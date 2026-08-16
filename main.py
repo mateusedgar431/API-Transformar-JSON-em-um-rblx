@@ -23,8 +23,8 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
     if valor is None or nome_prop in ["ClassName", "Name", "Parent"]:
         return ""
 
-    # Se já existir CFrame, ignora Position/Orientation duplicados para evitar conflito
-    if "CFrame" in props_dict and nome_prop in ["Position", "Orientation", "Rotation"]:
+    # Se já existir CFrame no dicionário, ignora Position/Orientation duplicados
+    if isinstance(props_dict, dict) and "CFrame" in props_dict and nome_prop in ["Position", "Orientation", "Rotation"]:
         return ""
 
     # 1. CFRAME
@@ -38,25 +38,29 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
                 <R20>{valor[9]}</R20><R21>{valor[10]}</R21><R22>{valor[11]}</R22>
             </CoordinateFrame>'''
 
-    # 2. BOOLEANOS (Testado antes para não cair em int/float)
-    elif isinstance(valor, bool):
+    # 2. BOOLEANOS (Garante que booleano seja tratado antes de int/float)
+    if isinstance(valor, bool):
         val_str = "true" if valor else "false"
         return f'\n            <bool name="{nome_prop}">{val_str}</bool>'
 
-    # 3. NÚMEROS (Ints/Floats) - Impede o erro de 'float' not iterable
-    elif isinstance(valor, (int, float)):
+    # 3. NÚMEROS (Ints/Floats) - Checa antes de tentar acessar chaves de dicionário!
+    if isinstance(valor, (int, float)):
         props_int = ["ZIndex", "LayoutOrder", "BorderSizePixel", "TextSize"]
         if nome_prop in props_int or isinstance(valor, int):
             return f'\n            <int name="{nome_prop}">{int(valor)}</int>'
         return f'\n            <float name="{nome_prop}">{float(valor)}</float>'
 
-    # 4. UDIM2 (Garante a checagem segura se é dicionário)
-    elif isinstance(valor, dict) and "X" in valor and "Y" in valor and isinstance(valor.get("X"), dict):
-        x_s = valor["X"].get("Scale", 0)
-        x_o = valor["X"].get("Offset", 0)
-        y_s = valor["Y"].get("Scale", 0)
-        y_o = valor["Y"].get("Offset", 0)
-        return f'''
+    # 4. DICIONÁRIOS (UDim2, Vector3, Vector2, Color3)
+    if isinstance(valor, dict):
+        # UDim2
+        if "X" in valor and "Y" in valor and isinstance(valor.get("X"), dict):
+            x_dict = valor.get("X", {})
+            y_dict = valor.get("Y", {})
+            x_s = x_dict.get("Scale", 0) if isinstance(x_dict, dict) else 0
+            x_o = x_dict.get("Offset", 0) if isinstance(x_dict, dict) else 0
+            y_s = y_dict.get("Scale", 0) if isinstance(y_dict, dict) else 0
+            y_o = y_dict.get("Offset", 0) if isinstance(y_dict, dict) else 0
+            return f'''
             <UDim2 name="{nome_prop}">
                 <XS>{x_s}</XS>
                 <XO>{x_o}</XO>
@@ -64,33 +68,44 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
                 <YO>{y_o}</YO>
             </UDim2>'''
 
-    # 5. VETORES (Vector3 / Vector2)
-    elif isinstance(valor, dict) and "X" in valor and "Y" in valor and "Z" in valor:
-        return f'''
+        # Vector3
+        if "X" in valor and "Y" in valor and "Z" in valor:
+            return f'''
             <Vector3 name="{nome_prop}">
-                <X>{valor["X"]}</X><Y>{valor["Y"]}</Y><Z>{valor["Z"]}</Z>
+                <X>{valor.get("X", 0)}</X>
+                <Y>{valor.get("Y", 0)}</Y>
+                <Z>{valor.get("Z", 0)}</Z>
             </Vector3>'''
-    elif isinstance(valor, dict) and "X" in valor and "Y" in valor:
-        return f'''
+
+        # Vector2
+        if "X" in valor and "Y" in valor:
+            return f'''
             <Vector2 name="{nome_prop}">
-                <X>{valor["X"]}</X><Y>{valor["Y"]}</Y>
+                <X>{valor.get("X", 0)}</X>
+                <Y>{valor.get("Y", 0)}</Y>
             </Vector2>'''
-    elif isinstance(valor, list) and len(valor) == 3:
-        return f'''
+
+        # Color3
+        if "R" in valor and "G" in valor and "B" in valor:
+            r_val = valor.get("R", 0)
+            g_val = valor.get("G", 0)
+            b_val = valor.get("B", 0)
+            r = int(r_val * 255) if isinstance(r_val, float) and r_val <= 1.0 else int(r_val)
+            g = int(g_val * 255) if isinstance(g_val, float) and g_val <= 1.0 else int(g_val)
+            b = int(b_val * 255) if isinstance(b_val, float) and b_val <= 1.0 else int(b_val)
+            cor_uint = (r << 16) | (g << 8) | b
+            return f'\n            <Color3uint8 name="{nome_prop}">{cor_uint}</Color3uint8>'
+
+    # 5. LISTAS (Listas puras enviadas do Lua)
+    if isinstance(valor, list):
+        if len(valor) == 3 and all(isinstance(v, (int, float)) for v in valor):
+            return f'''
             <Vector3 name="{nome_prop}">
                 <X>{valor[0]}</X><Y>{valor[1]}</Y><Z>{valor[2]}</Z>
             </Vector3>'''
 
-    # 6. CORES
-    elif isinstance(valor, dict) and "R" in valor and "G" in valor and "B" in valor:
-        r = int(valor["R"] * 255) if isinstance(valor["R"], float) and valor["R"] <= 1.0 else int(valor["R"])
-        g = int(valor["G"] * 255) if isinstance(valor["G"], float) and valor["G"] <= 1.0 else int(valor["G"])
-        b = int(valor["B"] * 255) if isinstance(valor["B"], float) and valor["B"] <= 1.0 else int(valor["B"])
-        cor_uint = (r << 16) | (g << 8) | b
-        return f'\n            <Color3uint8 name="{nome_prop}">{cor_uint}</Color3uint8>'
-
-    # 7. ENUMS, STRINGS E RECURSOS
-    elif isinstance(valor, str):
+    # 6. ENUMS, STRINGS E RECURSOS
+    if isinstance(valor, str):
         if "Enum." in valor:
             enum_val = valor.split(".")[-1]
             return f'\n            <token name="{nome_prop}">{enum_val}</token>'
@@ -111,6 +126,9 @@ def processar_objetos_xml(TableData):
                 children = a.get("Children", [])
                 script_code = a.get("Script")
 
+                if not isinstance(props, dict):
+                    props = {}
+
                 class_name = props.get("ClassName", "Part")
                 obj_name = props.get("Name", f"Object_{idx}")
 
@@ -121,26 +139,25 @@ def processar_objetos_xml(TableData):
 
                 xml_output += f'\n<Item class="{class_name}" referent="{ref_id}">'
                 xml_output += '\n  <Properties>'
-                xml_output += f'\n    <string name="Name">{saxutils.escape(obj_name)}</string>'
+                xml_output += f'\n    <string name="Name">{saxutils.escape(str(obj_name))}</string>'
 
-                # Propriedades padrão vitais para a GUI aparecer na tela
+                # Propriedades padrão para ScreenGui
                 if class_name == "ScreenGui":
                     if "ResetOnSpawn" not in props:
                         props["ResetOnSpawn"] = True
                     if "Enabled" not in props:
                         props["Enabled"] = True
 
-                # Previne que blocos caiam ou fiquem intangíveis se faltar a prop
+                # Previne que blocos caiam ou fiquem invisíveis
                 if class_name in ["Part", "WedgePart", "CornerWedgePart", "MeshPart", "SpawnLocation", "BasePart"]:
                     if "Anchored" not in props:
                         props["Anchored"] = True
                     if "CanCollide" not in props:
                         props["CanCollide"] = True
 
-                # Loop das propriedades
-                if isinstance(props, dict):
-                    for nome_prop, val_prop in props.items():
-                        xml_output += processar_propriedade_xml(nome_prop, val_prop, props)
+                # Processa cada propriedade de forma segura
+                for nome_prop, val_prop in props.items():
+                    xml_output += processar_propriedade_xml(nome_prop, val_prop, props)
 
                 # Injeção de Código nos Scripts
                 if script_code or class_name in ["Script", "LocalScript", "ModuleScript"]:
@@ -150,7 +167,7 @@ def processar_objetos_xml(TableData):
 
                 xml_output += '\n  </Properties>'
 
-                # Processamento recursivo para filhos (GUIs, Folders, etc.)
+                # Processamento recursivo dos filhos
                 if children and isinstance(children, list):
                     xml_output += processar_objetos_xml(children)
 
