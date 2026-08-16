@@ -4,7 +4,7 @@ import xml.sax.saxutils as saxutils
 
 app = Flask(__name__)
 
-# Mapeamento oficial das classes de serviços do Roblox
+# Mapeamento dos serviços oficiais do Roblox para não virarem pastas comuns
 SERVICOS_OFICIAIS = {
     "Workspace": "Workspace",
     "Lighting": "Lighting",
@@ -21,11 +21,11 @@ SERVICOS_OFICIAIS = {
 }
 
 def processar_propriedade_xml(nome_prop, valor):
-    """Traduz as propriedades coletadas do Lua para tags XML compatíveis com o Roblox"""
+    """Converte cada propriedade do JSON para a tag XML oficial do Roblox"""
     if valor is None or nome_prop == "ClassName":
         return ""
     
-    # Tratamento especial para CFrame (Posição + Rotação)
+    # CFrame (Posição + Matriz de Rotação) - Essencial para as peças aparecerem no mapa
     if nome_prop == "CFrame" and isinstance(valor, dict):
         pos = valor.get("Position", {"X": 0, "Y": 0, "Z": 0})
         return f'''
@@ -44,7 +44,7 @@ def processar_propriedade_xml(nome_prop, valor):
                 <R22>{valor.get("R22", 1)}</R22>
             </CoordinateFrame>'''
 
-    # Position, Size, Vector3
+    # Position, Size e Vector3 em geral
     elif isinstance(valor, dict) and "X" in valor and "Y" in valor and "Z" in valor:
         return f'''
             <Vector3 name="{nome_prop}">
@@ -73,12 +73,11 @@ def processar_propriedade_xml(nome_prop, valor):
             return f'\n            <float name="{nome_prop}">{valor}</float>'
         return f'\n            <int name="{nome_prop}">{valor}</int>'
     
-    # Strings, Enums, Texturas e Imagens
+    # Strings, Enums, Texturas e Decals
     elif isinstance(valor, str):
         if "Enum." in valor:
             enum_val = valor.split(".")[-1]
             return f'\n            <token name="{nome_prop}">{enum_val}</token>'
-        # Suporte para IDs de Texturas e Decals
         if nome_prop in ["Texture", "Image", "TextureId", "ImageId"] or valor.startswith("rbxassetid://"):
             return f'\n            <Content name="{nome_prop}"><url>{saxutils.escape(valor)}</url></Content>'
         return f'\n            <string name="{nome_prop}">{saxutils.escape(valor)}</string>'
@@ -95,27 +94,27 @@ def processar_objetos_xml(lista_objetos):
         class_name = props.get("ClassName", "Part")
         obj_name = props.get("Name", f"Object_{idx}")
         
-        # Preserva o tipo real de classe para Scripts
+        # Garante a classe correta para scripts
         if script_code and class_name not in ["Script", "LocalScript", "ModuleScript"]:
             class_name = "Script"
 
-        # ID único sem número negativo para evitar erros de XML
+        # Gera referent limpo para evitar erros no parser do Roblox
         ref_id = f"RBX_OBJ_{idx}_{abs(hash(obj_name))}"
 
         xml_output += f'\n<Item class="{class_name}" referent="{ref_id}">'
         xml_output += '\n  <Properties>'
         
-        # Garante física básica para partes do Workspace caso faltem no envio
+        # Se for peça e não veio Anchored no JSON, força True para não cair no mapa
         if class_name in ["Part", "WedgePart", "CornerWedgePart", "MeshPart", "SpawnLocation"]:
             if "Anchored" not in props:
                 props["Anchored"] = True
-            
-        # Processa todas as propriedades da lista enviada pelo Lua
+
+        # Processa todas as propriedades enviadas pelo Lua
         for nome_prop, val_prop in props.items():
             if nome_prop != "ClassName":
                 xml_output += processar_propriedade_xml(nome_prop, val_prop)
 
-        # Insere o código fonte para Scripts
+        # Adiciona o código do Script
         if script_code or class_name in ["Script", "LocalScript", "ModuleScript"]:
             codigo_str = str(script_code) if script_code is not None else ""
             codigo_escapado = saxutils.escape(codigo_str)
@@ -123,7 +122,7 @@ def processar_objetos_xml(lista_objetos):
 
         xml_output += '\n  </Properties>'
         
-        # Processa os filhos recursivamente
+        # Processa os objetos filhos (Texturas, Decals, outros objetos)
         if children:
             xml_output += processar_objetos_xml(children)
             
@@ -142,7 +141,6 @@ def construir_rbxlx_completo(part_data_dict):
             if servico_nome == "Workspace":
                 workspace_content += processar_objetos_xml(objetos)
             else:
-                # Usa a classe oficial do serviço (ServerScriptService, StarterGui, etc.)
                 classe_servico = SERVICOS_OFICIAIS.get(servico_nome, "Folder")
                 ref_servico = f"RBX_SERVICE_{servico_nome}"
                 
