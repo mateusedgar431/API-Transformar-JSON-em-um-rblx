@@ -23,7 +23,7 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
     if valor is None or nome_prop in ["ClassName", "Name", "Parent"]:
         return ""
 
-    # Se tiver CFrame, ignora Position e Orientation duplicados para não dar conflito
+    # Se já existir CFrame, ignora Position/Orientation duplicados para evitar conflito
     if "CFrame" in props_dict and nome_prop in ["Position", "Orientation", "Rotation"]:
         return ""
 
@@ -38,8 +38,20 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
                 <R20>{valor[9]}</R20><R21>{valor[10]}</R21><R22>{valor[11]}</R22>
             </CoordinateFrame>'''
 
-    # 2. UDIM2 (Fundamental para StarterGui / ScreenGui / TextLabel / Frame)
-    elif isinstance(valor, dict) and ("X" in valor and "Y" in valor) and (isinstance(valor["X"], dict) or "Scale" in valor.get("X", {})):
+    # 2. BOOLEANOS (Testado antes para não cair em int/float)
+    elif isinstance(valor, bool):
+        val_str = "true" if valor else "false"
+        return f'\n            <bool name="{nome_prop}">{val_str}</bool>'
+
+    # 3. NÚMEROS (Ints/Floats) - Impede o erro de 'float' not iterable
+    elif isinstance(valor, (int, float)):
+        props_int = ["ZIndex", "LayoutOrder", "BorderSizePixel", "TextSize"]
+        if nome_prop in props_int or isinstance(valor, int):
+            return f'\n            <int name="{nome_prop}">{int(valor)}</int>'
+        return f'\n            <float name="{nome_prop}">{float(valor)}</float>'
+
+    # 4. UDIM2 (Garante a checagem segura se é dicionário)
+    elif isinstance(valor, dict) and "X" in valor and "Y" in valor and isinstance(valor.get("X"), dict):
         x_s = valor["X"].get("Scale", 0)
         x_o = valor["X"].get("Offset", 0)
         y_s = valor["Y"].get("Scale", 0)
@@ -52,7 +64,7 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
                 <YO>{y_o}</YO>
             </UDim2>'''
 
-    # 3. VETORES (Vector3 / Vector2)
+    # 5. VETORES (Vector3 / Vector2)
     elif isinstance(valor, dict) and "X" in valor and "Y" in valor and "Z" in valor:
         return f'''
             <Vector3 name="{nome_prop}">
@@ -69,7 +81,7 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
                 <X>{valor[0]}</X><Y>{valor[1]}</Y><Z>{valor[2]}</Z>
             </Vector3>'''
 
-    # 4. CORES (Color3uint8 / Color3)
+    # 6. CORES
     elif isinstance(valor, dict) and "R" in valor and "G" in valor and "B" in valor:
         r = int(valor["R"] * 255) if isinstance(valor["R"], float) and valor["R"] <= 1.0 else int(valor["R"])
         g = int(valor["G"] * 255) if isinstance(valor["G"], float) and valor["G"] <= 1.0 else int(valor["G"])
@@ -77,19 +89,7 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
         cor_uint = (r << 16) | (g << 8) | b
         return f'\n            <Color3uint8 name="{nome_prop}">{cor_uint}</Color3uint8>'
 
-    # 5. BOOLEANOS
-    elif isinstance(valor, bool):
-        val_str = "true" if valor else "false"
-        return f'\n            <bool name="{nome_prop}">{val_str}</bool>'
-
-    # 6. NÚMEROS (Floats vs Ints tratados por propriedade conhecida)
-    elif isinstance(valor, (int, float)):
-        props_int = ["ZIndex", "LayoutOrder", "BorderSizePixel", "TextSize"]
-        if nome_prop in props_int or isinstance(valor, int):
-            return f'\n            <int name="{nome_prop}">{int(valor)}</int>'
-        return f'\n            <float name="{nome_prop}">{float(valor)}</float>'
-
-    # 7. ENUMS, STRINGS E ASSETS
+    # 7. ENUMS, STRINGS E RECURSOS
     elif isinstance(valor, str):
         if "Enum." in valor:
             enum_val = valor.split(".")[-1]
@@ -130,18 +130,19 @@ def processar_objetos_xml(TableData):
                     if "Enabled" not in props:
                         props["Enabled"] = True
 
+                # Previne que blocos caiam ou fiquem intangíveis se faltar a prop
                 if class_name in ["Part", "WedgePart", "CornerWedgePart", "MeshPart", "SpawnLocation", "BasePart"]:
                     if "Anchored" not in props:
                         props["Anchored"] = True
                     if "CanCollide" not in props:
                         props["CanCollide"] = True
 
-                # Processa todas as propriedades
+                # Loop das propriedades
                 if isinstance(props, dict):
                     for nome_prop, val_prop in props.items():
                         xml_output += processar_propriedade_xml(nome_prop, val_prop, props)
 
-                # Código-fonte para Scripts
+                # Injeção de Código nos Scripts
                 if script_code or class_name in ["Script", "LocalScript", "ModuleScript"]:
                     codigo_str = str(script_code) if script_code is not None else ""
                     codigo_escapado = saxutils.escape(codigo_str)
@@ -149,7 +150,7 @@ def processar_objetos_xml(TableData):
 
                 xml_output += '\n  </Properties>'
 
-                # Processa os filhos (Essencial para GUIs dentro de ScreenGui e peças dentro de Folders)
+                # Processamento recursivo para filhos (GUIs, Folders, etc.)
                 if children and isinstance(children, list):
                     xml_output += processar_objetos_xml(children)
 
