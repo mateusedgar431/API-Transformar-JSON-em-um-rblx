@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 import requests
 import xml.sax.saxutils as saxutils
+import uuid
 
 app = Flask(__name__)
 
@@ -8,7 +9,11 @@ def processar_propriedade_xml(nome_prop, valor):
     if valor is None:
         return ""
     
-    # Vector3 (Position, Size, etc.)
+    # Previne que o ClassName seja adicionado como propriedade comum
+    if nome_prop == "ClassName":
+        return ""
+    
+    # Trata Vector3 (Position, Size, Pivot, etc.)
     if isinstance(valor, dict) and "X" in valor and "Y" in valor and "Z" in valor:
         return f'''
             <Vector3 name="{nome_prop}">
@@ -17,32 +22,34 @@ def processar_propriedade_xml(nome_prop, valor):
                 <Z>{valor["Z"]}</Z>
             </Vector3>'''
     
-    # Color3 (R, G, B)
+    # Trata Color3 (R, G, B)
     elif isinstance(valor, dict) and "R" in valor and "G" in valor and "B" in valor:
         r = int(valor["R"] * 255) if isinstance(valor["R"], float) and valor["R"] <= 1.0 else int(valor["R"])
         g = int(valor["G"] * 255) if isinstance(valor["G"], float) and valor["G"] <= 1.0 else int(valor["G"])
         b = int(valor["B"] * 255) if isinstance(valor["B"], float) and valor["B"] <= 1.0 else int(valor["B"])
+        r = min(255, max(0, r))
+        g = min(255, max(0, g))
+        b = min(255, max(0, b))
         cor_uint = (r << 16) | (g << 8) | b
         return f'\n            <Color3uint8 name="{nome_prop}">{cor_uint}</Color3uint8>'
     
-    # Booleanos
+    # Trata Booleanos
     elif isinstance(valor, bool):
         val_str = "true" if valor else "false"
         return f'\n            <bool name="{nome_prop}">{val_str}</bool>'
     
-    # Numeros
+    # Trata Números (float / int)
     elif isinstance(valor, (int, float)):
         if isinstance(valor, float):
             return f'\n            <float name="{nome_prop}">{valor}</float>'
         return f'\n            <int name="{nome_prop}">{valor}</int>'
     
-    # Strings / Enums / TextureId / DecalId
+    # Trata Strings, Texturas, Decals e Enums
     elif isinstance(valor, str):
         if "Enum." in valor:
             enum_val = valor.split(".")[-1]
             return f'\n            <token name="{nome_prop}">{enum_val}</token>'
-        # Content (para Texturas e Imagens)
-        if nome_prop in ["Texture", "Image", "TextureId", "ImageId"] or valor.startswith("rbxassetid://"):
+        if nome_prop in ["Texture", "Image", "TextureId", "ImageId"] or valor.startswith("rbxassetid://") or valor.startswith("http"):
             return f'\n            <Content name="{nome_prop}"><url>{saxutils.escape(valor)}</url></Content>'
         return f'\n            <string name="{nome_prop}">{saxutils.escape(valor)}</string>'
         
@@ -58,29 +65,36 @@ def processar_objetos_xml(lista_objetos):
         class_name = props.get("ClassName", "Part")
         obj_name = props.get("Name", f"Object_{idx}")
         
-        # Garante a classe correta de scripts
-        if script_code and class_name not in ["Script", "LocalScript", "ModuleScript"]:
-            class_name = "Script"
+        # Garante ID único e positivo para o 'referent'
+        ref_id = f"RBX_REF_{uuid.uuid4().hex[:8]}"
 
-        xml_output += f'\n<Item class="{class_name}" referent="RBX_OBJ_{idx}_{abs(hash(obj_name))}">'
+        xml_output += f'\n<Item class="{class_name}" referent="{ref_id}">'
         xml_output += '\n  <Properties>'
         
-        # Garante visibilidade e fisica basica de Parts
-        if "Anchored" not in props and class_name in ["Part", "WedgePart", "CornerWedgePart", "MeshPart"]:
-            props["Anchored"] = True
-            
-        for nome_prop, val_prop in props.items():
-            if nome_prop != "ClassName":
-                xml_output += processar_propriedade_xml(nome_prop, val_prop)
+        # Garante propriedades físicas e visuais padrão para Parts se estiverem ausentes
+        if class_name in ["Part", "WedgePart", "CornerWedgePart", "MeshPart"]:
+            if "Anchored" not in props:
+                props["Anchored"] = True
+            if "CanCollide" not in props:
+                props["CanCollide"] = True
+            if "Size" not in props and "size" not in props:
+                props["Size"] = {"X": 4.0, "Y": 1.0, "Z": 2.0}
+            if "Position" not in props and "CFrame" not in props:
+                props["Position"] = {"X": 0.0, "Y": 0.0, "Z": 0.0}
 
-        # Escreve o codigo do Script na propriedade Source
-        if script_code:
-            codigo_escapado = saxutils.escape(str(script_code))
+        # Processa todas as propriedades da instância
+        for nome_prop, val_prop in props.items():
+            xml_output += processar_propriedade_xml(nome_prop, val_prop)
+
+        # Trata Scripts (Script, LocalScript, ModuleScript)
+        if class_name in ["Script", "LocalScript", "ModuleScript"] or script_code is not None:
+            codigo = str(script_code) if script_code is not None else ""
+            codigo_escapado = saxutils.escape(codigo)
             xml_output += f'\n            <ProtectedString name="Source">{codigo_escapado}</ProtectedString>'
 
         xml_output += '\n  </Properties>'
         
-        # Processa os filhos (ex: Texture dentro da Part, LocalScript dentro do Gui)
+        # Processa os filhos recursivamente (Decals, Texturas, Sub-scripts, etc.)
         if children:
             xml_output += processar_objetos_xml(children)
             
@@ -92,8 +106,8 @@ def construir_rbxlx_completo(part_data_dict):
     workspace_content = ""
     outros_servicos = ""
 
-    # Classes oficiais dos servicos do Roblox para nao virarem "Folder"
     servicos_oficiais = {
+        "Workspace": "Workspace",
         "ServerScriptService": "ServerScriptService",
         "ReplicatedStorage": "ReplicatedStorage",
         "ServerStorage": "ServerStorage",
@@ -111,7 +125,8 @@ def construir_rbxlx_completo(part_data_dict):
                 workspace_content += processar_objetos_xml(objetos)
             else:
                 classe_servico = servicos_oficiais.get(servico_nome, "Folder")
-                outros_servicos += f'\n<Item class="{classe_servico}" referent="RBX_SERVICE_{servico_nome}">'
+                ref_servico = f"RBX_SERVICE_{servico_nome}"
+                outros_servicos += f'\n<Item class="{classe_servico}" referent="{ref_servico}">'
                 outros_servicos += f'\n  <Properties><string name="Name">{servico_nome}</string></Properties>'
                 outros_servicos += processar_objetos_xml(objetos)
                 outros_servicos += '\n</Item>'
@@ -124,6 +139,7 @@ def construir_rbxlx_completo(part_data_dict):
     <Item class="Workspace" referent="RBX_WORKSPACE">
         <Properties>
             <string name="Name">Workspace</string>
+            <bool name="FilteringEnabled">true</bool>
         </Properties>
         {workspace_content}
     </Item>
@@ -141,7 +157,7 @@ def publicar():
         place_id = request.headers.get('place-id')
 
         if not api_key or not universe_id or not place_id:
-            return jsonify({"erro": "Headers obrigatorios faltando."}), 400
+            return jsonify({"erro": "Headers obrigatórios faltando."}), 400
 
         conteudo_rbxlx = construir_rbxlx_completo(dados_json)
         url_roblox = f"https://apis.roblox.com/universes/v1/{universe_id}/places/{place_id}/versions?versionType=Published"
@@ -152,7 +168,7 @@ def publicar():
             "User-Agent": "RobloxOpenCloudClient/1.0"
         }
 
-        resposta = requests.post(url_roblox, headers_roblox, data=conteudo_rbxlx)
+        resposta = requests.post(url_roblox, headers=headers_roblox, data=conteudo_rbxlx)
 
         return jsonify({
             "status": resposta.status_code,
