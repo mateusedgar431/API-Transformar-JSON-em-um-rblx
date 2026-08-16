@@ -77,11 +77,12 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
                 <B>{b}</B>
             </Color3>'''
 
-    # 5. STRINGS E ENUMS GENÉRICOS (Sem filtros específicos)
+    # 5. STRINGS E ENUMS
     if isinstance(valor, str):
-        # Trata QUALQUER Enum que chegue do Lua (Ex: "Enum.Material.Plastic", "Enum.Font.Gotham", etc.)
+        # Quebra a string por ponto caso venha no formato "Enum.Grupo.Nome"
         if "Enum." in valor:
-            nome_enum = valor.split(".")[-1]
+            partes = valor.split(".")
+            nome_enum = partes[-1]
             return f'\n            <token name="{nome_prop}">{nome_enum}</token>'
 
         if nome_prop in ["Texture", "Image", "TextureId", "ImageId", "MeshId", "SoundId"] or valor.startswith("rbxassetid://"):
