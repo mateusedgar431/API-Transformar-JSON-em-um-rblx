@@ -41,38 +41,26 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
         val_str = "true" if valor else "false"
         return f'\n            <bool name="{nome_prop}">{val_str}</bool>'
 
-    # Check se a propriedade é tipicamente um Enum no Roblox
-    is_enum_prop = (
-        nome_prop in ["Material", "Shape", "Font", "FormFactor"] or
-        nome_prop.endswith("Type") or 
-        nome_prop.endswith("Style") or 
-        nome_prop.endswith("Mode") or 
-        nome_prop.endswith("Alignment") or 
-        nome_prop.endswith("Direction")
-    )
-
-    # 3. ENUMS (Puros enviados pelo Lua como String, Dict ou Int)
-    if is_enum_prop:
-        # Se veio como String ("Enum.Material.Neon" ou "Neon")
-        if isinstance(valor, str):
-            enum_nome = valor.split(".")[-1]
-            return f'\n            <token name="{nome_prop}">{enum_nome}</token>'
-        # Se veio como Número puro
-        elif isinstance(valor, int):
-            return f'\n            <token name="{nome_prop}">{valor}</token>'
-        # Se o JSON serializou o Enum como Dicionário {Name: "...", Value: ...}
-        elif isinstance(valor, dict):
-            val_final = valor.get("Value") or valor.get("Name") or ""
-            return f'\n            <token name="{nome_prop}">{val_final}</token>'
-
-    # 4. NÚMEROS (Ints/Floats normais)
+    # 3. ENUMS E NÚMEROS (Trata números e tokens enviadas pelo Lua)
     if isinstance(valor, (int, float)):
+        is_enum_prop = (
+            nome_prop in ["Material", "Shape", "Font", "FormFactor"] or
+            nome_prop.endswith("Type") or 
+            nome_prop.endswith("Style") or 
+            nome_prop.endswith("Mode") or 
+            nome_prop.endswith("Alignment") or 
+            nome_prop.endswith("Direction")
+        )
+        
+        if is_enum_prop and isinstance(valor, int):
+            return f'\n            <token name="{nome_prop}">{int(valor)}</token>'
+
         props_int = ["ZIndex", "LayoutOrder", "BorderSizePixel", "TextSize"]
         if nome_prop in props_int or isinstance(valor, int):
             return f'\n            <int name="{nome_prop}">{int(valor)}</int>'
         return f'\n            <float name="{nome_prop}">{float(valor)}</float>'
 
-    # 5. DICIONÁRIOS (UDim2, Vector3, Color3)
+    # 4. DICIONÁRIOS (UDim2, Vector3, Color3)
     if isinstance(valor, dict):
         if "X" in valor and "Y" in valor and isinstance(valor.get("X"), dict):
             x_dict, y_dict = valor.get("X", {}), valor.get("Y", {})
@@ -101,7 +89,7 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
                 <B>{b}</B>
             </Color3>'''
 
-    # 6. STRINGS E CONTEÚDOS DE MÍDIA
+    # 5. STRINGS E MÍDIA
     if isinstance(valor, str):
         if "Enum." in valor:
             enum_nome = valor.split(".")[-1]
