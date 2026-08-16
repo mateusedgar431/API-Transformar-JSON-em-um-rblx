@@ -4,14 +4,48 @@ import xml.sax.saxutils as saxutils
 
 app = Flask(__name__)
 
-def extrair_vetor(vetor_data, default_x=0, default_y=0, default_z=0):
-    if isinstance(vetor_data, dict):
-        return (
-            vetor_data.get("X", default_x),
-            vetor_data.get("Y", default_y),
-            vetor_data.get("Z", default_z)
-        )
-    return default_x, default_y, default_z
+def processar_propriedade_xml(nome_prop, valor):
+    """Traduz as propriedades coletadas do Lua diretamente para tags XML do Roblox"""
+    if valor is None:
+        return ""
+    
+    # Position, Size, Vector3
+    if isinstance(valor, dict) and "X" in valor and "Y" in valor and "Z" in valor:
+        return f'''
+            <Vector3 name="{nome_prop}">
+                <X>{valor["X"]}</X>
+                <Y>{valor["Y"]}</Y>
+                <Z>{valor["Z"]}</Z>
+            </Vector3>'''
+    
+    # Color3 (R, G, B)
+    elif isinstance(valor, dict) and "R" in valor and "G" in valor and "B" in valor:
+        r = int(valor["R"] * 255) if isinstance(valor["R"], float) and valor["R"] <= 1.0 else int(valor["R"])
+        g = int(valor["G"] * 255) if isinstance(valor["G"], float) and valor["G"] <= 1.0 else int(valor["G"])
+        b = int(valor["B"] * 255) if isinstance(valor["B"], float) and valor["B"] <= 1.0 else int(valor["B"])
+        
+        cor_uint = (r << 16) | (g << 8) | b
+        return f'\n            <Color3uint8 name="{nome_prop}">{cor_uint}</Color3uint8>'
+    
+    # Booleanos (Anchored, CanCollide, etc.)
+    elif isinstance(valor, bool):
+        val_str = "true" if valor else "false"
+        return f'\n            <bool name="{nome_prop}">{val_str}</bool>'
+    
+    # Numeros (Transparency, Reflectance, etc.)
+    elif isinstance(valor, (int, float)):
+        if isinstance(valor, float):
+            return f'\n            <float name="{nome_prop}">{valor}</float>'
+        return f'\n            <int name="{nome_prop}">{valor}</int>'
+    
+    # Strings e Enums (Material, Shape, Name)
+    elif isinstance(valor, str):
+        if "Enum." in valor:
+            enum_val = valor.split(".")[-1]
+            return f'\n            <token name="{nome_prop}">{enum_val}</token>'
+        return f'\n            <string name="{nome_prop}">{saxutils.escape(valor)}</string>'
+        
+    return ""
 
 def processar_objetos_xml(lista_objetos):
     xml_output = ""
@@ -28,28 +62,20 @@ def processar_objetos_xml(lista_objetos):
 
         xml_output += f'\n<Item class="{class_name}" referent="RBX_OBJ_{idx}_{abs(hash(obj_name))}">'
         xml_output += '\n  <Properties>'
-        xml_output += f'\n    <string name="Name">{saxutils.escape(str(obj_name))}</string>'
         
-        if "Position" in props:
-            px, py, pz = extrair_vetor(props["Position"], 0, 10, 0)
-            xml_output += f'''
-            <Vector3 name="Position">
-                <X>{px}</X><Y>{py}</Y><Z>{pz}</Z>
-            </Vector3>'''
+        # Garante que peças fiquem fixas se não for especificado
+        if "Anchored" not in props and class_name in ["Part", "WedgePart", "CornerWedgePart", "MeshPart"]:
+            props["Anchored"] = True
             
-        if "Size" in props or "size" in props:
-            sx, sy, sz = extrair_vetor(props.get("Size") or props.get("size"), 4, 1.2, 2)
-            xml_output += f'''
-            <Vector3 name="size">
-                <X>{sx}</X><Y>{sy}</Y><Z>{sz}</Z>
-            </Vector3>'''
+        # Processa todas as propriedades da lista enviada pelo Lua
+        for nome_prop, val_prop in props.items():
+            if nome_prop not in ["ClassName"]:
+                xml_output += processar_propriedade_xml(nome_prop, val_prop)
 
-        xml_output += '\n    <bool name="Anchored">true</bool>'
-        xml_output += '\n    <bool name="CanCollide">true</bool>'
-
+        # Insere o código do Script
         if script_code:
             codigo_escapado = saxutils.escape(str(script_code))
-            xml_output += f'\n    <ProtectedString name="Source">{codigo_escapado}</ProtectedString>'
+            xml_output += f'\n            <ProtectedString name="Source">{codigo_escapado}</ProtectedString>'
 
         xml_output += '\n  </Properties>'
         
@@ -108,7 +134,7 @@ def publicar():
         place_id = request.headers.get('place-id')
 
         if not api_key or not universe_id or not place_id:
-            return jsonify({"erro": "Headers 'x-api-key', 'universe-id' e 'place-id' sao obrigatorios."}), 400
+            return jsonify({"erro": "Headers obrigatorios faltando."}), 400
 
         conteudo_rbxlx = construir_rbxlx_completo(dados_json)
         url_roblox = f"https://apis.roblox.com/universes/v1/{universe_id}/places/{place_id}/versions?versionType=Published"
