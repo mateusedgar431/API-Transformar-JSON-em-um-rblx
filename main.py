@@ -19,12 +19,16 @@ SERVICOS_OFICIAIS = {
     "MaterialService": "MaterialService"
 }
 
-def processar_propriedade_xml(nome_prop, valor):
-    # Ignora meta-propriedades que não são tags internas do Roblox
+def processar_propriedade_xml(nome_prop, valor, props_dict):
+    # Ignora meta-propriedades
     if valor is None or nome_prop in ["ClassName", "Name", "Parent"]:
         return ""
 
-    # 1. CFRAME (Posição e Matriz de Rotação)
+    # Se já existir CFrame, ignora Position e Orientation/Rotation para não dar conflito no XML
+    if "CFrame" in props_dict and nome_prop in ["Position", "Orientation", "Rotation"]:
+        return ""
+
+    # 1. CFRAME (Posição + Matriz de Rotação)
     if nome_prop == "CFrame":
         if isinstance(valor, list) and len(valor) >= 12:
             return f'''
@@ -60,7 +64,7 @@ def processar_propriedade_xml(nome_prop, valor):
                 <R22>{valor.get("R22", 1)}</R22>
             </CoordinateFrame>'''
 
-    # 2. VETORES (Position, Size, PivotOffset, Velocity, Scale, Vector2, Vector3)
+    # 2. VETORES (Size, Position, Vector3, Vector2)
     elif isinstance(valor, dict) and "X" in valor and "Y" in valor and "Z" in valor:
         return f'''
             <Vector3 name="{nome_prop}">
@@ -68,12 +72,6 @@ def processar_propriedade_xml(nome_prop, valor):
                 <Y>{valor["Y"]}</Y>
                 <Z>{valor["Z"]}</Z>
             </Vector3>'''
-    elif isinstance(valor, dict) and "X" in valor and "Y" in valor:
-        return f'''
-            <Vector2 name="{nome_prop}">
-                <X>{valor["X"]}</X>
-                <Y>{valor["Y"]}</Y>
-            </Vector2>'''
     elif isinstance(valor, list) and len(valor) == 3 and isinstance(valor[0], (int, float)):
         return f'''
             <Vector3 name="{nome_prop}">
@@ -81,46 +79,35 @@ def processar_propriedade_xml(nome_prop, valor):
                 <Y>{valor[1]}</Y>
                 <Z>{valor[2]}</Z>
             </Vector3>'''
-    elif isinstance(valor, list) and len(valor) == 2 and isinstance(valor[0], (int, float)):
+    elif isinstance(valor, dict) and "X" in valor and "Y" in valor:
         return f'''
             <Vector2 name="{nome_prop}">
-                <X>{valor[0]}</X>
-                <Y>{valor[1]}</Y>
+                <X>{valor["X"]}</X>
+                <Y>{valor["Y"]}</Y>
             </Vector2>'''
 
-    # 3. UDim2 e UDim (Para GUIs)
-    elif isinstance(valor, dict) and "X" in valor and "Y" in valor and isinstance(valor["X"], dict):
-        # Estrutura UDim2: {X: {Scale: 0, Offset: 0}, Y: {Scale: 0, Offset: 0}}
-        x_s, x_o = valor["X"].get("Scale", 0), valor["X"].get("Offset", 0)
-        y_s, y_o = valor["Y"].get("Scale", 0), valor["Y"].get("Offset", 0)
-        return f'''
-            <UDim2 name="{nome_prop}">
-                <XS>{x_s}</XS>
-                <XO>{x_o}</XO>
-                <YS>{y_s}</YS>
-                <YO>{y_o}</YO>
-            </UDim2>'''
-
-    # 4. CORES (Color3, Color3uint8)
+    # 3. CORES (Color, Color3, BrickColor)
     elif isinstance(valor, dict) and "R" in valor and "G" in valor and "B" in valor:
         r = int(valor["R"] * 255) if isinstance(valor["R"], float) and valor["R"] <= 1.0 else int(valor["R"])
         g = int(valor["G"] * 255) if isinstance(valor["G"], float) and valor["G"] <= 1.0 else int(valor["G"])
         b = int(valor["B"] * 255) if isinstance(valor["B"], float) and valor["B"] <= 1.0 else int(valor["B"])
         cor_uint = (r << 16) | (g << 8) | b
-        return f'\n            <Color3uint8 name="{nome_prop}">{cor_uint}</Color3uint8>'
+        # Converte 'Color' para 'Color3uint8' que é o padrão XML nativo do Roblox
+        nome_cor = "Color3uint8" if nome_prop in ["Color", "Color3"] else nome_prop
+        return f'\n            <{nome_cor} name="{nome_prop}">{cor_uint}</{nome_cor}>'
 
-    # 5. BOOLEANOS (Anchored, CanCollide, CastShadow, Enabled, Visible, etc.)
+    # 4. BOOLEANOS (Anchored, CanCollide, CastShadow, etc.)
     elif isinstance(valor, bool):
         val_str = "true" if valor else "false"
         return f'\n            <bool name="{nome_prop}">{val_str}</bool>'
 
-    # 6. NÚMEROS (Transparency, Reflectance, FieldOfView, Health, Float/Int)
+    # 5. NÚMEROS (Transparency, Reflectance, MaterialVariant)
     elif isinstance(valor, (int, float)):
         if isinstance(valor, float):
             return f'\n            <float name="{nome_prop}">{valor}</float>'
         return f'\n            <int name="{nome_prop}">{valor}</int>'
 
-    # 7. STRINGS, ENUMS, ATIVOS (MeshId, Texture, Material, Color3/BrickColor por nome)
+    # 6. ENUMS E STRINGS (Material, Shape, MeshId, etc.)
     elif isinstance(valor, str):
         if "Enum." in valor:
             enum_val = valor.split(".")[-1]
@@ -153,19 +140,19 @@ def processar_objetos_xml(TableData):
                 xml_output += '\n  <Properties>'
                 xml_output += f'\n    <string name="Name">{saxutils.escape(obj_name)}</string>'
 
-                # Garante física básica se não vier no JSON
+                # Força valores padrão para evitar que fiquem invisíveis ou sem colisão
                 if class_name in ["Part", "WedgePart", "CornerWedgePart", "MeshPart", "SpawnLocation", "BasePart"]:
                     if "Anchored" not in props:
                         props["Anchored"] = True
                     if "CanCollide" not in props:
                         props["CanCollide"] = True
 
-                # Processa todas as propriedades enviadas pelo Lua dinamicamente
+                # Processa todas as propriedades repassando o dicionário completo para checar conflitos (CFrame x Position)
                 if isinstance(props, dict):
                     for nome_prop, val_prop in props.items():
-                        xml_output += processar_propriedade_xml(nome_prop, val_prop)
+                        xml_output += processar_propriedade_xml(nome_prop, val_prop, props)
 
-                # Código do script
+                # Injeta o código nos scripts
                 if script_code or class_name in ["Script", "LocalScript", "ModuleScript"]:
                     codigo_str = str(script_code) if script_code is not None else ""
                     codigo_escapado = saxutils.escape(codigo_str)
@@ -173,7 +160,7 @@ def processar_objetos_xml(TableData):
 
                 xml_output += '\n  </Properties>'
 
-                # Filhos do objeto
+                # Processa filhos do objeto
                 if children and isinstance(children, list):
                     xml_output += processar_objetos_xml(children)
 
