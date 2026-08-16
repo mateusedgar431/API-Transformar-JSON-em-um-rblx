@@ -23,7 +23,6 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
     if valor is None or nome_prop in ["ClassName", "Name", "Parent"]:
         return ""
 
-    # Evita conflitos de CFrame com Position e Orientation
     if isinstance(props_dict, dict) and "CFrame" in props_dict and nome_prop in ["Position", "Orientation", "Rotation"]:
         return ""
 
@@ -42,85 +41,49 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
         val_str = "true" if valor else "false"
         return f'\n            <bool name="{nome_prop}">{val_str}</bool>'
 
-    # 3. NÚMEROS (Int/Float)
+    # 3. NÚMEROS (Ints/Floats)
     if isinstance(valor, (int, float)):
         props_int = ["ZIndex", "LayoutOrder", "BorderSizePixel", "TextSize"]
         if nome_prop in props_int or isinstance(valor, int):
             return f'\n            <int name="{nome_prop}">{int(valor)}</int>'
         return f'\n            <float name="{nome_prop}">{float(valor)}</float>'
 
-    # 4. DICIONÁRIOS (UDim2, Vector3, Vector2, Color3)
+    # 4. DICIONÁRIOS (UDim2, Vector3, Color3)
     if isinstance(valor, dict):
-        # UDim2
         if "X" in valor and "Y" in valor and isinstance(valor.get("X"), dict):
-            x_dict = valor.get("X", {})
-            y_dict = valor.get("Y", {})
-            x_s = x_dict.get("Scale", 0) if isinstance(x_dict, dict) else 0
-            x_o = x_dict.get("Offset", 0) if isinstance(x_dict, dict) else 0
-            y_s = y_dict.get("Scale", 0) if isinstance(y_dict, dict) else 0
-            y_o = y_dict.get("Offset", 0) if isinstance(y_dict, dict) else 0
+            x_dict, y_dict = valor.get("X", {}), valor.get("Y", {})
             return f'''
             <UDim2 name="{nome_prop}">
-                <XS>{x_s}</XS>
-                <XO>{x_o}</XO>
-                <YS>{y_s}</YS>
-                <YO>{y_o}</YO>
+                <XS>{x_dict.get("Scale", 0)}</XS>
+                <XO>{x_dict.get("Offset", 0)}</XO>
+                <YS>{y_dict.get("Scale", 0)}</YS>
+                <YO>{y_dict.get("Offset", 0)}</YO>
             </UDim2>'''
 
-        # Vector3
         if "X" in valor and "Y" in valor and "Z" in valor:
             return f'''
             <Vector3 name="{nome_prop}">
-                <X>{valor.get("X", 0)}</X>
-                <Y>{valor.get("Y", 0)}</Y>
-                <Z>{valor.get("Z", 0)}</Z>
+                <X>{valor.get("X", 0)}</X><Y>{valor.get("Y", 0)}</Y><Z>{valor.get("Z", 0)}</Z>
             </Vector3>'''
 
-        # Vector2
-        if "X" in valor and "Y" in valor:
-            return f'''
-            <Vector2 name="{nome_prop}">
-                <X>{valor.get("X", 0)}</X>
-                <Y>{valor.get("Y", 0)}</Y>
-            </Vector2>'''
-
-        # Color3
         if "R" in valor and "G" in valor and "B" in valor:
-            r_val = valor.get("R", 0)
-            g_val = valor.get("G", 0)
-            b_val = valor.get("B", 0)
-            r = int(r_val * 255) if isinstance(r_val, float) and r_val <= 1.0 else int(r_val)
-            g = int(g_val * 255) if isinstance(g_val, float) and g_val <= 1.0 else int(g_val)
-            b = int(b_val * 255) if isinstance(b_val, float) and b_val <= 1.0 else int(b_val)
-            cor_uint = (r << 16) | (g << 8) | b
-            return f'\n            <Color3uint8 name="{nome_prop}">{cor_uint}</Color3uint8>'
-
-    # 5. LISTAS
-    if isinstance(valor, list):
-        if len(valor) == 3 and all(isinstance(v, (int, float)) for v in valor):
+            r = valor["R"] / 255.0 if valor["R"] > 1.0 else valor["R"]
+            g = valor["G"] / 255.0 if valor["G"] > 1.0 else valor["G"]
+            b = valor["B"] / 255.0 if valor["B"] > 1.0 else valor["B"]
             return f'''
-            <Vector3 name="{nome_prop}">
-                <X>{valor[0]}</X><Y>{valor[1]}</Y><Z>{valor[2]}</Z>
-            </Vector3>'''
+            <Color3 name="{nome_prop}">
+                <R>{r}</R>
+                <G>{g}</G>
+                <B>{b}</B>
+            </Color3>'''
 
-    # 6. STRINGS E ENUMS UNIVERSAIS
+    # 5. STRINGS E ENUMS GENÉRICOS (Sem filtros específicos)
     if isinstance(valor, str):
-        # Trata fontes enviadas como string do Enum
-        if nome_prop == "FontFace" or (nome_prop == "Font" and "Enum.Font." in valor):
-            nome_fonte = valor.split(".")[-1]
-            return f'''
-            <Font name="{nome_prop}">
-                <Family><url>rbxasset://fonts/families/{nome_fonte}.json</url></Family>
-                <Weight>400</Weight>
-                <Style>Normal</Style>
-            </Font>'''
-
-        # Trata qualquer Enum extra enviado pelo Lua
+        # Trata QUALQUER Enum que chegue do Lua (Ex: "Enum.Material.Plastic", "Enum.Font.Gotham", etc.)
         if "Enum." in valor:
             nome_enum = valor.split(".")[-1]
             return f'\n            <token name="{nome_prop}">{nome_enum}</token>'
 
-        # Assets
         if nome_prop in ["Texture", "Image", "TextureId", "ImageId", "MeshId", "SoundId"] or valor.startswith("rbxassetid://"):
             return f'\n            <Content name="{nome_prop}"><url>{saxutils.escape(valor)}</url></Content>'
 
@@ -154,25 +117,21 @@ def processar_objetos_xml(TableData):
                 xml_output += '\n  <Properties>'
                 xml_output += f'\n    <string name="Name">{saxutils.escape(str(obj_name))}</string>'
 
-                # Força exibição de ScreenGui
                 if class_name == "ScreenGui":
                     if "ResetOnSpawn" not in props:
                         props["ResetOnSpawn"] = True
                     if "Enabled" not in props:
                         props["Enabled"] = True
 
-                # Previne queda/intangibilidade de blocos
                 if class_name in ["Part", "WedgePart", "CornerWedgePart", "MeshPart", "SpawnLocation", "BasePart"]:
                     if "Anchored" not in props:
                         props["Anchored"] = True
                     if "CanCollide" not in props:
                         props["CanCollide"] = True
 
-                # Converte todas as propriedades
                 for nome_prop, val_prop in props.items():
                     xml_output += processar_propriedade_xml(nome_prop, val_prop, props)
 
-                # Código do Script
                 if script_code or class_name in ["Script", "LocalScript", "ModuleScript"]:
                     codigo_str = str(script_code) if script_code is not None else ""
                     codigo_escapado = saxutils.escape(codigo_str)
@@ -180,7 +139,6 @@ def processar_objetos_xml(TableData):
 
                 xml_output += '\n  </Properties>'
 
-                # Processa os filhos
                 if children and isinstance(children, list):
                     xml_output += processar_objetos_xml(children)
 
