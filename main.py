@@ -20,7 +20,8 @@ SERVICOS_OFICIAIS = {
 }
 
 def processar_propriedade_xml(nome_prop, valor, props_dict):
-    if valor is None or nome_prop in ["ClassName", "Name", "Parent"]:
+    # Ignora valores nulos, propriedades de controle e propriedades descontinuadas (como FormFactor)
+    if valor is None or nome_prop in ["ClassName", "Name", "Parent", "FormFactor"]:
         return ""
 
     if isinstance(props_dict, dict) and "CFrame" in props_dict and nome_prop in ["Position", "Orientation", "Rotation"]:
@@ -41,19 +42,34 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
         val_str = "true" if valor else "false"
         return f'\n            <bool name="{nome_prop}">{val_str}</bool>'
 
-    # 3. ENUMITEM NATIVO SERIALIZADO COMO DICIONÁRIO (Ex: {"Value": 256, "Name": "Neon"})
+    # 3. TRATAMENTO DE FACES E AXES (Trata objetos complexos de Enum.Faces e Enum.Axes)
+    if nome_prop in ["Faces", "Face"] and isinstance(valor, (dict, str, int)):
+        if isinstance(valor, dict):
+            top = "true" if valor.get("Top") else "false"
+            bottom = "true" if valor.get("Bottom") else "false"
+            left = "true" if valor.get("Left") else "false"
+            right = "true" if valor.get("Right") else "false"
+            front = "true" if valor.get("Front") else "false"
+            back = "true" if valor.get("Back") else "false"
+            return f'''
+            <Faces name="{nome_prop}">
+                <Faces>{(1 if valor.get("Right") else 0) | (2 if valor.get("Top") else 0) | (4 if valor.get("Back") else 0) | (8 if valor.get("Left") else 0) | (16 if valor.get("Bottom") else 0) | (32 if valor.get("Front") else 0)}</Faces>
+            </Faces>'''
+        # Se a propriedade for 'Face' individual (Enum.NormalId), mapeia diretamente para token
+        elif isinstance(valor, int):
+            return f'\n            <token name="{nome_prop}">{valor}</token>'
+
+    # 4. ENUMITEM SERIALIZADO COMO DICIONÁRIO OU NÚMERO (Enum.NormalId, Material, etc.)
     if isinstance(valor, dict) and ("Value" in valor or "EnumType" in valor or "Name" in valor):
         enum_val = valor.get("Value") if valor.get("Value") is not None else valor.get("Name", "")
         return f'\n            <token name="{nome_prop}">{enum_val}</token>'
 
-    # 4. INTEIROS E ENUMITEMS CONVERTIDOS EM NÚMERO NATIVAMENTE PELO LUAU
     if isinstance(valor, int):
         props_int_explicitas = ["ZIndex", "LayoutOrder", "BorderSizePixel", "TextSize"]
-        
         if nome_prop in props_int_explicitas:
             return f'\n            <int name="{nome_prop}">{valor}</int>'
         
-        # Todo EnumItem nativo virará a tag <token> exigida pelo XML da Roblox
+        # Converte IDs de Enum (como NormalId) para a tag <token> exigida pelo XML
         return f'\n            <token name="{nome_prop}">{valor}</token>'
 
     # 5. FLOATS
@@ -89,7 +105,7 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
                 <B>{b}</B>
             </Color3>'''
 
-    # 7. STRINGS E CONTEÚDOS DE MÍDIA
+    # 7. STRINGS E MÍDIA
     if isinstance(valor, str):
         if nome_prop in ["Texture", "Image", "TextureId", "ImageId", "MeshId", "SoundId"] or valor.startswith("rbxassetid://"):
             return f'\n            <Content name="{nome_prop}"><url>{saxutils.escape(valor)}</url></Content>'
@@ -225,4 +241,3 @@ def publicar():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
-
