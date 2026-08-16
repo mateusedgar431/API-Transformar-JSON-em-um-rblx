@@ -20,94 +20,76 @@ SERVICOS_OFICIAIS = {
 }
 
 def processar_propriedade_xml(nome_prop, valor, props_dict):
-    # Ignora meta-propriedades
     if valor is None or nome_prop in ["ClassName", "Name", "Parent"]:
         return ""
 
-    # Se já existir CFrame, ignora Position e Orientation/Rotation para não dar conflito no XML
+    # Se tiver CFrame, ignora Position e Orientation duplicados para não dar conflito
     if "CFrame" in props_dict and nome_prop in ["Position", "Orientation", "Rotation"]:
         return ""
 
-    # 1. CFRAME (Posição + Matriz de Rotação)
+    # 1. CFRAME
     if nome_prop == "CFrame":
         if isinstance(valor, list) and len(valor) >= 12:
             return f'''
             <CoordinateFrame name="CFrame">
-                <X>{valor[0]}</X>
-                <Y>{valor[1]}</Y>
-                <Z>{valor[2]}</Z>
-                <R00>{valor[3]}</R00>
-                <R01>{valor[4]}</R01>
-                <R02>{valor[5]}</R02>
-                <R10>{valor[6]}</R10>
-                <R11>{valor[7]}</R11>
-                <R12>{valor[8]}</R12>
-                <R20>{valor[9]}</R20>
-                <R21>{valor[10]}</R21>
-                <R22>{valor[11]}</R22>
-            </CoordinateFrame>'''
-        elif isinstance(valor, dict):
-            pos = valor.get("Position", {"X": 0, "Y": 0, "Z": 0})
-            return f'''
-            <CoordinateFrame name="CFrame">
-                <X>{pos.get('X', 0)}</X>
-                <Y>{pos.get('Y', 0)}</Y>
-                <Z>{pos.get('Z', 0)}</Z>
-                <R00>{valor.get("R00", 1)}</R00>
-                <R01>{valor.get("R01", 0)}</R01>
-                <R02>{valor.get("R02", 0)}</R02>
-                <R10>{valor.get("R10", 0)}</R10>
-                <R11>{valor.get("R11", 1)}</R11>
-                <R12>{valor.get("R12", 0)}</R12>
-                <R20>{valor.get("R20", 0)}</R20>
-                <R21>{valor.get("R21", 0)}</R21>
-                <R22>{valor.get("R22", 1)}</R22>
+                <X>{valor[0]}</X><Y>{valor[1]}</Y><Z>{valor[2]}</Z>
+                <R00>{valor[3]}</R00><R01>{valor[4]}</R01><R02>{valor[5]}</R02>
+                <R10>{valor[6]}</R10><R11>{valor[7]}</R11><R12>{valor[8]}</R12>
+                <R20>{valor[9]}</R20><R21>{valor[10]}</R21><R22>{valor[11]}</R22>
             </CoordinateFrame>'''
 
-    # 2. VETORES (Size, Position, Vector3, Vector2)
+    # 2. UDIM2 (Fundamental para StarterGui / ScreenGui / TextLabel / Frame)
+    elif isinstance(valor, dict) and ("X" in valor and "Y" in valor) and (isinstance(valor["X"], dict) or "Scale" in valor.get("X", {})):
+        x_s = valor["X"].get("Scale", 0)
+        x_o = valor["X"].get("Offset", 0)
+        y_s = valor["Y"].get("Scale", 0)
+        y_o = valor["Y"].get("Offset", 0)
+        return f'''
+            <UDim2 name="{nome_prop}">
+                <XS>{x_s}</XS>
+                <XO>{x_o}</XO>
+                <YS>{y_s}</YS>
+                <YO>{y_o}</YO>
+            </UDim2>'''
+
+    # 3. VETORES (Vector3 / Vector2)
     elif isinstance(valor, dict) and "X" in valor and "Y" in valor and "Z" in valor:
         return f'''
             <Vector3 name="{nome_prop}">
-                <X>{valor["X"]}</X>
-                <Y>{valor["Y"]}</Y>
-                <Z>{valor["Z"]}</Z>
-            </Vector3>'''
-    elif isinstance(valor, list) and len(valor) == 3 and isinstance(valor[0], (int, float)):
-        return f'''
-            <Vector3 name="{nome_prop}">
-                <X>{valor[0]}</X>
-                <Y>{valor[1]}</Y>
-                <Z>{valor[2]}</Z>
+                <X>{valor["X"]}</X><Y>{valor["Y"]}</Y><Z>{valor["Z"]}</Z>
             </Vector3>'''
     elif isinstance(valor, dict) and "X" in valor and "Y" in valor:
         return f'''
             <Vector2 name="{nome_prop}">
-                <X>{valor["X"]}</X>
-                <Y>{valor["Y"]}</Y>
+                <X>{valor["X"]}</X><Y>{valor["Y"]}</Y>
             </Vector2>'''
+    elif isinstance(valor, list) and len(valor) == 3:
+        return f'''
+            <Vector3 name="{nome_prop}">
+                <X>{valor[0]}</X><Y>{valor[1]}</Y><Z>{valor[2]}</Z>
+            </Vector3>'''
 
-    # 3. CORES (Color, Color3, BrickColor)
+    # 4. CORES (Color3uint8 / Color3)
     elif isinstance(valor, dict) and "R" in valor and "G" in valor and "B" in valor:
         r = int(valor["R"] * 255) if isinstance(valor["R"], float) and valor["R"] <= 1.0 else int(valor["R"])
         g = int(valor["G"] * 255) if isinstance(valor["G"], float) and valor["G"] <= 1.0 else int(valor["G"])
         b = int(valor["B"] * 255) if isinstance(valor["B"], float) and valor["B"] <= 1.0 else int(valor["B"])
         cor_uint = (r << 16) | (g << 8) | b
-        # Converte 'Color' para 'Color3uint8' que é o padrão XML nativo do Roblox
-        nome_cor = "Color3uint8" if nome_prop in ["Color", "Color3"] else nome_prop
-        return f'\n            <{nome_cor} name="{nome_prop}">{cor_uint}</{nome_cor}>'
+        return f'\n            <Color3uint8 name="{nome_prop}">{cor_uint}</Color3uint8>'
 
-    # 4. BOOLEANOS (Anchored, CanCollide, CastShadow, etc.)
+    # 5. BOOLEANOS
     elif isinstance(valor, bool):
         val_str = "true" if valor else "false"
         return f'\n            <bool name="{nome_prop}">{val_str}</bool>'
 
-    # 5. NÚMEROS (Transparency, Reflectance, MaterialVariant)
+    # 6. NÚMEROS (Floats vs Ints tratados por propriedade conhecida)
     elif isinstance(valor, (int, float)):
-        if isinstance(valor, float):
-            return f'\n            <float name="{nome_prop}">{valor}</float>'
-        return f'\n            <int name="{nome_prop}">{valor}</int>'
+        props_int = ["ZIndex", "LayoutOrder", "BorderSizePixel", "TextSize"]
+        if nome_prop in props_int or isinstance(valor, int):
+            return f'\n            <int name="{nome_prop}">{int(valor)}</int>'
+        return f'\n            <float name="{nome_prop}">{float(valor)}</float>'
 
-    # 6. ENUMS E STRINGS (Material, Shape, MeshId, etc.)
+    # 7. ENUMS, STRINGS E ASSETS
     elif isinstance(valor, str):
         if "Enum." in valor:
             enum_val = valor.split(".")[-1]
@@ -117,6 +99,7 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
         return f'\n            <string name="{nome_prop}">{saxutils.escape(valor)}</string>'
 
     return ""
+
 
 def processar_objetos_xml(TableData):
     xml_output = ""
@@ -140,19 +123,25 @@ def processar_objetos_xml(TableData):
                 xml_output += '\n  <Properties>'
                 xml_output += f'\n    <string name="Name">{saxutils.escape(obj_name)}</string>'
 
-                # Força valores padrão para evitar que fiquem invisíveis ou sem colisão
+                # Propriedades padrão vitais para a GUI aparecer na tela
+                if class_name == "ScreenGui":
+                    if "ResetOnSpawn" not in props:
+                        props["ResetOnSpawn"] = True
+                    if "Enabled" not in props:
+                        props["Enabled"] = True
+
                 if class_name in ["Part", "WedgePart", "CornerWedgePart", "MeshPart", "SpawnLocation", "BasePart"]:
                     if "Anchored" not in props:
                         props["Anchored"] = True
                     if "CanCollide" not in props:
                         props["CanCollide"] = True
 
-                # Processa todas as propriedades repassando o dicionário completo para checar conflitos (CFrame x Position)
+                # Processa todas as propriedades
                 if isinstance(props, dict):
                     for nome_prop, val_prop in props.items():
                         xml_output += processar_propriedade_xml(nome_prop, val_prop, props)
 
-                # Injeta o código nos scripts
+                # Código-fonte para Scripts
                 if script_code or class_name in ["Script", "LocalScript", "ModuleScript"]:
                     codigo_str = str(script_code) if script_code is not None else ""
                     codigo_escapado = saxutils.escape(codigo_str)
@@ -160,7 +149,7 @@ def processar_objetos_xml(TableData):
 
                 xml_output += '\n  </Properties>'
 
-                # Processa filhos do objeto
+                # Processa os filhos (Essencial para GUIs dentro de ScreenGui e peças dentro de Folders)
                 if children and isinstance(children, list):
                     xml_output += processar_objetos_xml(children)
 
@@ -168,19 +157,20 @@ def processar_objetos_xml(TableData):
 
     return xml_output
 
+
 def construir_rbxlx_completo(part_data_dict):
     workspace_content = ""
     outros_servicos = ""
 
     if isinstance(part_data_dict, dict):
         for servico_nome, servico_dados in part_data_dict.items():
-            objetos = servico_dados.get("Objects", [])
+            objetos = servico_dados.get("Objects", []) if isinstance(servico_dados, dict) else servico_dados
 
             if servico_nome == "Workspace":
                 workspace_content += processar_objetos_xml(objetos)
             else:
                 classe_servico = SERVICOS_OFICIAIS.get(servico_nome, "Folder")
-                ref_servico = f"RBX_SERVICE_{servico_nome}"
+                ref_servico = f"RBX_SERVICE_{servico_nome.upper()}"
 
                 outros_servicos += f'\n<Item class="{classe_servico}" referent="{ref_servico}">'
                 outros_servicos += f'\n  <Properties><string name="Name">{servico_nome}</string></Properties>'
@@ -204,6 +194,7 @@ def construir_rbxlx_completo(part_data_dict):
 </roblox>'''
 
     return rbxlx_str.encode('utf-8')
+
 
 @app.route('/publicar', methods=['POST'])
 def publicar():
@@ -234,6 +225,7 @@ def publicar():
 
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
