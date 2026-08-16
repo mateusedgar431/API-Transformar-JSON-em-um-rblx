@@ -41,8 +41,20 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
         val_str = "true" if valor else "false"
         return f'\n            <bool name="{nome_prop}">{val_str}</bool>'
 
-    # 3. NÚMEROS (Ints/Floats)
+    # 3. TRATAMENTO GENÉRICO DE ENUMS E NÚMEROS (Aceita os IDs do .Value do Lua)
     if isinstance(valor, (int, float)):
+        is_enum_prop = (
+            nome_prop in ["Material", "Shape", "Font", "FormFactor"] or
+            nome_prop.endswith("Type") or 
+            nome_prop.endswith("Style") or 
+            nome_prop.endswith("Mode") or 
+            nome_prop.endswith("Alignment") or 
+            nome_prop.endswith("Direction")
+        )
+        
+        if is_enum_prop and isinstance(valor, int):
+            return f'\n            <token name="{nome_prop}">{int(valor)}</token>'
+
         props_int = ["ZIndex", "LayoutOrder", "BorderSizePixel", "TextSize"]
         if nome_prop in props_int or isinstance(valor, int):
             return f'\n            <int name="{nome_prop}">{int(valor)}</int>'
@@ -77,12 +89,8 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
                 <B>{b}</B>
             </Color3>'''
 
-    # 5. STRINGS E ENUMS GENÉRICOS (100% dinâmico para qualquer Enum vindo do Lua)
+    # 5. STRINGS E CONTEÚDOS DE MÍDIA
     if isinstance(valor, str):
-        if "Enum." in valor:
-            nome_enum = valor.split(".")[-1]
-            return f'\n            <token name="{nome_prop}">{nome_enum}</token>'
-
         if nome_prop in ["Texture", "Image", "TextureId", "ImageId", "MeshId", "SoundId"] or valor.startswith("rbxassetid://"):
             return f'\n            <Content name="{nome_prop}"><url>{saxutils.escape(valor)}</url></Content>'
 
