@@ -20,10 +20,10 @@ SERVICOS_OFICIAIS = {
 }
 
 def processar_propriedade_xml(nome_prop, valor):
-    if valor is None or nome_prop in ["ClassName", "Name"]:
+    if valor is None or nome_prop in ["ClassName", "Name", "Parent"]:
         return ""
 
-    # CFrame (Trata a lista de 12 números vinda de {valor:GetComponents()})
+    # Tratamento de CFrame (Lista de 12 elementos vinda do GetComponents())
     if nome_prop == "CFrame":
         if isinstance(valor, list) and len(valor) >= 12:
             return f'''
@@ -59,7 +59,7 @@ def processar_propriedade_xml(nome_prop, valor):
                 <R22>{valor.get("R22", 1)}</R22>
             </CoordinateFrame>'''
 
-    # Vetores (Position, Size, etc.)
+    # Vetores (Position, Size)
     elif isinstance(valor, dict) and "X" in valor and "Y" in valor and "Z" in valor:
         return f'''
             <Vector3 name="{nome_prop}">
@@ -75,7 +75,7 @@ def processar_propriedade_xml(nome_prop, valor):
                 <Z>{valor[2]}</Z>
             </Vector3>'''
 
-    # Cores (Color3)
+    # Cores
     elif isinstance(valor, dict) and "R" in valor and "G" in valor and "B" in valor:
         r = int(valor["R"] * 255) if isinstance(valor["R"], float) and valor["R"] <= 1.0 else int(valor["R"])
         g = int(valor["G"] * 255) if isinstance(valor["G"], float) and valor["G"] <= 1.0 else int(valor["G"])
@@ -83,18 +83,18 @@ def processar_propriedade_xml(nome_prop, valor):
         cor_uint = (r << 16) | (g << 8) | b
         return f'\n            <Color3uint8 name="{nome_prop}">{cor_uint}</Color3uint8>'
 
-    # Booleanos (Anchored, CanCollide, etc.)
+    # Booleanos
     elif isinstance(valor, bool):
         val_str = "true" if valor else "false"
         return f'\n            <bool name="{nome_prop}">{val_str}</bool>'
 
-    # Números (Transparency, Reflectance, etc.)
+    # Números
     elif isinstance(valor, (int, float)):
         if isinstance(valor, float):
             return f'\n            <float name="{nome_prop}">{valor}</float>'
         return f'\n            <int name="{nome_prop}">{valor}</int>'
 
-    # Strings / Enums / Texturas
+    # Strings e Enums
     elif isinstance(valor, str):
         if "Enum." in valor:
             enum_val = valor.split(".")[-1]
@@ -109,7 +109,6 @@ def processar_propriedade_xml(nome_prop, valor):
 def processar_objetos_xml(TableData):
     xml_output = ""
 
-    # Percorre toda a lista enviada usando for _, a in pairs(TableData)
     if isinstance(TableData, list):
         for idx, a in enumerate(TableData):
             if isinstance(a, dict):
@@ -118,9 +117,9 @@ def processar_objetos_xml(TableData):
                 script_code = a.get("Script")
 
                 class_name = props.get("ClassName", "Part")
-                obj_name = props.get("Name", f"Object_{idx}")
+                obj_name = props.get("Name", f"Part_{idx}")
 
-                # Se houver código de script, ajusta a classe caso necessário
+                # Força tag de script
                 if script_code and class_name not in ["Script", "LocalScript", "ModuleScript"]:
                     class_name = "Script"
 
@@ -130,20 +129,22 @@ def processar_objetos_xml(TableData):
                 xml_output += '\n  <Properties>'
                 xml_output += f'\n    <string name="Name">{saxutils.escape(obj_name)}</string>'
 
-                # Força Ancoragem para evitar que as peças caiam no vácuo
-                if class_name in ["Part", "WedgePart", "CornerWedgePart", "MeshPart", "SpawnLocation"]:
+                # Propriedades obrigatórias para renderização e física
+                if class_name in ["Part", "WedgePart", "CornerWedgePart", "MeshPart", "SpawnLocation", "BasePart"]:
                     if "Anchored" not in props:
                         props["Anchored"] = True
                     if "CanCollide" not in props:
                         props["CanCollide"] = True
+                    if "Transparency" not in props:
+                        props["Transparency"] = 0
 
-                # Processa cada propriedade da peça
+                # Processa cada propriedade
                 if isinstance(props, dict):
                     for nome_prop, val_prop in props.items():
-                        if nome_prop not in ["ClassName", "Name"]:
+                        if nome_prop not in ["ClassName", "Name", "Parent"]:
                             xml_output += processar_propriedade_xml(nome_prop, val_prop)
 
-                # Adiciona o código caso seja um Script
+                # Código-fonte para Scripts
                 if script_code or class_name in ["Script", "LocalScript", "ModuleScript"]:
                     codigo_str = str(script_code) if script_code is not None else ""
                     codigo_escapado = saxutils.escape(codigo_str)
@@ -151,7 +152,7 @@ def processar_objetos_xml(TableData):
 
                 xml_output += '\n  </Properties>'
 
-                # Recursão para processar os filhos da peça/objeto
+                # Processa filhos aninhados garantindo hierarquia pai-filho
                 if children and isinstance(children, list):
                     xml_output += processar_objetos_xml(children)
 
@@ -182,10 +183,11 @@ def construir_rbxlx_completo(part_data_dict):
     elif isinstance(part_data_dict, list):
         workspace_content = processar_objetos_xml(part_data_dict)
 
+    # Estrutura base contendo o Workspace devidamente montado com referent limpo
     rbxlx_str = f'''<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
     <External>null</External>
     <External>nil</External>
-    <Item class="Workspace" referent="RBX_WORKSPACE">
+    <Item class="Workspace" referent="RBX_WORKSPACE_ROOT">
         <Properties>
             <string name="Name">Workspace</string>
             <bool name="FilteringEnabled">true</bool>
