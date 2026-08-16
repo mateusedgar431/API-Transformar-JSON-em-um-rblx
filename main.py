@@ -26,11 +26,9 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
     if isinstance(props_dict, dict) and "CFrame" in props_dict and nome_prop in ["Position", "Orientation", "Rotation"]:
         return ""
 
-    xml_gerado = ""
-
     # 1. CFRAME
     if nome_prop == "CFrame" and isinstance(valor, list) and len(valor) >= 12:
-        xml_gerado = f'''
+        return f'''
             <CoordinateFrame name="CFrame">
                 <X>{valor[0]}</X><Y>{valor[1]}</Y><Z>{valor[2]}</Z>
                 <R00>{valor[3]}</R00><R01>{valor[4]}</R01><R02>{valor[5]}</R02>
@@ -39,23 +37,22 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
             </CoordinateFrame>'''
 
     # 2. BOOLEANOS
-    elif isinstance(valor, bool):
+    if isinstance(valor, bool):
         val_str = "true" if valor else "false"
-        xml_gerado = f'\n            <bool name="{nome_prop}">{val_str}</bool>'
+        return f'\n            <bool name="{nome_prop}">{val_str}</bool>'
 
     # 3. NÚMEROS (Ints/Floats)
-    elif isinstance(valor, (int, float)):
+    if isinstance(valor, (int, float)):
         props_int = ["ZIndex", "LayoutOrder", "BorderSizePixel", "TextSize"]
         if nome_prop in props_int or isinstance(valor, int):
-            xml_gerado = f'\n            <int name="{nome_prop}">{int(valor)}</int>'
-        else:
-            xml_gerado = f'\n            <float name="{nome_prop}">{float(valor)}</float>'
+            return f'\n            <int name="{nome_prop}">{int(valor)}</int>'
+        return f'\n            <float name="{nome_prop}">{float(valor)}</float>'
 
     # 4. DICIONÁRIOS (UDim2, Vector3, Color3)
-    elif isinstance(valor, dict):
+    if isinstance(valor, dict):
         if "X" in valor and "Y" in valor and isinstance(valor.get("X"), dict):
             x_dict, y_dict = valor.get("X", {}), valor.get("Y", {})
-            xml_gerado = f'''
+            return f'''
             <UDim2 name="{nome_prop}">
                 <XS>{x_dict.get("Scale", 0)}</XS>
                 <XO>{x_dict.get("Offset", 0)}</XO>
@@ -63,41 +60,35 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
                 <YO>{y_dict.get("Offset", 0)}</YO>
             </UDim2>'''
 
-        elif "X" in valor and "Y" in valor and "Z" in valor:
-            xml_gerado = f'''
+        if "X" in valor and "Y" in valor and "Z" in valor:
+            return f'''
             <Vector3 name="{nome_prop}">
                 <X>{valor.get("X", 0)}</X><Y>{valor.get("Y", 0)}</Y><Z>{valor.get("Z", 0)}</Z>
             </Vector3>'''
 
-        elif "R" in valor and "G" in valor and "B" in valor:
+        if "R" in valor and "G" in valor and "B" in valor:
             r = valor["R"] / 255.0 if valor["R"] > 1.0 else valor["R"]
             g = valor["G"] / 255.0 if valor["G"] > 1.0 else valor["G"]
             b = valor["B"] / 255.0 if valor["B"] > 1.0 else valor["B"]
-            xml_gerado = f'''
+            return f'''
             <Color3 name="{nome_prop}">
                 <R>{r}</R>
                 <G>{g}</G>
                 <B>{b}</B>
             </Color3>'''
 
-    # 5. STRINGS E ENUMS
-    elif isinstance(valor, str):
+    # 5. STRINGS E ENUMS GENÉRICOS (100% dinâmico para qualquer Enum vindo do Lua)
+    if isinstance(valor, str):
         if "Enum." in valor:
-            partes = valor.split(".")
-            nome_enum = partes[-1]
-            xml_gerado = f'\n            <token name="{nome_prop}">{nome_enum}</token>'
+            nome_enum = valor.split(".")[-1]
+            return f'\n            <token name="{nome_prop}">{nome_enum}</token>'
 
-        elif nome_prop in ["Texture", "Image", "TextureId", "ImageId", "MeshId", "SoundId"] or valor.startswith("rbxassetid://"):
-            xml_gerado = f'\n            <Content name="{nome_prop}"><url>{saxutils.escape(valor)}</url></Content>'
+        if nome_prop in ["Texture", "Image", "TextureId", "ImageId", "MeshId", "SoundId"] or valor.startswith("rbxassetid://"):
+            return f'\n            <Content name="{nome_prop}"><url>{saxutils.escape(valor)}</url></Content>'
 
-        else:
-            xml_gerado = f'\n            <string name="{nome_prop}">{saxutils.escape(valor)}</string>'
+        return f'\n            <string name="{nome_prop}">{saxutils.escape(valor)}</string>'
 
-    # PRINT DE DEBUG
-    if xml_gerado:
-        print(f"[DEBUG PROPRIEDADE] Nome: {nome_prop} | Valor Recebido: {valor} ({type(valor).__name__}) -> XML: {xml_gerado.strip()}")
-
-    return xml_gerado
+    return ""
 
 
 def processar_objetos_xml(TableData):
@@ -115,8 +106,6 @@ def processar_objetos_xml(TableData):
 
                 class_name = props.get("ClassName", "Part")
                 obj_name = props.get("Name", f"Object_{idx}")
-
-                print(f"\n--- [DEBUG OBJETO] Criando objeto: {obj_name} ({class_name}) ---")
 
                 if script_code and class_name not in ["Script", "LocalScript", "ModuleScript"]:
                     class_name = "Script"
@@ -192,11 +181,6 @@ def construir_rbxlx_completo(part_data_dict):
     {outros_servicos}
 </roblox>'''
 
-    # PRINT DEBUG XML COMPLETO
-    print("\n================ [DEBUG XML FINAL COMPLETO] ================")
-    print(rbxlx_str)
-    print("============================================================\n")
-
     return rbxlx_str.encode('utf-8')
 
 
@@ -204,8 +188,6 @@ def construir_rbxlx_completo(part_data_dict):
 def publicar():
     try:
         dados_json = request.json
-        print("\n[DEBUG RECEBIDO] Dados brutos do JSON:", dados_json)
-
         api_key = request.headers.get('x-api-key')
         universe_id = request.headers.get('universe-id')
         place_id = request.headers.get('place-id')
@@ -224,16 +206,12 @@ def publicar():
 
         resposta = requests.post(url_roblox, headers=headers_roblox, data=conteudo_rbxlx)
 
-        print(f"[DEBUG RESPOSTA ROBLOX] Status Code: {resposta.status_code}")
-        print(f"[DEBUG RESPOSTA ROBLOX] Resposta: {resposta.text}")
-
         return jsonify({
             "status": resposta.status_code,
             "resposta_roblox": resposta.text
         })
 
     except Exception as e:
-        print(f"[DEBUG ERRO]: {str(e)}")
         return jsonify({"erro": str(e)}), 500
 
 
