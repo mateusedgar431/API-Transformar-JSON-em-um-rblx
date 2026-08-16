@@ -41,26 +41,26 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
         val_str = "true" if valor else "false"
         return f'\n            <bool name="{nome_prop}">{val_str}</bool>'
 
-    # 3. ENUMS E NÚMEROS (Trata números e tokens enviadas pelo Lua)
-    if isinstance(valor, (int, float)):
-        is_enum_prop = (
-            nome_prop in ["Material", "Shape", "Font", "FormFactor"] or
-            nome_prop.endswith("Type") or 
-            nome_prop.endswith("Style") or 
-            nome_prop.endswith("Mode") or 
-            nome_prop.endswith("Alignment") or 
-            nome_prop.endswith("Direction")
-        )
-        
-        if is_enum_prop and isinstance(valor, int):
-            return f'\n            <token name="{nome_prop}">{int(valor)}</token>'
+    # 3. ENUMITEM NATIVO SERIALIZADO COMO DICIONÁRIO (Ex: {"Value": 256, "Name": "Neon"})
+    if isinstance(valor, dict) and ("Value" in valor or "EnumType" in valor or "Name" in valor):
+        enum_val = valor.get("Value") if valor.get("Value") is not None else valor.get("Name", "")
+        return f'\n            <token name="{nome_prop}">{enum_val}</token>'
 
-        props_int = ["ZIndex", "LayoutOrder", "BorderSizePixel", "TextSize"]
-        if nome_prop in props_int or isinstance(valor, int):
-            return f'\n            <int name="{nome_prop}">{int(valor)}</int>'
+    # 4. INTEIROS E ENUMITEMS CONVERTIDOS EM NÚMERO NATIVAMENTE PELO LUAU
+    if isinstance(valor, int):
+        props_int_explicitas = ["ZIndex", "LayoutOrder", "BorderSizePixel", "TextSize"]
+        
+        if nome_prop in props_int_explicitas:
+            return f'\n            <int name="{nome_prop}">{valor}</int>'
+        
+        # Todo EnumItem nativo virará a tag <token> exigida pelo XML da Roblox
+        return f'\n            <token name="{nome_prop}">{valor}</token>'
+
+    # 5. FLOATS
+    if isinstance(valor, float):
         return f'\n            <float name="{nome_prop}">{float(valor)}</float>'
 
-    # 4. DICIONÁRIOS (UDim2, Vector3, Color3)
+    # 6. DICIONÁRIOS (UDim2, Vector3, Color3)
     if isinstance(valor, dict):
         if "X" in valor and "Y" in valor and isinstance(valor.get("X"), dict):
             x_dict, y_dict = valor.get("X", {}), valor.get("Y", {})
@@ -89,12 +89,8 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
                 <B>{b}</B>
             </Color3>'''
 
-    # 5. STRINGS E MÍDIA
+    # 7. STRINGS E CONTEÚDOS DE MÍDIA
     if isinstance(valor, str):
-        if "Enum." in valor:
-            enum_nome = valor.split(".")[-1]
-            return f'\n            <token name="{nome_prop}">{enum_nome}</token>'
-
         if nome_prop in ["Texture", "Image", "TextureId", "ImageId", "MeshId", "SoundId"] or valor.startswith("rbxassetid://"):
             return f'\n            <Content name="{nome_prop}"><url>{saxutils.escape(valor)}</url></Content>'
 
@@ -229,3 +225,4 @@ def publicar():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
+
