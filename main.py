@@ -4,7 +4,6 @@ import xml.sax.saxutils as saxutils
 
 app = Flask(__name__)
 
-# Mapeamento dos serviços oficiais do Roblox para não virarem pastas comuns
 SERVICOS_OFICIAIS = {
     "Workspace": "Workspace",
     "Lighting": "Lighting",
@@ -21,14 +20,30 @@ SERVICOS_OFICIAIS = {
 }
 
 def processar_propriedade_xml(nome_prop, valor):
-    """Converte cada propriedade do JSON para a tag XML oficial do Roblox"""
-    if valor is None or nome_prop == "ClassName":
+    if valor is None or nome_prop in ["ClassName", "Name"]:
         return ""
     
-    # CFrame (Posição + Matriz de Rotação) - Essencial para as peças aparecerem no mapa
-    if nome_prop == "CFrame" and isinstance(valor, dict):
-        pos = valor.get("Position", {"X": 0, "Y": 0, "Z": 0})
-        return f'''
+    # TRATAMENTO DE CFRAME (Lê a lista de 12 números gerada por {valor:GetComponents()})
+    if nome_prop == "CFrame":
+        if isinstance(valor, list) and len(valor) >= 12:
+            return f'''
+            <CoordinateFrame name="CFrame">
+                <X>{valor[0]}</X>
+                <Y>{valor[1]}</Y>
+                <Z>{valor[2]}</Z>
+                <R00>{valor[3]}</R00>
+                <R01>{valor[4]}</R01>
+                <R02>{valor[5]}</R02>
+                <R10>{valor[6]}</R10>
+                <R11>{valor[7]}</R11>
+                <R12>{valor[8]}</R12>
+                <R20>{valor[9]}</R20>
+                <R21>{valor[10]}</R21>
+                <R22>{valor[11]}</R22>
+            </CoordinateFrame>'''
+        elif isinstance(valor, dict): # Caso venha como dicionário
+            pos = valor.get("Position", {"X": 0, "Y": 0, "Z": 0})
+            return f'''
             <CoordinateFrame name="CFrame">
                 <X>{pos.get('X', 0)}</X>
                 <Y>{pos.get('Y', 0)}</Y>
@@ -62,18 +77,18 @@ def processar_propriedade_xml(nome_prop, valor):
         cor_uint = (r << 16) | (g << 8) | b
         return f'\n            <Color3uint8 name="{nome_prop}">{cor_uint}</Color3uint8>'
     
-    # Booleanos (Anchored, CanCollide, etc.)
+    # Booleanos
     elif isinstance(valor, bool):
         val_str = "true" if valor else "false"
         return f'\n            <bool name="{nome_prop}">{val_str}</bool>'
     
-    # Números (Transparency, Reflectance, etc.)
+    # Números
     elif isinstance(valor, (int, float)):
         if isinstance(valor, float):
             return f'\n            <float name="{nome_prop}">{valor}</float>'
         return f'\n            <int name="{nome_prop}">{valor}</int>'
     
-    # Strings, Enums, Texturas e Decals
+    # Strings, BrickColor, Enums e Imagens
     elif isinstance(valor, str):
         if "Enum." in valor:
             enum_val = valor.split(".")[-1]
@@ -94,27 +109,22 @@ def processar_objetos_xml(lista_objetos):
         class_name = props.get("ClassName", "Part")
         obj_name = props.get("Name", f"Object_{idx}")
         
-        # Garante a classe correta para scripts
         if script_code and class_name not in ["Script", "LocalScript", "ModuleScript"]:
             class_name = "Script"
 
-        # Gera referent limpo para evitar erros no parser do Roblox
         ref_id = f"RBX_OBJ_{idx}_{abs(hash(obj_name))}"
 
         xml_output += f'\n<Item class="{class_name}" referent="{ref_id}">'
         xml_output += '\n  <Properties>'
+        xml_output += f'\n    <string name="Name">{saxutils.escape(obj_name)}</string>'
         
-        # Se for peça e não veio Anchored no JSON, força True para não cair no mapa
         if class_name in ["Part", "WedgePart", "CornerWedgePart", "MeshPart", "SpawnLocation"]:
             if "Anchored" not in props:
                 props["Anchored"] = True
 
-        # Processa todas as propriedades enviadas pelo Lua
         for nome_prop, val_prop in props.items():
-            if nome_prop != "ClassName":
-                xml_output += processar_propriedade_xml(nome_prop, val_prop)
+            xml_output += processar_propriedade_xml(nome_prop, val_prop)
 
-        # Adiciona o código do Script
         if script_code or class_name in ["Script", "LocalScript", "ModuleScript"]:
             codigo_str = str(script_code) if script_code is not None else ""
             codigo_escapado = saxutils.escape(codigo_str)
@@ -122,7 +132,6 @@ def processar_objetos_xml(lista_objetos):
 
         xml_output += '\n  </Properties>'
         
-        # Processa os objetos filhos (Texturas, Decals, outros objetos)
         if children:
             xml_output += processar_objetos_xml(children)
             
