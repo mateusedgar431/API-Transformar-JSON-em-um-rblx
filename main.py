@@ -23,14 +23,13 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
     if valor is None or nome_prop in ["ClassName", "Name", "Parent"]:
         return ""
 
-    # Se já existir CFrame no dicionário, ignora Position/Orientation duplicados
+    # Evita conflitos de CFrame com Position e Orientation
     if isinstance(props_dict, dict) and "CFrame" in props_dict and nome_prop in ["Position", "Orientation", "Rotation"]:
         return ""
 
     # 1. CFRAME
-    if nome_prop == "CFrame":
-        if isinstance(valor, list) and len(valor) >= 12:
-            return f'''
+    if nome_prop == "CFrame" and isinstance(valor, list) and len(valor) >= 12:
+        return f'''
             <CoordinateFrame name="CFrame">
                 <X>{valor[0]}</X><Y>{valor[1]}</Y><Z>{valor[2]}</Z>
                 <R00>{valor[3]}</R00><R01>{valor[4]}</R01><R02>{valor[5]}</R02>
@@ -38,12 +37,12 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
                 <R20>{valor[9]}</R20><R21>{valor[10]}</R21><R22>{valor[11]}</R22>
             </CoordinateFrame>'''
 
-    # 2. BOOLEANOS (Garante que booleano seja tratado antes de int/float)
+    # 2. BOOLEANOS
     if isinstance(valor, bool):
         val_str = "true" if valor else "false"
         return f'\n            <bool name="{nome_prop}">{val_str}</bool>'
 
-    # 3. NÚMEROS (Ints/Floats) - Checa antes de tentar acessar chaves de dicionário!
+    # 3. NÚMEROS (Int/Float)
     if isinstance(valor, (int, float)):
         props_int = ["ZIndex", "LayoutOrder", "BorderSizePixel", "TextSize"]
         if nome_prop in props_int or isinstance(valor, int):
@@ -96,7 +95,7 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
             cor_uint = (r << 16) | (g << 8) | b
             return f'\n            <Color3uint8 name="{nome_prop}">{cor_uint}</Color3uint8>'
 
-    # 5. LISTAS (Listas puras enviadas do Lua)
+    # 5. LISTAS
     if isinstance(valor, list):
         if len(valor) == 3 and all(isinstance(v, (int, float)) for v in valor):
             return f'''
@@ -104,13 +103,27 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
                 <X>{valor[0]}</X><Y>{valor[1]}</Y><Z>{valor[2]}</Z>
             </Vector3>'''
 
-    # 6. ENUMS, STRINGS E RECURSOS
+    # 6. STRINGS E ENUMS UNIVERSAIS
     if isinstance(valor, str):
+        # Trata fontes enviadas como string do Enum
+        if nome_prop == "FontFace" or (nome_prop == "Font" and "Enum.Font." in valor):
+            nome_fonte = valor.split(".")[-1]
+            return f'''
+            <Font name="{nome_prop}">
+                <Family><url>rbxasset://fonts/families/{nome_fonte}.json</url></Family>
+                <Weight>400</Weight>
+                <Style>Normal</Style>
+            </Font>'''
+
+        # Trata qualquer Enum extra enviado pelo Lua
         if "Enum." in valor:
-            enum_val = valor.split(".")[-1]
-            return f'\n            <token name="{nome_prop}">{enum_val}</token>'
+            nome_enum = valor.split(".")[-1]
+            return f'\n            <token name="{nome_prop}">{nome_enum}</token>'
+
+        # Assets
         if nome_prop in ["Texture", "Image", "TextureId", "ImageId", "MeshId", "SoundId"] or valor.startswith("rbxassetid://"):
             return f'\n            <Content name="{nome_prop}"><url>{saxutils.escape(valor)}</url></Content>'
+
         return f'\n            <string name="{nome_prop}">{saxutils.escape(valor)}</string>'
 
     return ""
@@ -141,25 +154,25 @@ def processar_objetos_xml(TableData):
                 xml_output += '\n  <Properties>'
                 xml_output += f'\n    <string name="Name">{saxutils.escape(str(obj_name))}</string>'
 
-                # Propriedades padrão para ScreenGui
+                # Força exibição de ScreenGui
                 if class_name == "ScreenGui":
                     if "ResetOnSpawn" not in props:
                         props["ResetOnSpawn"] = True
                     if "Enabled" not in props:
                         props["Enabled"] = True
 
-                # Previne que blocos caiam ou fiquem invisíveis
+                # Previne queda/intangibilidade de blocos
                 if class_name in ["Part", "WedgePart", "CornerWedgePart", "MeshPart", "SpawnLocation", "BasePart"]:
                     if "Anchored" not in props:
                         props["Anchored"] = True
                     if "CanCollide" not in props:
                         props["CanCollide"] = True
 
-                # Processa cada propriedade de forma segura
+                # Converte todas as propriedades
                 for nome_prop, val_prop in props.items():
                     xml_output += processar_propriedade_xml(nome_prop, val_prop, props)
 
-                # Injeção de Código nos Scripts
+                # Código do Script
                 if script_code or class_name in ["Script", "LocalScript", "ModuleScript"]:
                     codigo_str = str(script_code) if script_code is not None else ""
                     codigo_escapado = saxutils.escape(codigo_str)
@@ -167,7 +180,7 @@ def processar_objetos_xml(TableData):
 
                 xml_output += '\n  </Properties>'
 
-                # Processamento recursivo dos filhos
+                # Processa os filhos
                 if children and isinstance(children, list):
                     xml_output += processar_objetos_xml(children)
 
