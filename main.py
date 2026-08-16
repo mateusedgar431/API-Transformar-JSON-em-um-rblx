@@ -5,11 +5,10 @@ import xml.sax.saxutils as saxutils
 app = Flask(__name__)
 
 def processar_propriedade_xml(nome_prop, valor):
-    """Traduz as propriedades coletadas do Lua diretamente para tags XML do Roblox"""
     if valor is None:
         return ""
     
-    # Position, Size, Vector3
+    # Vector3 (Position, Size, etc.)
     if isinstance(valor, dict) and "X" in valor and "Y" in valor and "Z" in valor:
         return f'''
             <Vector3 name="{nome_prop}">
@@ -23,26 +22,28 @@ def processar_propriedade_xml(nome_prop, valor):
         r = int(valor["R"] * 255) if isinstance(valor["R"], float) and valor["R"] <= 1.0 else int(valor["R"])
         g = int(valor["G"] * 255) if isinstance(valor["G"], float) and valor["G"] <= 1.0 else int(valor["G"])
         b = int(valor["B"] * 255) if isinstance(valor["B"], float) and valor["B"] <= 1.0 else int(valor["B"])
-        
         cor_uint = (r << 16) | (g << 8) | b
         return f'\n            <Color3uint8 name="{nome_prop}">{cor_uint}</Color3uint8>'
     
-    # Booleanos (Anchored, CanCollide, etc.)
+    # Booleanos
     elif isinstance(valor, bool):
         val_str = "true" if valor else "false"
         return f'\n            <bool name="{nome_prop}">{val_str}</bool>'
     
-    # Numeros (Transparency, Reflectance, etc.)
+    # Numeros
     elif isinstance(valor, (int, float)):
         if isinstance(valor, float):
             return f'\n            <float name="{nome_prop}">{valor}</float>'
         return f'\n            <int name="{nome_prop}">{valor}</int>'
     
-    # Strings e Enums (Material, Shape, Name)
+    # Strings / Enums / TextureId / DecalId
     elif isinstance(valor, str):
         if "Enum." in valor:
             enum_val = valor.split(".")[-1]
             return f'\n            <token name="{nome_prop}">{enum_val}</token>'
+        # Content (para Texturas e Imagens)
+        if nome_prop in ["Texture", "Image", "TextureId", "ImageId"] or valor.startswith("rbxassetid://"):
+            return f'\n            <Content name="{nome_prop}"><url>{saxutils.escape(valor)}</url></Content>'
         return f'\n            <string name="{nome_prop}">{saxutils.escape(valor)}</string>'
         
     return ""
@@ -57,28 +58,29 @@ def processar_objetos_xml(lista_objetos):
         class_name = props.get("ClassName", "Part")
         obj_name = props.get("Name", f"Object_{idx}")
         
+        # Garante a classe correta de scripts
         if script_code and class_name not in ["Script", "LocalScript", "ModuleScript"]:
             class_name = "Script"
 
         xml_output += f'\n<Item class="{class_name}" referent="RBX_OBJ_{idx}_{abs(hash(obj_name))}">'
         xml_output += '\n  <Properties>'
         
-        # Garante que peças fiquem fixas se não for especificado
+        # Garante visibilidade e fisica basica de Parts
         if "Anchored" not in props and class_name in ["Part", "WedgePart", "CornerWedgePart", "MeshPart"]:
             props["Anchored"] = True
             
-        # Processa todas as propriedades da lista enviada pelo Lua
         for nome_prop, val_prop in props.items():
-            if nome_prop not in ["ClassName"]:
+            if nome_prop != "ClassName":
                 xml_output += processar_propriedade_xml(nome_prop, val_prop)
 
-        # Insere o código do Script
+        # Escreve o codigo do Script na propriedade Source
         if script_code:
             codigo_escapado = saxutils.escape(str(script_code))
             xml_output += f'\n            <ProtectedString name="Source">{codigo_escapado}</ProtectedString>'
 
         xml_output += '\n  </Properties>'
         
+        # Processa os filhos (ex: Texture dentro da Part, LocalScript dentro do Gui)
         if children:
             xml_output += processar_objetos_xml(children)
             
@@ -90,13 +92,26 @@ def construir_rbxlx_completo(part_data_dict):
     workspace_content = ""
     outros_servicos = ""
 
+    # Classes oficiais dos servicos do Roblox para nao virarem "Folder"
+    servicos_oficiais = {
+        "ServerScriptService": "ServerScriptService",
+        "ReplicatedStorage": "ReplicatedStorage",
+        "ServerStorage": "ServerStorage",
+        "StarterGui": "StarterGui",
+        "StarterPack": "StarterPack",
+        "Lighting": "Lighting",
+        "SoundService": "SoundService"
+    }
+
     if isinstance(part_data_dict, dict):
         for servico_nome, servico_dados in part_data_dict.items():
             objetos = servico_dados.get("Objects", [])
+            
             if servico_nome == "Workspace":
                 workspace_content += processar_objetos_xml(objetos)
             else:
-                outros_servicos += f'\n<Item class="Folder" referent="RBX_SERVICE_{servico_nome}">'
+                classe_servico = servicos_oficiais.get(servico_nome, "Folder")
+                outros_servicos += f'\n<Item class="{classe_servico}" referent="RBX_SERVICE_{servico_nome}">'
                 outros_servicos += f'\n  <Properties><string name="Name">{servico_nome}</string></Properties>'
                 outros_servicos += processar_objetos_xml(objetos)
                 outros_servicos += '\n</Item>'
@@ -110,14 +125,6 @@ def construir_rbxlx_completo(part_data_dict):
         <Properties>
             <string name="Name">Workspace</string>
         </Properties>
-        <Item class="SpawnLocation" referent="RBX_SPAWN">
-            <Properties>
-                <string name="Name">SpawnLocation</string>
-                <bool name="Anchored">true</bool>
-                <Vector3 name="Position"><X>0</X><Y>5</Y><Z>0</Z></Vector3>
-                <Vector3 name="size"><X>12</X><Y>1</Y><Z>12</Z></Vector3>
-            </Properties>
-        </Item>
         {workspace_content}
     </Item>
     {outros_servicos}
@@ -145,7 +152,7 @@ def publicar():
             "User-Agent": "RobloxOpenCloudClient/1.0"
         }
 
-        resposta = requests.post(url_roblox, headers=headers_roblox, data=conteudo_rbxlx)
+        resposta = requests.post(url_roblox, headers_roblox, data=conteudo_rbxlx)
 
         return jsonify({
             "status": resposta.status_code,
