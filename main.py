@@ -22,8 +22,8 @@ SERVICOS_OFICIAIS = {
 def processar_propriedade_xml(nome_prop, valor):
     if valor is None or nome_prop in ["ClassName", "Name"]:
         return ""
-    
-    # TRATAMENTO DE CFRAME (Lê a lista de 12 números gerada por {valor:GetComponents()})
+
+    # CFrame (Trata a lista de 12 números vinda de {valor:GetComponents()})
     if nome_prop == "CFrame":
         if isinstance(valor, list) and len(valor) >= 12:
             return f'''
@@ -41,7 +41,7 @@ def processar_propriedade_xml(nome_prop, valor):
                 <R21>{valor[10]}</R21>
                 <R22>{valor[11]}</R22>
             </CoordinateFrame>'''
-        elif isinstance(valor, dict): # Caso venha como dicionário
+        elif isinstance(valor, dict):
             pos = valor.get("Position", {"X": 0, "Y": 0, "Z": 0})
             return f'''
             <CoordinateFrame name="CFrame">
@@ -59,7 +59,7 @@ def processar_propriedade_xml(nome_prop, valor):
                 <R22>{valor.get("R22", 1)}</R22>
             </CoordinateFrame>'''
 
-    # Position, Size e Vector3 em geral
+    # Vetores (Position, Size, etc.)
     elif isinstance(valor, dict) and "X" in valor and "Y" in valor and "Z" in valor:
         return f'''
             <Vector3 name="{nome_prop}">
@@ -67,28 +67,34 @@ def processar_propriedade_xml(nome_prop, valor):
                 <Y>{valor["Y"]}</Y>
                 <Z>{valor["Z"]}</Z>
             </Vector3>'''
-    
-    # Color3 (R, G, B)
+    elif isinstance(valor, list) and len(valor) == 3 and isinstance(valor[0], (int, float)):
+        return f'''
+            <Vector3 name="{nome_prop}">
+                <X>{valor[0]}</X>
+                <Y>{valor[1]}</Y>
+                <Z>{valor[2]}</Z>
+            </Vector3>'''
+
+    # Cores (Color3)
     elif isinstance(valor, dict) and "R" in valor and "G" in valor and "B" in valor:
         r = int(valor["R"] * 255) if isinstance(valor["R"], float) and valor["R"] <= 1.0 else int(valor["R"])
         g = int(valor["G"] * 255) if isinstance(valor["G"], float) and valor["G"] <= 1.0 else int(valor["G"])
         b = int(valor["B"] * 255) if isinstance(valor["B"], float) and valor["B"] <= 1.0 else int(valor["B"])
-        
         cor_uint = (r << 16) | (g << 8) | b
         return f'\n            <Color3uint8 name="{nome_prop}">{cor_uint}</Color3uint8>'
-    
-    # Booleanos
+
+    # Booleanos (Anchored, CanCollide, etc.)
     elif isinstance(valor, bool):
         val_str = "true" if valor else "false"
         return f'\n            <bool name="{nome_prop}">{val_str}</bool>'
-    
-    # Números
+
+    # Números (Transparency, Reflectance, etc.)
     elif isinstance(valor, (int, float)):
         if isinstance(valor, float):
             return f'\n            <float name="{nome_prop}">{valor}</float>'
         return f'\n            <int name="{nome_prop}">{valor}</int>'
-    
-    # Strings, BrickColor, Enums e Imagens
+
+    # Strings / Enums / Texturas
     elif isinstance(valor, str):
         if "Enum." in valor:
             enum_val = valor.split(".")[-1]
@@ -96,48 +102,63 @@ def processar_propriedade_xml(nome_prop, valor):
         if nome_prop in ["Texture", "Image", "TextureId", "ImageId"] or valor.startswith("rbxassetid://"):
             return f'\n            <Content name="{nome_prop}"><url>{saxutils.escape(valor)}</url></Content>'
         return f'\n            <string name="{nome_prop}">{saxutils.escape(valor)}</string>'
-        
+
     return ""
 
-def processar_objetos_xml(lista_objetos):
+
+def processar_objetos_xml(TableData):
     xml_output = ""
-    for idx, obj in enumerate(lista_objetos):
-        props = obj.get("Properties", {})
-        children = obj.get("Children", [])
-        script_code = obj.get("Script")
-        
-        class_name = props.get("ClassName", "Part")
-        obj_name = props.get("Name", f"Object_{idx}")
-        
-        if script_code and class_name not in ["Script", "LocalScript", "ModuleScript"]:
-            class_name = "Script"
 
-        ref_id = f"RBX_OBJ_{idx}_{abs(hash(obj_name))}"
+    # Percorre toda a lista enviada usando for _, a in pairs(TableData)
+    if isinstance(TableData, list):
+        for idx, a in enumerate(TableData):
+            if isinstance(a, dict):
+                props = a.get("Properties", {})
+                children = a.get("Children", [])
+                script_code = a.get("Script")
 
-        xml_output += f'\n<Item class="{class_name}" referent="{ref_id}">'
-        xml_output += '\n  <Properties>'
-        xml_output += f'\n    <string name="Name">{saxutils.escape(obj_name)}</string>'
-        
-        if class_name in ["Part", "WedgePart", "CornerWedgePart", "MeshPart", "SpawnLocation"]:
-            if "Anchored" not in props:
-                props["Anchored"] = True
+                class_name = props.get("ClassName", "Part")
+                obj_name = props.get("Name", f"Object_{idx}")
 
-        for nome_prop, val_prop in props.items():
-            xml_output += processar_propriedade_xml(nome_prop, val_prop)
+                # Se houver código de script, ajusta a classe caso necessário
+                if script_code and class_name not in ["Script", "LocalScript", "ModuleScript"]:
+                    class_name = "Script"
 
-        if script_code or class_name in ["Script", "LocalScript", "ModuleScript"]:
-            codigo_str = str(script_code) if script_code is not None else ""
-            codigo_escapado = saxutils.escape(codigo_str)
-            xml_output += f'\n            <ProtectedString name="Source">{codigo_escapado}</ProtectedString>'
+                ref_id = f"RBX_OBJ_{idx}_{abs(hash(obj_name))}"
 
-        xml_output += '\n  </Properties>'
-        
-        if children:
-            xml_output += processar_objetos_xml(children)
-            
-        xml_output += '\n</Item>'
+                xml_output += f'\n<Item class="{class_name}" referent="{ref_id}">'
+                xml_output += '\n  <Properties>'
+                xml_output += f'\n    <string name="Name">{saxutils.escape(obj_name)}</string>'
+
+                # Força Ancoragem para evitar que as peças caiam no vácuo
+                if class_name in ["Part", "WedgePart", "CornerWedgePart", "MeshPart", "SpawnLocation"]:
+                    if "Anchored" not in props:
+                        props["Anchored"] = True
+                    if "CanCollide" not in props:
+                        props["CanCollide"] = True
+
+                # Processa cada propriedade da peça
+                if isinstance(props, dict):
+                    for nome_prop, val_prop in props.items():
+                        if nome_prop not in ["ClassName", "Name"]:
+                            xml_output += processar_propriedade_xml(nome_prop, val_prop)
+
+                # Adiciona o código caso seja um Script
+                if script_code or class_name in ["Script", "LocalScript", "ModuleScript"]:
+                    codigo_str = str(script_code) if script_code is not None else ""
+                    codigo_escapado = saxutils.escape(codigo_str)
+                    xml_output += f'\n            <ProtectedString name="Source">{codigo_escapado}</ProtectedString>'
+
+                xml_output += '\n  </Properties>'
+
+                # Recursão para processar os filhos da peça/objeto
+                if children and isinstance(children, list):
+                    xml_output += processar_objetos_xml(children)
+
+                xml_output += '\n</Item>'
 
     return xml_output
+
 
 def construir_rbxlx_completo(part_data_dict):
     workspace_content = ""
@@ -146,13 +167,13 @@ def construir_rbxlx_completo(part_data_dict):
     if isinstance(part_data_dict, dict):
         for servico_nome, servico_dados in part_data_dict.items():
             objetos = servico_dados.get("Objects", [])
-            
+
             if servico_nome == "Workspace":
                 workspace_content += processar_objetos_xml(objetos)
             else:
                 classe_servico = SERVICOS_OFICIAIS.get(servico_nome, "Folder")
                 ref_servico = f"RBX_SERVICE_{servico_nome}"
-                
+
                 outros_servicos += f'\n<Item class="{classe_servico}" referent="{ref_servico}">'
                 outros_servicos += f'\n  <Properties><string name="Name">{servico_nome}</string></Properties>'
                 outros_servicos += processar_objetos_xml(objetos)
@@ -176,6 +197,7 @@ def construir_rbxlx_completo(part_data_dict):
 
     return rbxlx_str.encode('utf-8')
 
+
 @app.route('/publicar', methods=['POST'])
 def publicar():
     try:
@@ -189,7 +211,7 @@ def publicar():
 
         conteudo_rbxlx = construir_rbxlx_completo(dados_json)
         url_roblox = f"https://apis.roblox.com/universes/v1/{universe_id}/places/{place_id}/versions?versionType=Published"
-        
+
         headers_roblox = {
             "x-api-key": api_key,
             "Content-Type": "application/xml",
@@ -205,6 +227,7 @@ def publicar():
 
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
