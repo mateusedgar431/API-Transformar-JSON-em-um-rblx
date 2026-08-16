@@ -1,40 +1,52 @@
 from flask import Flask, request, jsonify
 import requests
-import xml.etree.ElementTree as ET
 
 app = Flask(__name__)
 
-def gerar_rbxlx(part_data_list):
-    roblox_xml = ET.Element("roblox", {
-        "xmlns:xmime": "http://www.w3.org/2005/05/xmlmime",
-        "version": "4"
-    })
-    
-    workspace = ET.SubElement(roblox_xml, "Item", {"class": "Workspace", "referent": "RBX_WORKSPACE"})
-    properties = ET.SubElement(workspace, "Properties")
-    name_prop = ET.SubElement(properties, "string", {"name": "Name"})
-    name_prop.text = "Workspace"
-
+def gerar_rbxlx_string(part_data_list):
+    """
+    Gera o XML .rbxlx com os cabecalhos padrao do Roblox para evitar bloqueio do WAF.
+    """
+    parts_xml = ""
     for index, item in enumerate(part_data_list):
-        part = ET.SubElement(workspace, "Item", {"class": "Part", "referent": f"RBX_PART_{index}"})
-        part_props = ET.SubElement(part, "Properties")
+        p_name = item.get("Name", "Part")
         
-        p_name = ET.SubElement(part_props, "string", {"name": "Name"})
-        p_name.text = str(item.get("Name", "Part"))
+        pos = item.get("Position", {})
+        px, py, pz = pos.get("X", 0), pos.get("Y", 0), pos.get("Z", 0)
         
-        pos_data = item.get("Position", {})
-        p_pos = ET.SubElement(part_props, "Vector3", {"name": "Position"})
-        ET.SubElement(p_pos, "X").text = str(pos_data.get("X", 0))
-        ET.SubElement(p_pos, "Y").text = str(pos_data.get("Y", 0))
-        ET.SubElement(p_pos, "Z").text = str(pos_data.get("Z", 0))
+        size = item.get("Size", {})
+        sx, sy, sz = size.get("X", 4), size.get("Y", 1.2), size.get("Z", 2)
 
-        size_data = item.get("Size", {})
-        p_size = ET.SubElement(part_props, "Vector3", {"name": "size"})
-        ET.SubElement(p_size, "X").text = str(size_data.get("X", 4))
-        ET.SubElement(p_size, "Y").text = str(size_data.get("Y", 1.2))
-        ET.SubElement(p_size, "Z").text = str(size_data.get("Z", 2))
+        parts_xml += f'''
+        <Item class="Part" referent="RBX_PART_{index}">
+            <Properties>
+                <string name="Name">{p_name}</string>
+                <Vector3 name="Position">
+                    <X>{px}</X>
+                    <Y>{py}</Y>
+                    <Z>{pz}</Z>
+                </Vector3>
+                <Vector3 name="size">
+                    <X>{sx}</X>
+                    <Y>{sy}</Y>
+                    <Z>{sz}</Z>
+                </Vector3>
+            </Properties>
+        </Item>'''
 
-    return ET.tostring(roblox_xml, encoding="utf-8", method="xml")
+    rbxlx_full = f'''<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <External>null</External>
+    <External>nil</External>
+    <Item class="Workspace" referent="RBX_WORKSPACE">
+        <Properties>
+            <string name="Name">Workspace</string>
+        </Properties>
+        {parts_xml}
+    </Item>
+</roblox>'''
+
+    return rbxlx_full.encode('utf-8')
+
 
 @app.route('/publicar', methods=['POST'])
 def publicar():
@@ -47,12 +59,14 @@ def publicar():
         if not api_key or not universe_id or not place_id:
             return jsonify({"erro": "Headers 'x-api-key', 'universe-id' e 'place-id' sao obrigatorios."}), 400
 
-        conteudo_rbxlx = gerar_rbxlx(dados_json)
+        conteudo_rbxlx = gerar_rbxlx_string(dados_json)
 
         url_roblox = f"https://apis.roblox.com/universes/v1/{universe_id}/places/{place_id}/versions?versionType=Published"
+        
         headers_roblox = {
             "x-api-key": api_key,
-            "Content-Type": "application/octet-stream"
+            "Content-Type": "application/xml",
+            "User-Agent": "RobloxOpenCloudClient/1.0"
         }
 
         resposta = requests.post(url_roblox, headers=headers_roblox, data=conteudo_rbxlx)
@@ -64,6 +78,7 @@ def publicar():
 
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
