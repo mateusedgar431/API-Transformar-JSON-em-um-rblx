@@ -276,8 +276,12 @@ def publicar():
         with open(file_rbxlx, "wb") as f:
             f.write(conteudo_rbxlx)
 
-        # 3. Compila XML para Binario (.rbxl) via rbxmk
-        cmd_rbxmk = "rbxmk.exe" if os.name == 'nt' else "rbxmk"
+        # 3. Compila XML para Binario (.rbxl) via rbxmk da mesma pasta (./rbxmk)
+        if os.name == 'nt':
+            cmd_rbxmk = "rbxmk.exe"
+        else:
+            cmd_rbxmk = "./rbxmk" if os.path.exists("./rbxmk") else "rbxmk"
+
         subprocess.run([cmd_rbxmk, "convertToRBXL", file_rbxlx, file_rbxl], check=True)
 
         # 4. Le o arquivo binario compilado
