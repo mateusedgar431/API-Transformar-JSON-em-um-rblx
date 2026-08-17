@@ -1,6 +1,8 @@
 from flask import Flask, request, jsonify
 import requests
 import xml.sax.saxutils as saxutils
+import subprocess
+import os
 
 app = Flask(__name__)
 
@@ -58,7 +60,6 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
     if isinstance(props_dict, dict) and "CFrame" in props_dict and nome_prop in ["Position", "Orientation", "Rotation"]:
         return ""
 
-    # Tratamento especial de tempo de Lighting para a API v1
     if nome_prop == "ClockTime":
         horas = float(valor)
         h = int(horas)
@@ -102,14 +103,6 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
 
         if "R" in valor and "G" in valor and "B" in valor:
             r, g, b = valor["R"], valor["G"], valor["B"]
-            
-            if nome_prop in ["Ambient", "OutdoorAmbient", "ColorShift_Top", "ColorShift_Bottom", "FogColor"]:
-                r_int = int(r * 255) if isinstance(r, float) and r <= 1.0 else int(r)
-                g_int = int(g * 255) if isinstance(g, float) and g <= 1.0 else int(g)
-                b_int = int(b * 255) if isinstance(b, float) and b <= 1.0 else int(b)
-                color_uint32 = (r_int << 16) | (g_int << 8) | b_int
-                return f'\n            <Color3uint8 name="{nome_prop}">{color_uint32}</Color3uint8>'
-            
             rf = r / 255.0 if r > 1.0 else float(r)
             gf = g / 255.0 if g > 1.0 else float(g)
             bf = b / 255.0 if b > 1.0 else float(b)
@@ -264,6 +257,9 @@ def construir_rbxlx_completo(part_data_dict):
 
 @app.route('/publicar', methods=['POST'])
 def publicar():
+    file_rbxlx = "temp_place.rbxlx"
+    file_rbxl = "temp_place.rbxl"
+
     try:
         dados_json = request.json
         api_key = request.headers.get('x-api-key')
@@ -273,16 +269,30 @@ def publicar():
         if not api_key or not universe_id or not place_id:
             return jsonify({"erro": "Headers obrigatorios faltando."}), 400
 
+        # 1. Gera o XML
         conteudo_rbxlx = construir_rbxlx_completo(dados_json)
-        url_roblox = f"https://apis.roblox.com/universes/v1/{universe_id}/places/{place_id}/versions?versionType=Published"
 
+        # 2. Escreve arquivo XML temporario
+        with open(file_rbxlx, "wb") as f:
+            f.write(conteudo_rbxlx)
+
+        # 3. Compila XML para Binario (.rbxl) via rbxmk
+        cmd_rbxmk = "rbxmk.exe" if os.name == 'nt' else "rbxmk"
+        subprocess.run([cmd_rbxmk, "convertToRBXL", file_rbxlx, file_rbxl], check=True)
+
+        # 4. Le o arquivo binario compilado
+        with open(file_rbxl, "rb") as f:
+            conteudo_binario = f.read()
+
+        # 5. Envia o payload BINÁRIO para a API V1
+        url_roblox = f"https://apis.roblox.com/universes/v1/{universe_id}/places/{place_id}/versions?versionType=Published"
         headers_roblox = {
             "x-api-key": api_key,
-            "Content-Type": "application/xml",
+            "Content-Type": "application/octet-stream",
             "User-Agent": "RobloxOpenCloudClient/1.0"
         }
 
-        resposta = requests.post(url_roblox, headers=headers_roblox, data=conteudo_rbxlx)
+        resposta = requests.post(url_roblox, headers=headers_roblox, data=conteudo_binario)
 
         return jsonify({
             "status": resposta.status_code,
@@ -291,6 +301,13 @@ def publicar():
 
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
+
+    finally:
+        # Limpa arquivos temporarios
+        if os.path.exists(file_rbxlx):
+            os.remove(file_rbxlx)
+        if os.path.exists(file_rbxl):
+            os.remove(file_rbxl)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
