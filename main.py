@@ -19,12 +19,15 @@ SERVICOS_OFICIAIS = {
     "MaterialService": "MaterialService"
 }
 
+# Mapeamento completo de Enums de Serviços para IDs numéricos exigidos no RBXLX
 MAPA_ENUM_TEXTO_PARA_ID = {
     "Right": 0, "Top": 1, "Back": 2, "Left": 3, "Bottom": 4, "Front": 5,
     "Smooth": 0, "Glue": 1, "Weld": 2, "Studs": 3, "Inlet": 4, 
     "Universal": 5, "Hinge": 6, "Motor": 7, "SteppingMotor": 8,
     "Ball": 0, "Block": 1, "Cylinder": 2, "Wedge": 3,
-    "Linear": 0, "In": 0, "Out": 1, "InOut": 2, "Sine": 1, "Quad": 3
+    "Linear": 0, "In": 0, "Out": 1, "InOut": 2, "Sine": 1, "Quad": 3,
+    "ShadowMap": 1, "Compatibility": 0, "Future": 2, "Voxel": 3,  # Technology
+    "Fixed": 0, "Attach": 1, "Watch": 2, "Track": 3, "Follow": 4, "Custom": 5, "Scriptable": 6 # CameraType
 }
 
 def normalizar_valor_token(nome_prop, valor):
@@ -44,8 +47,8 @@ def normalizar_valor_token(nome_prop, valor):
             return nome_limpo
         return nome_limpo
 
-    if isinstance(valor, int):
-        return str(valor)
+    if isinstance(valor, (int, float)):
+        return str(int(valor))
 
     return str(valor)
 
@@ -71,38 +74,7 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
         val_str = "true" if valor else "false"
         return f'\n            <bool name="{nome_prop}">{val_str}</bool>'
 
-    # 3. ENUMS / TOKENS
-    e_enum = (
-        nome_prop in ["Shape", "Font", "PartType", "Face", "NormalId", "Technology", "CameraType"] or
-        nome_prop.endswith("Surface") or
-        nome_prop.endswith("Type") or 
-        nome_prop.endswith("Style") or 
-        nome_prop.endswith("Mode") or 
-        nome_prop.endswith("Alignment") or 
-        nome_prop.endswith("Direction")
-    )
-
-    if e_enum or (isinstance(valor, str) and "Enum." in valor):
-        val_token = normalizar_valor_token(nome_prop, valor)
-        return f'\n            <token name="{nome_prop}">{val_token}</token>'
-
-    # 4. TRATAMENTO ESPECÍFICO PARA LIGHTING E PROPRIEDADES NATIVAS DE SERVIÇOS
-    if nome_prop == "ClockTime":
-        return f'\n            <float name="ClockTime">{float(valor)}</float>'
-    if nome_prop == "TimeOfDay":
-        return f'\n            <string name="TimeOfDay">{saxutils.escape(str(valor))}</string>'
-    if nome_prop in ["GeographicLatitude", "Brightness", "ExposureCompensation", "ShadowSoftness"]:
-        return f'\n            <float name="{nome_prop}">{float(valor)}</float>'
-
-    # 5. FLOATS GERAIS
-    if isinstance(valor, float):
-        return f'\n            <float name="{nome_prop}">{float(valor)}</float>'
-
-    # 6. INTEIROS
-    if isinstance(valor, int):
-        return f'\n            <int name="{nome_prop}">{valor}</int>'
-
-    # 7. DICIONÁRIOS (Color3 / Color3uint8 / Vector3 / UDim2)
+    # 3. DICIONÁRIOS (Color3 / Color3uint8 / Vector3 / UDim2)
     if isinstance(valor, dict):
         if "X" in valor and "Y" in valor and isinstance(valor.get("X"), dict):
             x_dict, y_dict = valor.get("X", {}), valor.get("Y", {})
@@ -121,11 +93,17 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
             </Vector3>'''
 
         if "R" in valor and "G" in valor and "B" in valor:
-            r = valor["R"]
-            g = valor["G"]
-            b = valor["B"]
+            r, g, b = valor["R"], valor["G"], valor["B"]
             
-            # Converte valores 0-255 para ponto flutuante 0.0 - 1.0 exigido no XML nativo
+            # Se a propriedade for de iluminação/cor de serviço, converte para inteiro uint8 caso necessário
+            if nome_prop in ["Ambient", "OutdoorAmbient", "ColorShift_Top", "ColorShift_Bottom", "FogColor"]:
+                r_int = int(r * 255) if isinstance(r, float) and r <= 1.0 else int(r)
+                g_int = int(g * 255) if isinstance(g, float) and g <= 1.0 else int(g)
+                b_int = int(b * 255) if isinstance(b, float) and b <= 1.0 else int(b)
+                # O formato RBXLX de serviços aceita a sintaxe hex em Color3uint8
+                color_uint32 = (r_int << 16) | (g_int << 8) | b_int
+                return f'\n            <Color3uint8 name="{nome_prop}">{color_uint32}</Color3uint8>'
+            
             rf = r / 255.0 if r > 1.0 else float(r)
             gf = g / 255.0 if g > 1.0 else float(g)
             bf = b / 255.0 if b > 1.0 else float(b)
@@ -137,7 +115,30 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
                 <B>{bf}</B>
             </Color3>'''
 
-    # 8. STRINGS
+    # 4. ENUMS / TOKENS
+    e_enum = (
+        nome_prop in ["Shape", "Font", "PartType", "Face", "NormalId", "Technology", "CameraType"] or
+        nome_prop.endswith("Surface") or
+        nome_prop.endswith("Type") or 
+        nome_prop.endswith("Style") or 
+        nome_prop.endswith("Mode") or 
+        nome_prop.endswith("Alignment") or 
+        nome_prop.endswith("Direction")
+    )
+
+    if e_enum or (isinstance(valor, str) and "Enum." in valor):
+        val_token = normalizar_valor_token(nome_prop, valor)
+        return f'\n            <token name="{nome_prop}">{val_token}</token>'
+
+    # 5. FLOATS (Gerais e de Serviços)
+    if isinstance(valor, float):
+        return f'\n            <float name="{nome_prop}">{valor}</float>'
+
+    # 6. INTEIROS
+    if isinstance(valor, int):
+        return f'\n            <int name="{nome_prop}">{valor}</int>'
+
+    # 7. STRINGS
     if isinstance(valor, str):
         if nome_prop in ["Texture", "Image", "TextureId", "ImageId", "MeshId", "SoundId"] or valor.startswith("rbxassetid://"):
             return f'\n            <Content name="{nome_prop}"><url>{saxutils.escape(valor)}</url></Content>'
@@ -198,7 +199,6 @@ def construir_rbxlx_completo(part_data_dict):
     workspace_content = ""
     servicos_xml = {}
 
-    # Inicializa os serviços
     for s_nome in SERVICOS_OFICIAIS.keys():
         if s_nome != "Workspace":
             servicos_xml[s_nome] = {"props": "", "objects": ""}
