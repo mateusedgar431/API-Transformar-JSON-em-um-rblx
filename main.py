@@ -58,11 +58,17 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
     if isinstance(props_dict, dict) and "CFrame" in props_dict and nome_prop in ["Position", "Orientation", "Rotation"]:
         return ""
 
-    # Ajuste de tempo de iluminação (TimeOfDay / ClockTime)
+    # Tratamento especial de tempo de Lighting para a API v1
+    if nome_prop == "ClockTime":
+        horas = float(valor)
+        h = int(horas)
+        m = int((horas - h) * 60)
+        s = int((((horas - h) * 60) - m) * 60)
+        time_str = f"{h:02d}:{m:02d}:{s:02d}"
+        return f'\n            <float name="ClockTime">{horas}</float>\n            <string name="TimeOfDay">{time_str}</string>'
+
     if nome_prop == "TimeOfDay":
         return f'\n            <string name="TimeOfDay">{saxutils.escape(str(valor))}</string>'
-    if nome_prop == "ClockTime":
-        return f'\n            <float name="ClockTime">{float(valor)}</float>'
 
     if nome_prop == "CFrame" and isinstance(valor, list) and len(valor) >= 12:
         return f'''
@@ -105,7 +111,7 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
                 return f'\n            <Color3uint8 name="{nome_prop}">{color_uint32}</Color3uint8>'
             
             rf = r / 255.0 if r > 1.0 else float(r)
-            gf = g / 255.0 if g > 1.0 else float(gf) if 'gf' in locals() else float(g)
+            gf = g / 255.0 if g > 1.0 else float(g)
             bf = b / 255.0 if b > 1.0 else float(b)
 
             return f'''
