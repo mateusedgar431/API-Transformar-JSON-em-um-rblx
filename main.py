@@ -65,7 +65,6 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
         s = int((((horas - h) * 60) - m) * 60)
         time_str = f"{h:02d}:{m:02d}:{s:02d}"
         
-        # Para forçar o escuro no XML, enviamos TimeOfDay + Brightness zero + Ambient preto
         if horas in [0, 0.0] or time_str == "00:00:00":
             return f'''
             <string name="TimeOfDay">00:00:00</string>
@@ -162,9 +161,6 @@ def processar_objetos_xml(TableData):
                 class_name = props.get("ClassName", "Part")
                 obj_name = props.get("Name", f"Object_{idx}")
 
-                if script_code and class_name not in ["Script", "LocalScript", "ModuleScript"]:
-                    class_name = "Script"
-
                 ref_id = f"RBX_OBJ_{idx}_{abs(hash(obj_name))}"
 
                 xml_output += f'\n<Item class="{class_name}" referent="{ref_id}">'
@@ -215,7 +211,7 @@ def construir_rbxlx_completo(part_data_dict):
 
             if servico_nome == "Workspace":
                 workspace_content += processar_objetos_xml(objetos)
-            else:
+            elif servico_nome in SERVICOS_OFICIAIS:
                 str_props = ""
                 for k, v in propriedades_servico.items():
                     str_props += processar_propriedade_xml(k, v, propriedades_servico)
