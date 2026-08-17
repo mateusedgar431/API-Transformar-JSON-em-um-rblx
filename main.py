@@ -24,7 +24,7 @@ SERVICOS_MESTRES = {
     "chat": "Chat"
 }
 
-# Propriedades padrao obrigatorias para evitar que o parser do Roblox descarte o servico
+# Propriedades minimas obrigatorias para o parser do Roblox aceitar os servicos
 PROPRIEDADES_PADRAO = {
     "Lighting": {
         "Ambient": [0.5, 0.5, 0.5],
@@ -68,9 +68,49 @@ def converter_para_cor_xml(nome_prop, r, g, b):
     bf = b / 255.0 if b > 1.0 else float(b)
     return f'<Color3 name="{nome_prop}"><R>{rf}</R><G>{gf}</G><B>{bf}</B></Color3>'
 
+def gerar_cframe_xml(nome_prop, valor):
+    x, y, z = 0.0, 0.0, 0.0
+    r00, r01, r02 = 1.0, 0.0, 0.0
+    r10, r11, r12 = 0.0, 1.0, 0.0
+    r20, r21, r22 = 0.0, 0.0, 1.0
+
+    if isinstance(valor, (list, tuple)):
+        if len(valor) >= 12:
+            x, y, z = float(valor[0]), float(valor[1]), float(valor[2])
+            r00, r01, r02 = float(valor[3]), float(valor[4]), float(valor[5])
+            r10, r11, r12 = float(valor[6]), float(valor[7]), float(valor[8])
+            r20, r21, r22 = float(valor[9]), float(valor[10]), float(valor[11])
+        elif len(valor) >= 3:
+            x, y, z = float(valor[0]), float(valor[1]), float(valor[2])
+    elif isinstance(valor, dict):
+        x = float(valor.get("X", 0.0))
+        y = float(valor.get("Y", 0.0))
+        z = float(valor.get("Z", 0.0))
+
+    return f'''<CoordinateFrame name="{nome_prop}">
+        <X>{x}</X><Y>{y}</Y><Z>{z}</Z>
+        <R00>{r00}</R00><R01>{r01}</R01><R02>{r02}</R02>
+        <R10>{r10}</R10><R11>{r11}</R11><R12>{r12}</R12>
+        <R20>{r20}</R20><R21>{r21}</R21><R22>{r22}</R22>
+    </CoordinateFrame>'''
+
 def tratar_propriedade_individual(nome_prop, valor, props_dict=None):
     if valor is None or nome_prop in ["ClassName", "Name", "Parent", "FormFactor"]:
         return ""
+
+    if nome_prop == "CFrame":
+        return gerar_cframe_xml("CFrame", valor)
+
+    if nome_prop in ["Position", "Orientation", "Rotation"] and props_dict and "CFrame" in props_dict:
+        return ""
+
+    if nome_prop == "Position" and props_dict and "CFrame" not in props_dict:
+        xml_pos = ""
+        if isinstance(valor, (list, tuple)) and len(valor) == 3:
+            xml_pos = f'<Vector3 name="Position"><X>{valor[0]}</X><Y>{valor[1]}</Y><Z>{valor[2]}</Z></Vector3>\n            '
+        elif isinstance(valor, dict) and "X" in valor and "Y" in valor and "Z" in valor:
+            xml_pos = f'<Vector3 name="Position"><X>{valor["X"]}</X><Y>{valor["Y"]}</Y><Z>{valor["Z"]}</Z></Vector3>\n            '
+        return xml_pos + gerar_cframe_xml("CFrame", valor)
 
     if nome_prop == "ClockTime":
         horas = float(valor)
@@ -88,17 +128,32 @@ def tratar_propriedade_individual(nome_prop, valor, props_dict=None):
     if isinstance(valor, dict):
         if "R" in valor and "G" in valor and "B" in valor:
             return converter_para_cor_xml(nome_prop, valor["R"], valor["G"], valor["B"])
+
         if "X" in valor and "Y" in valor and "Z" in valor:
             return f'<Vector3 name="{nome_prop}"><X>{valor["X"]}</X><Y>{valor["Y"]}</Y><Z>{valor["Z"]}</Z></Vector3>'
 
-    if isinstance(valor, (list, tuple)) and len(valor) == 3:
-        if nome_prop in ["Ambient", "OutdoorAmbient", "FogColor", "Color", "ColorShift_Bottom", "ColorShift_Top"]:
-            return converter_para_cor_xml(nome_prop, valor[0], valor[1], valor[2])
-        return f'<Vector3 name="{nome_prop}"><X>{valor[0]}</X><Y>{valor[1]}</Y><Z>{valor[2]}</Z></Vector3>'
+        if "X" in valor and "Y" in valor and isinstance(valor.get("X"), dict):
+            x_dict, y_dict = valor.get("X", {}), valor.get("Y", {})
+            return f'''<UDim2 name="{nome_prop}">
+                <XS>{x_dict.get("Scale", 0)}</XS><XO>{x_dict.get("Offset", 0)}</XO>
+                <YS>{y_dict.get("Scale", 0)}</YS><YO>{y_dict.get("Offset", 0)}</YO>
+            </UDim2>'''
+
+    if isinstance(valor, (list, tuple)):
+        if len(valor) == 3:
+            if nome_prop in ["Ambient", "OutdoorAmbient", "FogColor", "Color", "ColorShift_Bottom", "ColorShift_Top"]:
+                return converter_para_cor_xml(nome_prop, valor[0], valor[1], valor[2])
+            return f'<Vector3 name="{nome_prop}"><X>{valor[0]}</X><Y>{valor[1]}</Y><Z>{valor[2]}</Z></Vector3>'
+        elif len(valor) == 4 and nome_prop in ["Position", "Size", "AnchorPoint"]:
+            return f'''<UDim2 name="{nome_prop}">
+                <XS>{valor[0]}</XS><XO>{valor[1]}</XO>
+                <YS>{valor[2]}</YS><YO>{valor[3]}</YO>
+            </UDim2>'''
 
     e_enum = (
         nome_prop in ["Shape", "Font", "PartType", "Face", "NormalId", "Technology", "CameraType", "Material", "AmbientReverb"] or
-        nome_prop.endswith("Surface") or nome_prop.endswith("Type") or nome_prop.endswith("Style") or nome_prop.endswith("Mode")
+        nome_prop.endswith("Surface") or nome_prop.endswith("Type") or 
+        nome_prop.endswith("Style") or nome_prop.endswith("Mode")
     )
     if e_enum or (isinstance(valor, str) and "Enum." in valor):
         val_clean = str(valor).split(".")[-1]
@@ -112,6 +167,8 @@ def tratar_propriedade_individual(nome_prop, valor, props_dict=None):
         return f'<int name="{nome_prop}">{valor}</int>'
 
     if isinstance(valor, str):
+        if nome_prop in ["Texture", "Image", "TextureId", "ImageId", "MeshId", "SoundId"] or valor.startswith("rbxassetid://"):
+            return f'<Content name="{nome_prop}"><url>{saxutils.escape(valor)}</url></Content>'
         return f'<string name="{nome_prop}">{saxutils.escape(valor)}</string>'
 
     return ""
@@ -140,6 +197,11 @@ def processar_objetos_xml(TableData):
             if isinstance(a, dict):
                 props = a.get("Properties", {})
                 children = a.get("Children", []) or a.get("Objects", [])
+                script_code = a.get("Script") or (props.get("Source") if isinstance(props, dict) else None)
+
+                if not isinstance(props, dict):
+                    props = {}
+
                 class_name = props.get("ClassName", "Part")
                 obj_name = props.get("Name", f"Object_{idx}")
 
@@ -149,6 +211,11 @@ def processar_objetos_xml(TableData):
                 xml_output += '\n  <Properties>'
                 xml_output += f'\n    <string name="Name">{saxutils.escape(str(obj_name))}</string>'
                 xml_output += processar_dicionario_propriedades(props)
+
+                if script_code or class_name in ["Script", "LocalScript", "ModuleScript"]:
+                    codigo_str = str(script_code) if script_code is not None else ""
+                    xml_output += f'\n    <ProtectedString name="Source">{saxutils.escape(codigo_str)}</ProtectedString>'
+
                 xml_output += '\n  </Properties>'
 
                 if children and isinstance(children, list):
@@ -163,7 +230,6 @@ def construir_rbxlx_completo(part_data_dict):
     workspace_props = ""
     servicos_dados_finais = {}
 
-    # Preenche todos os servicos conhecidos com suas propriedades padrao
     for s_nome in SERVICOS_MESTRES.values():
         if s_nome != "Workspace":
             servicos_dados_finais[s_nome] = {
@@ -196,9 +262,11 @@ def construir_rbxlx_completo(part_data_dict):
                 workspace_content += processar_objetos_xml(objetos)
                 workspace_props = processar_dicionario_propriedades(propriedades_recebidas)
             else:
-                # Sobrescreve apenas as propriedades enviadas mantendo o bloco completo
                 servicos_dados_finais[servico_oficial]["props"].update(propriedades_recebidas)
                 servicos_dados_finais[servico_oficial]["objects"] = objetos
+
+    elif isinstance(part_data_dict, list):
+        workspace_content = processar_objetos_xml(part_data_dict)
 
     outros_servicos_str = ""
     for s_nome, dados in servicos_dados_finais.items():
