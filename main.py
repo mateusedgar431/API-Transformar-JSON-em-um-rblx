@@ -24,8 +24,8 @@ SERVICOS_MESTRES = {
     "chat": "Chat"
 }
 
-# Tabela completa de propriedades padrao automatica para todos os serviços do Roblox
-PROPRIEDADES_PADRAO = {
+# Propriedades padrao automaticas para todos os Services (evita rejeicao da Open Cloud)
+PROPRIEDADES_PADRAO_SERVICOS = {
     "Lighting": {
         "Ambient": [0.5, 0.5, 0.5],
         "Brightness": 2.0,
@@ -172,6 +172,7 @@ def processar_dicionario_propriedades(props_dict):
     return xml_props
 
 def processar_objetos_xml(TableData):
+    """Processa apenas o que foi enviado no JSON para Parts/Instancias, sem injetar padroes."""
     xml_output = ""
     if isinstance(TableData, list):
         for idx, a in enumerate(TableData):
@@ -201,14 +202,15 @@ def construir_rbxlx_completo(part_data_dict):
     workspace_props = ""
     servicos_dados_finais = {}
 
-    # Inicializa todos os servicos com suas propriedades obrigatorias
+    # 1. Carrega todas as propriedades padrao para SERVICOS (Lighting, StarterPlayer, etc.)
     for s_nome in SERVICOS_MESTRES.values():
         if s_nome != "Workspace":
             servicos_dados_finais[s_nome] = {
-                "props": PROPRIEDADES_PADRAO.get(s_nome, {}).copy(),
+                "props": PROPRIEDADES_PADRAO_SERVICOS.get(s_nome, {}).copy(),
                 "objects": []
             }
 
+    # 2. Processa a entrada do JSON
     if isinstance(part_data_dict, dict):
         for chave_entrada, servico_dados in part_data_dict.items():
             chave_low = str(chave_entrada).strip().lower()
@@ -234,7 +236,7 @@ def construir_rbxlx_completo(part_data_dict):
                 workspace_content += processar_objetos_xml(objetos)
                 workspace_props = processar_dicionario_propriedades(propriedades_recebidas)
             else:
-                # Atualiza as propriedades sem alterar as Parts
+                # Atualiza os Servicos com os dados do JSON mantendo o schema minimo
                 servicos_dados_finais[servico_oficial]["props"].update(propriedades_recebidas)
                 servicos_dados_finais[servico_oficial]["objects"] = objetos
 
