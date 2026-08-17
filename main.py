@@ -19,7 +19,7 @@ SERVICOS_OFICIAIS = {
     "MaterialService": "MaterialService"
 }
 
-# Tabela Mestra de Enums (Mantida para Face, Surfaces, etc., sem alterar Material por enquanto)
+# Tabela Mestra de Enums
 MAPA_ENUM_TEXTO_PARA_ID = {
     "Right": 0, "Top": 1, "Back": 2, "Left": 3, "Bottom": 4, "Front": 5,
     "Smooth": 0, "Glue": 1, "Weld": 2, "Studs": 3, "Inlet": 4, 
@@ -38,7 +38,6 @@ def normalizar_valor_token(nome_prop, valor):
     if isinstance(valor, str):
         nome_limpo = valor.split(".")[-1]
         
-        # Pausado ajuste de Material conforme solicitado
         if nome_prop == "Material":
             return nome_limpo
 
@@ -92,15 +91,21 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
         val_token = normalizar_valor_token(nome_prop, valor)
         return f'\n            <token name="{nome_prop}">{val_token}</token>'
 
-    # 4. FLOATS E DOUBLES (Importante para Lighting como ClockTime, Brightness, ExposureCompensation)
-    if isinstance(valor, float) or (isinstance(valor, int) and nome_prop in ["ClockTime", "GeographicLatitude", "Brightness", "ExposureCompensation", "FogStart", "FogEnd"]):
+    # 4. TIME / CLOCKTIME (O Lighting no XML prefere TimeOfDay ou ClockTime em float/string)
+    if nome_prop == "ClockTime":
+        return f'\n            <float name="ClockTime">{float(valor)}</float>'
+    if nome_prop == "TimeOfDay":
+        return f'\n            <string name="TimeOfDay">{saxutils.escape(str(valor))}</string>'
+
+    # 5. FLOATS E DOUBLES GERAIS
+    if isinstance(valor, float):
         return f'\n            <float name="{nome_prop}">{float(valor)}</float>'
 
-    # 5. INTEIROS
+    # 6. INTEIROS
     if isinstance(valor, int):
         return f'\n            <int name="{nome_prop}">{valor}</int>'
 
-    # 6. DICIONÁRIOS (UDim2, Vector3, Color3, Coloruint)
+    # 7. DICIONÁRIOS (Color3 / Vector3 / UDim2)
     if isinstance(valor, dict):
         if "X" in valor and "Y" in valor and isinstance(valor.get("X"), dict):
             x_dict, y_dict = valor.get("X", {}), valor.get("Y", {})
@@ -118,7 +123,7 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
                 <X>{valor.get("X", 0)}</X><Y>{valor.get("Y", 0)}</Y><Z>{valor.get("Z", 0)}</Z>
             </Vector3>'''
 
-        # Suporte completo para Color3 em propriedades de Services (Ambient, FogColor, etc.)
+        # Suporte Color3 e Color3ui
         if "R" in valor and "G" in valor and "B" in valor:
             r = valor["R"] / 255.0 if valor["R"] > 1.0 else valor["R"]
             g = valor["G"] / 255.0 if valor["G"] > 1.0 else valor["G"]
@@ -130,7 +135,7 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
                 <B>{b}</B>
             </Color3>'''
 
-    # 7. STRINGS
+    # 8. STRINGS
     if isinstance(valor, str):
         if nome_prop in ["Texture", "Image", "TextureId", "ImageId", "MeshId", "SoundId"] or valor.startswith("rbxassetid://"):
             return f'\n            <Content name="{nome_prop}"><url>{saxutils.escape(valor)}</url></Content>'
@@ -189,10 +194,12 @@ def processar_objetos_xml(TableData):
 
 def construir_rbxlx_completo(part_data_dict):
     workspace_content = ""
-    outros_servicos = ""
+    servicos_xml = {}
 
-    # Dicionário para garantir a criação limpa dos serviços principais
-    servicos_processados = {k: False for k in SERVICOS_OFICIAIS.keys()}
+    # Inicializa todos os serviços conhecidos
+    for s_nome in SERVICOS_OFICIAIS.keys():
+        if s_nome != "Workspace":
+            servicos_xml[s_nome] = {"props": "", "objects": ""}
 
     if isinstance(part_data_dict, dict):
         for servico_nome, servico_dados in part_data_dict.items():
@@ -205,25 +212,37 @@ def construir_rbxlx_completo(part_data_dict):
             elif isinstance(servico_dados, list):
                 objetos = servico_dados
 
-            classe_servico = SERVICOS_OFICIAIS.get(servico_nome, "Folder")
-            servicos_processados[servico_nome] = True
-
-            # Gera todas as propriedades configuradas no serviço
-            str_props_servico = f'\n    <string name="Name">{servico_nome}</string>'
-            for k, v in propriedades_servico.items():
-                str_props_servico += processar_propriedade_xml(k, v, propriedades_servico)
-
             if servico_nome == "Workspace":
                 workspace_content += processar_objetos_xml(objetos)
             else:
-                ref_servico = f"RBX_SERVICE_{servico_nome.upper()}"
-                outros_servicos += f'\n<Item class="{classe_servico}" referent="{ref_servico}">'
-                outros_servicos += f'\n  <Properties>{str_props_servico}\n  </Properties>'
-                outros_servicos += processar_objetos_xml(objetos)
-                outros_servicos += '\n</Item>'
+                str_props = f'\n    <string name="Name">{servico_nome}</string>'
+                for k, v in propriedades_servico.items():
+                    str_props += processar_propriedade_xml(k, v, propriedades_servico)
+
+                str_objs = processar_objetos_xml(objetos)
+
+                servicos_xml[servico_nome] = {
+                    "props": str_props,
+                    "objects": str_objs
+                }
 
     elif isinstance(part_data_dict, list):
         workspace_content = processar_objetos_xml(part_data_dict)
+
+    # Monta a estrutura final garantindo que Lighting e outros fiquem diretamente no nó raiz
+    outros_servicos_str = ""
+    for s_nome, s_classe in SERVICOS_OFICIAIS.items():
+        if s_nome == "Workspace":
+            continue
+
+        dados = servicos_xml.get(s_nome, {"props": f'\n    <string name="Name">{s_nome}</string>', "objects": ""})
+        ref_servico = f"RBX_SERVICE_{s_nome.upper()}"
+
+        outros_servicos_str += f'''
+    <Item class="{s_classe}" referent="{ref_servico}">
+        <Properties>{dados["props"]}
+        </Properties>{dados["objects"]}
+    </Item>'''
 
     rbxlx_str = f'''<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
     <External>null</External>
@@ -234,8 +253,7 @@ def construir_rbxlx_completo(part_data_dict):
             <bool name="FilteringEnabled">true</bool>
         </Properties>
         {workspace_content}
-    </Item>
-    {outros_servicos}
+    </Item>{outros_servicos_str}
 </roblox>'''
 
     return rbxlx_str.encode('utf-8')
