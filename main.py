@@ -58,6 +58,7 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
     if isinstance(props_dict, dict) and "CFrame" in props_dict and nome_prop in ["Position", "Orientation", "Rotation"]:
         return ""
 
+    # 1. CFRAME
     if nome_prop == "CFrame" and isinstance(valor, list) and len(valor) >= 12:
         return f'''
             <CoordinateFrame name="CFrame">
@@ -67,10 +68,12 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
                 <R20>{valor[9]}</R20><R21>{valor[10]}</R21><R22>{valor[11]}</R22>
             </CoordinateFrame>'''
 
+    # 2. BOOLEANOS
     if isinstance(valor, bool):
         val_str = "true" if valor else "false"
         return f'\n            <bool name="{nome_prop}">{val_str}</bool>'
 
+    # 3. DICIONÁRIOS (Color3 / Color3uint8 / Vector3 / UDim2)
     if isinstance(valor, dict):
         if "X" in valor and "Y" in valor and isinstance(valor.get("X"), dict):
             x_dict, y_dict = valor.get("X", {}), valor.get("Y", {})
@@ -91,6 +94,7 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
         if "R" in valor and "G" in valor and "B" in valor:
             r, g, b = valor["R"], valor["G"], valor["B"]
             
+            # Serviços de Iluminação aceitam Color3uint8
             if nome_prop in ["Ambient", "OutdoorAmbient", "ColorShift_Top", "ColorShift_Bottom", "FogColor"]:
                 r_int = int(r * 255) if isinstance(r, float) and r <= 1.0 else int(r)
                 g_int = int(g * 255) if isinstance(g, float) and g <= 1.0 else int(g)
@@ -109,6 +113,7 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
                 <B>{bf}</B>
             </Color3>'''
 
+    # 4. ENUMS / TOKENS
     e_enum = (
         nome_prop in ["Shape", "Font", "PartType", "Face", "NormalId", "Technology", "CameraType"] or
         nome_prop.endswith("Surface") or
@@ -123,12 +128,15 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
         val_token = normalizar_valor_token(nome_prop, valor)
         return f'\n            <token name="{nome_prop}">{val_token}</token>'
 
+    # 5. FLOATS
     if isinstance(valor, float):
         return f'\n            <float name="{nome_prop}">{valor}</float>'
 
+    # 6. INTEIROS
     if isinstance(valor, int):
         return f'\n            <int name="{nome_prop}">{valor}</int>'
 
+    # 7. STRINGS / CONTENTS
     if isinstance(valor, str):
         if nome_prop in ["Texture", "Image", "TextureId", "ImageId", "MeshId", "SoundId"] or valor.startswith("rbxassetid://"):
             return f'\n            <Content name="{nome_prop}"><url>{saxutils.escape(valor)}</url></Content>'
@@ -207,7 +215,7 @@ def construir_rbxlx_completo(part_data_dict):
             if servico_nome == "Workspace":
                 workspace_content += processar_objetos_xml(objetos)
             else:
-                str_props = f'\n    <string name="Name">{servico_nome}</string>'
+                str_props = ""
                 for k, v in propriedades_servico.items():
                     str_props += processar_propriedade_xml(k, v, propriedades_servico)
 
@@ -226,12 +234,13 @@ def construir_rbxlx_completo(part_data_dict):
         if s_nome == "Workspace":
             continue
 
-        dados = servicos_xml.get(s_nome, {"props": f'\n    <string name="Name">{s_nome}</string>', "objects": ""})
+        dados = servicos_xml.get(s_nome, {"props": "", "objects": ""})
         ref_servico = f"RBX_SERVICE_{s_nome.upper()}"
 
         outros_servicos_str += f'''
     <Item class="{s_classe}" referent="{ref_servico}">
-        <Properties>{dados["props"]}
+        <Properties>
+            <string name="Name">{s_nome}</string>{dados["props"]}
         </Properties>{dados["objects"]}
     </Item>'''
 
