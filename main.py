@@ -19,56 +19,55 @@ SERVICOS_OFICIAIS = {
     "MaterialService": "MaterialService"
 }
 
-# Mapeamento oficial de IDs de Enum do Roblox para os nomes de Token no XML
-ENUM_MAP = {
+# Dicionário de mapeamento direto de EnumItem IDs para Nomes de Tokens no XML
+MAPA_ENUMS = {
     "Material": {
         256: "Plastic", 272: "SmoothPlastic", 288: "Neon", 512: "Wood", 528: "WoodPlanks",
         784: "Marble", 788: "Basalt", 800: "Slate", 816: "CrackedLava", 832: "Concrete",
         848: "Limestone", 864: "Granite", 880: "Pavement", 896: "Brick", 912: "Pebble",
         928: "Sand", 1040: "Glass", 1056: "ForceField", 1072: "Ice", 1088: "Foil",
         1280: "Metal", 1296: "CorrodedMetal", 1312: "DiamondPlate", 1328: "Fabric",
-        1344: "Foil", 1536: "Grass", 1552: "LeafyGrass", 1568: "Sandstone", 1584: "Mud",
+        1536: "Grass", 1552: "LeafyGrass", 1568: "Sandstone", 1584: "Mud",
         1600: "Snow", 1616: "Ground", 1792: "Asphalt", 2048: "Salt"
     },
-    "Shape": {
-        0: "Ball", 1: "Block", 2: "Cylinder"
-    },
-    "PartType": {
-        0: "Ball", 1: "Block", 2: "Cylinder"
-    },
+    "Shape": {0: "Ball", 1: "Block", 2: "Cylinder"},
+    "PartType": {0: "Ball", 1: "Block", 2: "Cylinder"},
     "SurfaceType": {
         0: "Smooth", 1: "Glue", 2: "Weld", 3: "Studs", 4: "Inlet", 5: "Universal", 6: "Hinge", 7: "Motor", 8: "SteppingMotor"
-    },
-    "TopSurface": {0: "Smooth", 1: "Glue", 2: "Weld", 3: "Studs", 4: "Inlet", 5: "Universal", 6: "Hinge", 7: "Motor", 8: "SteppingMotor"},
-    "BottomSurface": {0: "Smooth", 1: "Glue", 2: "Weld", 3: "Studs", 4: "Inlet", 5: "Universal", 6: "Hinge", 7: "Motor", 8: "SteppingMotor"},
-    "LeftSurface": {0: "Smooth", 1: "Glue", 2: "Weld", 3: "Studs", 4: "Inlet", 5: "Universal", 6: "Hinge", 7: "Motor", 8: "SteppingMotor"},
-    "RightSurface": {0: "Smooth", 1: "Glue", 2: "Weld", 3: "Studs", 4: "Inlet", 5: "Universal", 6: "Hinge", 7: "Motor", 8: "SteppingMotor"},
-    "FrontSurface": {0: "Smooth", 1: "Glue", 2: "Weld", 3: "Studs", 4: "Inlet", 5: "Universal", 6: "Hinge", 7: "Motor", 8: "SteppingMotor"},
-    "BackSurface": {0: "Smooth", 1: "Glue", 2: "Weld", 3: "Studs", 4: "Inlet", 5: "Universal", 6: "Hinge", 7: "Motor", 8: "SteppingMotor"}
+    }
 }
 
-def extrair_nome_enum(nome_prop, valor):
-    # Se o valor veio como string "Enum.Material.Neon" ou "Neon"
-    if isinstance(valor, str):
-        return valor.split(".")[-1]
-    
-    # Se veio como dicionário {"Value": 288, "Name": "Neon"}
+def resolver_enum_token(nome_prop, valor):
+    # Se o valor vier como dicionário enviado pelo Luau
     if isinstance(valor, dict):
         if "Name" in valor and valor["Name"]:
-            return valor["Name"]
+            return str(valor["Name"])
         if "Value" in valor:
             valor = valor["Value"]
 
-    # Se veio como inteiro (ID do Enum)
+    # Se o valor for string "Enum.Material.Neon" ou "Neon"
+    if isinstance(valor, str):
+        if "." in valor:
+            return valor.split(".")[-1]
+        return valor
+
+    # Se for um número inteiro (ID interno do Enum)
     if isinstance(valor, int):
-        if nome_prop in ENUM_MAP and valor in ENUM_MAP[nome_prop]:
-            return ENUM_MAP[nome_prop][valor]
+        # Verifica se temos o mapeamento nominal para a propriedade
+        if nome_prop in MAPA_ENUMS and valor in MAPA_ENUMS[nome_prop]:
+            return MAPA_ENUMS[nome_prop][valor]
+        
+        # Mapeamento para propriedades de superfície (TopSurface, BottomSurface, etc.)
+        if nome_prop.endswith("Surface") and valor in MAPA_ENUMS["SurfaceType"]:
+            return MAPA_ENUMS["SurfaceType"][valor]
+            
         return str(valor)
 
     return str(valor)
 
 def processar_propriedade_xml(nome_prop, valor, props_dict):
-    if valor is None or nome_prop in ["ClassName", "Name", "Parent"]:
+    # Ignora propriedades de controle ou obsoletas que travam o parse
+    if valor is None or nome_prop in ["ClassName", "Name", "Parent", "FormFactor"]:
         return ""
 
     if isinstance(props_dict, dict) and "CFrame" in props_dict and nome_prop in ["Position", "Orientation", "Rotation"]:
@@ -89,9 +88,9 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
         val_str = "true" if valor else "false"
         return f'\n            <bool name="{nome_prop}">{val_str}</bool>'
 
-    # 3. VERIFICAÇÃO E CONVERSÃO DE ENUMS
-    is_enum = (
-        nome_prop in ["Material", "Shape", "Font", "FormFactor", "PartType"] or
+    # 3. PROCESSAMENTO DE ENUMS (Garante que todo Enum vire um <token> com string/nome aceito)
+    e_enum = (
+        nome_prop in ["Material", "Shape", "Font", "PartType"] or
         nome_prop.endswith("Surface") or
         nome_prop.endswith("Type") or 
         nome_prop.endswith("Style") or 
@@ -100,11 +99,11 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
         nome_prop.endswith("Direction")
     )
 
-    if is_enum or (isinstance(valor, str) and "Enum." in valor):
-        token_val = extrair_nome_enum(nome_prop, valor)
-        return f'\n            <token name="{nome_prop}">{token_val}</token>'
+    if e_enum or (isinstance(valor, str) and "Enum." in valor):
+        token_str = resolver_enum_token(nome_prop, valor)
+        return f'\n            <token name="{nome_prop}">{token_str}</token>'
 
-    # 4. INTEIROS PURAMENTE NUMÉRICOS
+    # 4. INTEIROS
     if isinstance(valor, int):
         return f'\n            <int name="{nome_prop}">{valor}</int>'
 
