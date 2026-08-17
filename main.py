@@ -24,6 +24,34 @@ SERVICOS_MESTRES = {
     "chat": "Chat"
 }
 
+# Propriedades padrao obrigatorias para evitar que o parser do Roblox descarte o servico
+PROPRIEDADES_PADRAO = {
+    "Lighting": {
+        "Ambient": [0.5, 0.5, 0.5],
+        "Brightness": 2.0,
+        "ClockTime": 14,
+        "ColorShift_Bottom": [0.0, 0.0, 0.0],
+        "ColorShift_Top": [0.0, 0.0, 0.0],
+        "EnvironmentDiffuseScale": 1.0,
+        "EnvironmentSpecularScale": 1.0,
+        "ExposureCompensation": 0.0,
+        "FogColor": [0.75, 0.75, 0.75],
+        "FogEnd": 100000.0,
+        "FogStart": 0.0,
+        "GeographicLatitude": 41.73,
+        "GlobalShadows": True,
+        "OutdoorAmbient": [0.5, 0.5, 0.5],
+        "ShadowSoftness": 0.5,
+        "Technology": 1
+    },
+    "SoundService": {
+        "AmbientReverb": 0,
+        "DistanceFactor": 3.33,
+        "DopplerScale": 1.0,
+        "RespectFilteringEnabled": True
+    }
+}
+
 MAPA_ENUM = {
     "Compatibility": 0, "ShadowMap": 1, "Future": 2, "Voxel": 3,
     "Smooth": 0, "Glue": 1, "Weld": 2, "Studs": 3, "Inlet": 4, 
@@ -44,17 +72,6 @@ def tratar_propriedade_individual(nome_prop, valor, props_dict=None):
     if valor is None or nome_prop in ["ClassName", "Name", "Parent", "FormFactor"]:
         return ""
 
-    if props_dict and "CFrame" in props_dict and nome_prop in ["Position", "Orientation", "Rotation"]:
-        return ""
-
-    if nome_prop == "CFrame" and isinstance(valor, (list, tuple)) and len(valor) >= 12:
-        return f'''<CoordinateFrame name="CFrame">
-            <X>{valor[0]}</X><Y>{valor[1]}</Y><Z>{valor[2]}</Z>
-            <R00>{valor[3]}</R00><R01>{valor[4]}</R01><R02>{valor[5]}</R02>
-            <R10>{valor[6]}</R10><R11>{valor[7]}</R11><R12>{valor[8]}</R12>
-            <R20>{valor[9]}</R20><R21>{valor[10]}</R21><R22>{valor[11]}</R22>
-        </CoordinateFrame>'''
-
     if nome_prop == "ClockTime":
         horas = float(valor)
         h = int(horas)
@@ -71,27 +88,17 @@ def tratar_propriedade_individual(nome_prop, valor, props_dict=None):
     if isinstance(valor, dict):
         if "R" in valor and "G" in valor and "B" in valor:
             return converter_para_cor_xml(nome_prop, valor["R"], valor["G"], valor["B"])
-
         if "X" in valor and "Y" in valor and "Z" in valor:
             return f'<Vector3 name="{nome_prop}"><X>{valor["X"]}</X><Y>{valor["Y"]}</Y><Z>{valor["Z"]}</Z></Vector3>'
 
-        if "X" in valor and "Y" in valor and isinstance(valor.get("X"), dict):
-            x_dict, y_dict = valor.get("X", {}), valor.get("Y", {})
-            return f'''<UDim2 name="{nome_prop}">
-                <XS>{x_dict.get("Scale", 0)}</XS><XO>{x_dict.get("Offset", 0)}</XO>
-                <YS>{y_dict.get("Scale", 0)}</YS><YO>{y_dict.get("Offset", 0)}</YO>
-            </UDim2>'''
-
     if isinstance(valor, (list, tuple)) and len(valor) == 3:
-        # Se for lista, aceita tanto Cor quanto Vector3
         if nome_prop in ["Ambient", "OutdoorAmbient", "FogColor", "Color", "ColorShift_Bottom", "ColorShift_Top"]:
             return converter_para_cor_xml(nome_prop, valor[0], valor[1], valor[2])
         return f'<Vector3 name="{nome_prop}"><X>{valor[0]}</X><Y>{valor[1]}</Y><Z>{valor[2]}</Z></Vector3>'
 
     e_enum = (
         nome_prop in ["Shape", "Font", "PartType", "Face", "NormalId", "Technology", "CameraType", "Material", "AmbientReverb"] or
-        nome_prop.endswith("Surface") or nome_prop.endswith("Type") or 
-        nome_prop.endswith("Style") or nome_prop.endswith("Mode")
+        nome_prop.endswith("Surface") or nome_prop.endswith("Type") or nome_prop.endswith("Style") or nome_prop.endswith("Mode")
     )
     if e_enum or (isinstance(valor, str) and "Enum." in valor):
         val_clean = str(valor).split(".")[-1]
@@ -105,8 +112,6 @@ def tratar_propriedade_individual(nome_prop, valor, props_dict=None):
         return f'<int name="{nome_prop}">{valor}</int>'
 
     if isinstance(valor, str):
-        if nome_prop in ["Texture", "Image", "TextureId", "ImageId", "MeshId", "SoundId"] or valor.startswith("rbxassetid://"):
-            return f'<Content name="{nome_prop}"><url>{saxutils.escape(valor)}</url></Content>'
         return f'<string name="{nome_prop}">{saxutils.escape(valor)}</string>'
 
     return ""
@@ -135,17 +140,8 @@ def processar_objetos_xml(TableData):
             if isinstance(a, dict):
                 props = a.get("Properties", {})
                 children = a.get("Children", []) or a.get("Objects", [])
-                script_code = a.get("Script") or props.get("Source")
-
-                if not isinstance(props, dict):
-                    props = {}
-
                 class_name = props.get("ClassName", "Part")
                 obj_name = props.get("Name", f"Object_{idx}")
-
-                if class_name in ["Part", "WedgePart", "CornerWedgePart", "MeshPart", "SpawnLocation", "BasePart"]:
-                    if "Anchored" not in props:
-                        props["Anchored"] = True
 
                 ref_id = f"RBX_OBJ_{idx}_{abs(hash(obj_name))}"
 
@@ -153,11 +149,6 @@ def processar_objetos_xml(TableData):
                 xml_output += '\n  <Properties>'
                 xml_output += f'\n    <string name="Name">{saxutils.escape(str(obj_name))}</string>'
                 xml_output += processar_dicionario_propriedades(props)
-
-                if script_code or class_name in ["Script", "LocalScript", "ModuleScript"]:
-                    codigo_str = str(script_code) if script_code is not None else ""
-                    xml_output += f'\n    <ProtectedString name="Source">{saxutils.escape(codigo_str)}</ProtectedString>'
-
                 xml_output += '\n  </Properties>'
 
                 if children and isinstance(children, list):
@@ -170,54 +161,56 @@ def processar_objetos_xml(TableData):
 def construir_rbxlx_completo(part_data_dict):
     workspace_content = ""
     workspace_props = ""
-    servicos_xml = {s_nome: {"props": "", "objects": ""} for s_nome in SERVICOS_MESTRES.values() if s_nome != "Workspace"}
+    servicos_dados_finais = {}
+
+    # Preenche todos os servicos conhecidos com suas propriedades padrao
+    for s_nome in SERVICOS_MESTRES.values():
+        if s_nome != "Workspace":
+            servicos_dados_finais[s_nome] = {
+                "props": PROPRIEDADES_PADRAO.get(s_nome, {}).copy(),
+                "objects": []
+            }
 
     if isinstance(part_data_dict, dict):
         for chave_entrada, servico_dados in part_data_dict.items():
             chave_low = str(chave_entrada).strip().lower()
             servico_oficial = SERVICOS_MESTRES.get(chave_low)
 
+            if not servico_oficial:
+                continue
+
             objetos = []
-            propriedades_servico = {}
+            propriedades_recebidas = {}
 
             if isinstance(servico_dados, dict):
                 objetos = servico_dados.get("Objects", []) or servico_dados.get("Children", [])
-                # Tenta pegar "Properties" ou assume o próprio dict se não houver subchaves
                 if "Properties" in servico_dados and isinstance(servico_dados["Properties"], dict):
-                    propriedades_servico = servico_dados["Properties"]
+                    propriedades_recebidas = servico_dados["Properties"]
                 else:
-                    propriedades_servico = {k: v for k, v in servico_dados.items() if k not in ["Objects", "Children"]}
+                    propriedades_recebidas = {k: v for k, v in servico_dados.items() if k not in ["Objects", "Children"]}
 
             elif isinstance(servico_dados, list):
                 objetos = servico_dados
 
-            print(f"[DEBUG] Servico extraido: {servico_oficial} | Propriedades: {propriedades_servico}")
-
             if servico_oficial == "Workspace":
                 workspace_content += processar_objetos_xml(objetos)
-                workspace_props = processar_dicionario_propriedades(propriedades_servico)
-            elif servico_oficial:
-                servicos_xml[servico_oficial] = {
-                    "props": processar_dicionario_propriedades(propriedades_servico),
-                    "objects": processar_objetos_xml(objetos)
-                }
-
-    elif isinstance(part_data_dict, list):
-        workspace_content = processar_objetos_xml(part_data_dict)
+                workspace_props = processar_dicionario_propriedades(propriedades_recebidas)
+            else:
+                # Sobrescreve apenas as propriedades enviadas mantendo o bloco completo
+                servicos_dados_finais[servico_oficial]["props"].update(propriedades_recebidas)
+                servicos_dados_finais[servico_oficial]["objects"] = objetos
 
     outros_servicos_str = ""
-    for s_nome in SERVICOS_MESTRES.values():
-        if s_nome == "Workspace":
-            continue
-
-        dados = servicos_xml.get(s_nome, {"props": "", "objects": ""})
+    for s_nome, dados in servicos_dados_finais.items():
         ref_servico = f"RBX_SERVICE_{s_nome.upper()}"
+        props_xml = processar_dicionario_propriedades(dados["props"])
+        objs_xml = processar_objetos_xml(dados["objects"])
 
         outros_servicos_str += f'''
     <Item class="{s_nome}" referent="{ref_servico}">
         <Properties>
-            <string name="Name">{s_nome}</string>{dados["props"]}
-        </Properties>{dados["objects"]}
+            <string name="Name">{s_nome}</string>{props_xml}
+        </Properties>{objs_xml}
     </Item>'''
 
     rbxlx_str = f'''<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
