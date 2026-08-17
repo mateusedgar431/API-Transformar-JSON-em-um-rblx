@@ -58,13 +58,21 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
     if isinstance(props_dict, dict) and "CFrame" in props_dict and nome_prop in ["Position", "Orientation", "Rotation"]:
         return ""
 
-    # Converte ClockTime direto para a tag TimeOfDay (string) aceita pela Open Cloud
     if nome_prop == "ClockTime":
         horas = float(valor)
         h = int(horas)
         m = int((horas - h) * 60)
         s = int((((horas - h) * 60) - m) * 60)
         time_str = f"{h:02d}:{m:02d}:{s:02d}"
+        
+        # Para forçar o escuro no XML, enviamos TimeOfDay + Brightness zero + Ambient preto
+        if horas in [0, 0.0] or time_str == "00:00:00":
+            return f'''
+            <string name="TimeOfDay">00:00:00</string>
+            <float name="Brightness">0</float>
+            <Color3 name="Ambient"><R>0</R><G>0</G><B>0</B></Color3>
+            <Color3 name="OutdoorAmbient"><R>0</R><G>0</G><B>0</B></Color3>'''
+        
         return f'\n            <string name="TimeOfDay">{time_str}</string>'
 
     if nome_prop == "CFrame" and isinstance(valor, list) and len(valor) >= 12:
