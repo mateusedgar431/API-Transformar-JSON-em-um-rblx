@@ -24,7 +24,6 @@ SERVICOS_MESTRES = {
     "chat": "Chat"
 }
 
-# Propriedades padrao obrigatorias para todos os servicos do Roblox
 PROPRIEDADES_PADRAO = {
     "Lighting": {
         "Ambient": [0.5, 0.5, 0.5],
@@ -93,6 +92,16 @@ MAPA_ENUM = {
     "NoReverb": 0, "Generic": 1000, "PaddedCell": 2000, "Room": 3000, "Bathroom": 4000, "Cave": 8000
 }
 
+# Lista de propriedades numericas que OBRIGATORIAMENTE precisam ir como <float> no XML
+PROPS_FLOAT = {
+    "FogEnd", "FogStart", "Brightness", "ClockTime",
+    "EnvironmentDiffuseScale", "EnvironmentSpecularScale",
+    "ExposureCompensation", "GeographicLatitude", "ShadowSoftness",
+    "DistanceFactor", "DopplerScale", "CameraMaxZoomDistance",
+    "CameraMinZoomDistance", "HealthDisplayDistance", "NameDisplayDistance",
+    "Transparency", "Reflectance", "Volume"
+}
+
 def converter_para_cor_xml(nome_prop, r, g, b):
     rf = r / 255.0 if r > 1.0 else float(r)
     gf = g / 255.0 if g > 1.0 else float(g)
@@ -143,18 +152,24 @@ def tratar_propriedade_individual(nome_prop, valor, props_dict=None):
             xml_pos = f'<Vector3 name="Position"><X>{valor["X"]}</X><Y>{valor["Y"]}</Y><Z>{valor["Z"]}</Z></Vector3>\n            '
         return xml_pos + gerar_cframe_xml("CFrame", valor)
 
-    if nome_prop == "ClockTime":
-        horas = float(valor)
-        h = int(horas)
-        m = int((horas - h) * 60)
-        s = int((((horas - h) * 60) - m) * 60)
-        return f'<float name="ClockTime">{horas}</float>\n            <string name="TimeOfDay">{h:02d}:{m:02d}:{s:02d}</string>'
+    if isinstance(valor, bool):
+        return f'<bool name="{nome_prop}">{"true" if valor else "false"}</bool>'
+
+    # Converte propriedades decimais para <float> obrigatoriamente
+    if nome_prop in PROPS_FLOAT:
+        try:
+            val_float = float(valor)
+            if nome_prop == "ClockTime":
+                h = int(val_float)
+                m = int((val_float - h) * 60)
+                s = int((((val_float - h) * 60) - m) * 60)
+                return f'<float name="ClockTime">{val_float}</float>\n            <string name="TimeOfDay">{h:02d}:{m:02d}:{s:02d}</string>'
+            return f'<float name="{nome_prop}">{val_float}</float>'
+        except (ValueError, TypeError):
+            pass
 
     if nome_prop == "TimeOfDay":
         return f'<string name="TimeOfDay">{saxutils.escape(str(valor))}</string>'
-
-    if isinstance(valor, bool):
-        return f'<bool name="{nome_prop}">{"true" if valor else "false"}</bool>'
 
     if isinstance(valor, dict):
         if "R" in valor and "G" in valor and "B" in valor:
