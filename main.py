@@ -19,7 +19,7 @@ SERVICOS_OFICIAIS = {
     "MaterialService": "MaterialService"
 }
 
-# Mapeamento de IDs numéricos para Nomes válidos exigidos pela tag <token>
+# Mapeamentos Oficiais
 ID_PARA_NOME_ENUM = {
     "Material": {
         256: "Plastic", 272: "SmoothPlastic", 288: "Neon", 512: "Wood", 528: "WoodPlanks",
@@ -37,19 +37,42 @@ ID_PARA_NOME_ENUM = {
     "Shape": {0: "Ball", 1: "Block", 2: "Cylinder"}
 }
 
+# Mapeamento estrito do Enum.NormalId / Enum.FaceId para o XML do Roblox
+FACE_NAME_TO_INT = {
+    "Right": 0,
+    "Top": 1,
+    "Back": 2,
+    "Left": 3,
+    "Bottom": 4,
+    "Front": 5
+}
+
+FACE_INT_TO_NAME = {v: k for k, v in FACE_NAME_TO_INT.items()}
+
 def normalizar_valor_token(nome_prop, valor):
-    # Se já for dicionário do Luau com Name/Value
+    # Se for dicionário do Luau com Name/Value
     if isinstance(valor, dict):
         if "Name" in valor and valor["Name"]:
-            return str(valor["Name"])
-        if "Value" in valor:
+            valor = valor["Name"]
+        elif "Value" in valor:
             valor = valor["Value"]
 
-    # Se for string (ex: "Enum.Material.Neon" ou "Neon")
+    # Tratamento Específico para Face / NormalId
+    if nome_prop in ["Face", "NormalId"]:
+        if isinstance(valor, str):
+            nome_limpo = valor.split(".")[-1]
+            if nome_limpo in FACE_NAME_TO_INT:
+                return str(FACE_NAME_TO_INT[nome_limpo])
+            if nome_limpo.isdigit():
+                return nome_limpo
+        if isinstance(valor, int):
+            return str(valor)
+
+    # Tratamento para outras strings de Enum
     if isinstance(valor, str):
         return valor.split(".")[-1]
 
-    # Se for inteiro (ex: 288)
+    # Tratamento para inteiros gerais
     if isinstance(valor, int):
         if nome_prop == "Material" and valor in ID_PARA_NOME_ENUM["Material"]:
             return ID_PARA_NOME_ENUM["Material"][valor]
@@ -85,7 +108,7 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
 
     # 3. ENUMS / TOKENS
     e_enum = (
-        nome_prop in ["Material", "Shape", "Font", "PartType"] or
+        nome_prop in ["Material", "Shape", "Font", "PartType", "Face", "NormalId"] or
         nome_prop.endswith("Surface") or
         nome_prop.endswith("Type") or 
         nome_prop.endswith("Style") or 
