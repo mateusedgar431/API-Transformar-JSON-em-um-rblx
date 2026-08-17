@@ -15,57 +15,51 @@ SERVICOS_OFICIAIS = {
     "StarterPlayer": "StarterPlayer",
     "StarterPack": "StarterPack",
     "Teams": "Teams",
-    "SoundService": "SoundService"
+    "SoundService": "SoundService",
+    "MaterialService": "MaterialService"
 }
 
-# Tabela de conversão: Nome do Enum -> Valor Inteiro Oficial no XML do Roblox
-MATERIAL_NAME_TO_ID = {
-    "Plastic": 256, "SmoothPlastic": 272, "Neon": 288, "Wood": 512, "WoodPlanks": 528,
-    "Marble": 784, "Basalt": 788, "Slate": 800, "CrackedLava": 816, "Concrete": 832,
-    "Limestone": 848, "Granite": 864, "Pavement": 880, "Brick": 896, "Pebble": 912,
-    "Sand": 928, "Glass": 1040, "ForceField": 1056, "Ice": 1072, "Foil": 1088,
-    "Metal": 1280, "CorrodedMetal": 1296, "DiamondPlate": 1312, "Fabric": 1328,
-    "Grass": 1536, "LeafyGrass": 1552, "Sandstone": 1568, "Mud": 1584,
-    "Snow": 1600, "Ground": 1616, "Asphalt": 1792, "Salt": 2048
+# Mapeamento de IDs numéricos para Nomes válidos exigidos pela tag <token>
+ID_PARA_NOME_ENUM = {
+    "Material": {
+        256: "Plastic", 272: "SmoothPlastic", 288: "Neon", 512: "Wood", 528: "WoodPlanks",
+        784: "Marble", 788: "Basalt", 800: "Slate", 816: "CrackedLava", 832: "Concrete",
+        848: "Limestone", 864: "Granite", 880: "Pavement", 896: "Brick", 912: "Pebble",
+        928: "Sand", 1040: "Glass", 1056: "ForceField", 1072: "Ice", 1088: "Foil",
+        1280: "Metal", 1296: "CorrodedMetal", 1312: "DiamondPlate", 1328: "Fabric",
+        1536: "Grass", 1552: "LeafyGrass", 1568: "Sandstone", 1584: "Mud",
+        1600: "Snow", 1616: "Ground", 1792: "Asphalt", 2048: "Salt"
+    },
+    "Surface": {
+        0: "Smooth", 1: "Glue", 2: "Weld", 3: "Studs", 4: "Inlet", 
+        5: "Universal", 6: "Hinge", 7: "Motor", 8: "SteppingMotor"
+    },
+    "Shape": {0: "Ball", 1: "Block", 2: "Cylinder"}
 }
 
-SURFACE_NAME_TO_ID = {
-    "Smooth": 0, "Glue": 1, "Weld": 2, "Studs": 3, "Inlet": 4, 
-    "Universal": 5, "Hinge": 6, "Motor": 7, "SteppingMotor": 8
-}
-
-SHAPE_NAME_TO_ID = {"Ball": 0, "Block": 1, "Cylinder": 2}
-
-def obter_int_do_enum(nome_prop, valor):
-    # Case 1: Valor já é um número inteiro enviado pelo Luau
-    if isinstance(valor, int):
-        return valor
-
-    # Case 2: Valor é um dicionário contendo {"Value": int} ou {"Name": str}
+def normalizar_valor_token(nome_prop, valor):
+    # Se já for dicionário do Luau com Name/Value
     if isinstance(valor, dict):
-        if "Value" in valor and isinstance(valor["Value"], int):
-            return valor["Value"]
-        if "Name" in valor:
-            valor = valor["Name"]
+        if "Name" in valor and valor["Name"]:
+            return str(valor["Name"])
+        if "Value" in valor:
+            valor = valor["Value"]
 
-    # Case 3: Valor é uma String (ex: "Enum.Material.Neon" ou "Neon")
+    # Se for string (ex: "Enum.Material.Neon" ou "Neon")
     if isinstance(valor, str):
-        nome_limpo = valor.split(".")[-1]
+        return valor.split(".")[-1]
 
-        if nome_prop == "Material" and nome_limpo in MATERIAL_NAME_TO_ID:
-            return MATERIAL_NAME_TO_ID[nome_limpo]
-        
-        if nome_prop.endswith("Surface") and nome_limpo in SURFACE_NAME_TO_ID:
-            return SURFACE_NAME_TO_ID[nome_limpo]
+    # Se for inteiro (ex: 288)
+    if isinstance(valor, int):
+        if nome_prop == "Material" and valor in ID_PARA_NOME_ENUM["Material"]:
+            return ID_PARA_NOME_ENUM["Material"][valor]
+        if nome_prop.endswith("Surface") and valor in ID_PARA_NOME_ENUM["Surface"]:
+            return ID_PARA_NOME_ENUM["Surface"][valor]
+        if nome_prop in ["Shape", "PartType"] and valor in ID_PARA_NOME_ENUM["Shape"]:
+            return ID_PARA_NOME_ENUM["Shape"][valor]
+        return str(valor)
 
-        if nome_prop in ["Shape", "PartType"] and nome_limpo in SHAPE_NAME_TO_ID:
-            return SHAPE_NAME_TO_ID[nome_limpo]
-
-        # Tenta conversão direta caso venha string de número "288"
-        if nome_limpo.isdigit():
-            return int(nome_limpo)
-
-    return 0
+    return str(valor)
 
 def processar_propriedade_xml(nome_prop, valor, props_dict):
     if valor is None or nome_prop in ["ClassName", "Name", "Parent", "FormFactor"]:
@@ -89,7 +83,7 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
         val_str = "true" if valor else "false"
         return f'\n            <bool name="{nome_prop}">{val_str}</bool>'
 
-    # 3. ENUMS (Garante conversão estrita para número inteiro dentro da tag <token>)
+    # 3. ENUMS / TOKENS
     e_enum = (
         nome_prop in ["Material", "Shape", "Font", "PartType"] or
         nome_prop.endswith("Surface") or
@@ -101,8 +95,8 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
     )
 
     if e_enum or (isinstance(valor, str) and "Enum." in valor):
-        enum_int_val = obter_int_do_enum(nome_prop, valor)
-        return f'\n            <token name="{nome_prop}">{enum_int_val}</token>'
+        val_token = normalizar_valor_token(nome_prop, valor)
+        return f'\n            <token name="{nome_prop}">{val_token}</token>'
 
     # 4. INTEIROS
     if isinstance(valor, int):
@@ -141,7 +135,7 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
                 <B>{b}</B>
             </Color3>'''
 
-    # 7. STRINGS E CONTEÚDOS DE MÍDIA
+    # 7. STRINGS
     if isinstance(valor, str):
         if nome_prop in ["Texture", "Image", "TextureId", "ImageId", "MeshId", "SoundId"] or valor.startswith("rbxassetid://"):
             return f'\n            <Content name="{nome_prop}"><url>{saxutils.escape(valor)}</url></Content>'
@@ -174,12 +168,6 @@ def processar_objetos_xml(TableData):
                 xml_output += f'\n<Item class="{class_name}" referent="{ref_id}">'
                 xml_output += '\n  <Properties>'
                 xml_output += f'\n    <string name="Name">{saxutils.escape(str(obj_name))}</string>'
-
-                if class_name == "ScreenGui":
-                    if "ResetOnSpawn" not in props:
-                        props["ResetOnSpawn"] = True
-                    if "Enabled" not in props:
-                        props["Enabled"] = True
 
                 if class_name in ["Part", "WedgePart", "CornerWedgePart", "MeshPart", "SpawnLocation", "BasePart"]:
                     if "Anchored" not in props:
