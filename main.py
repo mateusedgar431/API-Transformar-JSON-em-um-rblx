@@ -184,40 +184,67 @@ def processar_objetos_xml(TableData):
 
     return xml_output
 
-def gerar_script_configuracao_servicos(part_data_dict):
-    """Gera um Script Luau para aplicar todas as propriedades de Services diretamente no runtime."""
-    linhas_luau = []
+def gerar_script_com_loop(part_data_dict):
+    """Gera um Script Luau usando loops para iterar sobre os serviços e aplicar propriedades."""
+    servicos_config = {}
 
     if isinstance(part_data_dict, dict):
         for servico_nome, servico_dados in part_data_dict.items():
             if isinstance(servico_dados, dict) and "Properties" in servico_dados:
                 props = servico_dados["Properties"]
                 if props:
-                    linhas_luau.append(f'local service_{servico_nome} = game:GetService("{servico_nome}")')
-                    for prop_nome, val in props.items():
-                        if isinstance(val, bool):
-                            val_str = "true" if val else "false"
-                            linhas_luau.append(f'service_{servico_nome}.{prop_nome} = {val_str}')
-                        elif isinstance(val, (int, float)):
-                            linhas_luau.append(f'service_{servico_nome}.{prop_nome} = {val}')
-                        elif isinstance(val, str):
-                            linhas_luau.append(f'service_{servico_nome}.{prop_nome} = "{val}"')
-                        elif isinstance(val, dict) and "R" in val and "G" in val and "B" in val:
-                            r, g, b = val["R"], val["G"], val["B"]
-                            if r <= 1.0 and g <= 1.0 and b <= 1.0:
-                                r, g, b = r * 255, g * 255, b * 255
-                            linhas_luau.append(f'service_{servico_nome}.{prop_nome} = Color3.fromRGB({int(r)}, {int(g)}, {int(b)})')
+                    servicos_config[servico_nome] = props
 
-    if not linhas_luau:
+    if not servicos_config:
         return ""
 
-    codigo_script = "\n".join(linhas_luau) + "\nscript:Destroy()"
-    codigo_escapado = saxutils.escape(codigo_script)
+    # Constrói o dicionário em formato de tabela Luau
+    tabela_luau_linhas = ["local serviceData = {"]
+    for s_nome, props in servicos_config.items():
+        tabela_luau_linhas.append(f'    ["{s_nome}"] = {{')
+        for p_nome, val in props.items():
+            if isinstance(val, bool):
+                val_str = "true" if val else "false"
+                tabela_luau_linhas.append(f'        ["{p_nome}"] = {val_str},')
+            elif isinstance(val, (int, float)):
+                tabela_luau_linhas.append(f'        ["{p_nome}"] = {val},')
+            elif isinstance(val, str):
+                tabela_luau_linhas.append(f'        ["{p_nome}"] = "{val}",')
+            elif isinstance(val, dict) and "R" in val and "G" in val and "B" in val:
+                r, g, b = val["R"], val["G"], val["B"]
+                if r <= 1.0 and g <= 1.0 and b <= 1.0:
+                    r, g, b = r * 255, g * 255, b * 255
+                tabela_luau_linhas.append(f'        ["{p_nome}"] = Color3.fromRGB({int(r)}, {int(g)}, {int(b)}),')
+        tabela_luau_linhas.append("    },")
+    tabela_luau_linhas.append("}")
+
+    # Script em Luau que itera sobre a tabela e aplica com pcall
+    script_luau = "\n".join(tabela_luau_linhas) + """
+
+for serviceName, properties in pairs(serviceData) do
+    local success, service = pcall(function()
+        return game:GetService(serviceName)
+    end)
+    
+    if success and service then
+        for propName, propValue in pairs(properties) do
+            pcall(function()
+                service[propName] = propValue
+            end)
+        end
+    end
+end
+
+task.wait()
+script:Destroy()
+"""
+
+    codigo_escapado = saxutils.escape(script_luau)
 
     return f'''
-    <Item class="Script" referent="RBX_SERVICE_CONFIGURATOR">
+    <Item class="Script" referent="RBX_SERVICE_CONFIGURATOR_LOOP">
         <Properties>
-            <string name="Name">__ServiceConfigurator</string>
+            <string name="Name">__ServiceConfiguratorLoop</string>
             <ProtectedString name="Source">{codigo_escapado}</ProtectedString>
         </Properties>
     </Item>'''
@@ -226,9 +253,9 @@ def construir_rbxlx_completo(part_data_dict):
     workspace_content = ""
     outros_servicos = ""
 
-    # Gera o script que configura as propriedades dos serviços no jogo
-    script_config = gerar_script_configuracao_servicos(part_data_dict)
-    workspace_content += script_config
+    # Adiciona o Script com o loop na Workspace
+    script_loop = gerar_script_com_loop(part_data_dict)
+    workspace_content += script_loop
 
     if isinstance(part_data_dict, dict):
         for servico_nome, servico_dados in part_data_dict.items():
