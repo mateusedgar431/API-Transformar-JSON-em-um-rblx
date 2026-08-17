@@ -24,7 +24,8 @@ SERVICOS_MESTRES = {
     "chat": "Chat"
 }
 
-PROPRIEDADES_PADRAO_SERVICOS = {
+# Propriedades padrao obrigatorias para evitar que o parser do Roblox descarte o servico
+PROPRIEDADES_PADRAO = {
     "Lighting": {
         "Ambient": [0.5, 0.5, 0.5],
         "Brightness": 2.0,
@@ -50,21 +51,6 @@ PROPRIEDADES_PADRAO_SERVICOS = {
         "RespectFilteringEnabled": True
     }
 }
-
-BASEPLATE_PADRAO = [
-    {
-        "Properties": {
-            "ClassName": "Part",
-            "Name": "Baseplate",
-            "Anchored": True,
-            "CanCollide": True,
-            "Size": [2048, 1, 2048],
-            "Position": [0, -0.5, 0],
-            "Color": [163, 162, 165],
-            "Material": "Plastic"
-        }
-    }
-]
 
 MAPA_ENUM = {
     "Compatibility": 0, "ShadowMap": 1, "Future": 2, "Voxel": 3,
@@ -152,15 +138,10 @@ def processar_objetos_xml(TableData):
     if isinstance(TableData, list):
         for idx, a in enumerate(TableData):
             if isinstance(a, dict):
-                props = a.get("Properties", {}).copy()
+                props = a.get("Properties", {})
                 children = a.get("Children", []) or a.get("Objects", [])
                 class_name = props.get("ClassName", "Part")
                 obj_name = props.get("Name", f"Object_{idx}")
-
-                # Garante que peças não caiam no vácuo se 'Anchored' não for fornecido
-                if class_name in ["Part", "WedgePart", "CornerWedgePart", "MeshPart", "SpawnLocation"]:
-                    props.setdefault("Anchored", True)
-                    props.setdefault("CanCollide", True)
 
                 ref_id = f"RBX_OBJ_{idx}_{abs(hash(obj_name))}"
 
@@ -182,14 +163,13 @@ def construir_rbxlx_completo(part_data_dict):
     workspace_props = ""
     servicos_dados_finais = {}
 
+    # Preenche todos os servicos conhecidos com suas propriedades padrao
     for s_nome in SERVICOS_MESTRES.values():
         if s_nome != "Workspace":
             servicos_dados_finais[s_nome] = {
-                "props": PROPRIEDADES_PADRAO_SERVICOS.get(s_nome, {}).copy(),
+                "props": PROPRIEDADES_PADRAO.get(s_nome, {}).copy(),
                 "objects": []
             }
-
-    workspace_objetos = []
 
     if isinstance(part_data_dict, dict):
         for chave_entrada, servico_dados in part_data_dict.items():
@@ -213,17 +193,12 @@ def construir_rbxlx_completo(part_data_dict):
                 objetos = servico_dados
 
             if servico_oficial == "Workspace":
-                workspace_objetos.extend(objetos)
+                workspace_content += processar_objetos_xml(objetos)
                 workspace_props = processar_dicionario_propriedades(propriedades_recebidas)
             else:
+                # Sobrescreve apenas as propriedades enviadas mantendo o bloco completo
                 servicos_dados_finais[servico_oficial]["props"].update(propriedades_recebidas)
                 servicos_dados_finais[servico_oficial]["objects"] = objetos
-
-    # Se nenhum objeto foi enviado para o Workspace, insere a Baseplate padrão
-    if not workspace_objetos:
-        workspace_objetos = BASEPLATE_PADRAO
-
-    workspace_content = processar_objetos_xml(workspace_objetos)
 
     outros_servicos_str = ""
     for s_nome, dados in servicos_dados_finais.items():
