@@ -36,16 +36,12 @@ def normalizar_valor_token(nome_prop, valor):
 
     if isinstance(valor, str):
         nome_limpo = valor.split(".")[-1]
-        
         if nome_prop == "Material":
             return nome_limpo
-
         if nome_limpo in MAPA_ENUM_TEXTO_PARA_ID:
             return str(MAPA_ENUM_TEXTO_PARA_ID[nome_limpo])
-
         if nome_limpo.isdigit():
             return nome_limpo
-
         return nome_limpo
 
     if isinstance(valor, int):
@@ -161,6 +157,9 @@ def processar_objetos_xml(TableData):
                 xml_output += '\n  <Properties>'
                 xml_output += f'\n    <string name="Name">{saxutils.escape(str(obj_name))}</string>'
 
+                if class_name in ["Script", "LocalScript"]:
+                    xml_output += '\n    <bool name="Disabled">false</bool>'
+
                 if class_name in ["Part", "WedgePart", "CornerWedgePart", "MeshPart", "SpawnLocation", "BasePart"]:
                     if "Anchored" not in props:
                         props["Anchored"] = True
@@ -184,8 +183,8 @@ def processar_objetos_xml(TableData):
 
     return xml_output
 
-def gerar_script_com_loop(part_data_dict):
-    """Gera um Script Luau usando loops para iterar sobre os serviços e aplicar propriedades."""
+def gerar_script_server(part_data_dict):
+    """Gera o script ativado no ServerScriptService com delay para evitar overwrite da engine."""
     servicos_config = {}
 
     if isinstance(part_data_dict, dict):
@@ -198,7 +197,6 @@ def gerar_script_com_loop(part_data_dict):
     if not servicos_config:
         return ""
 
-    # Constrói o dicionário em formato de tabela Luau
     tabela_luau_linhas = ["local serviceData = {"]
     for s_nome, props in servicos_config.items():
         tabela_luau_linhas.append(f'    ["{s_nome}"] = {{')
@@ -218,8 +216,7 @@ def gerar_script_com_loop(part_data_dict):
         tabela_luau_linhas.append("    },")
     tabela_luau_linhas.append("}")
 
-    # Script em Luau que itera sobre a tabela e aplica com pcall
-    script_luau = "\n".join(tabela_luau_linhas) + """
+    script_luau = "task.wait(0.5)\n" + "\n".join(tabela_luau_linhas) + """
 
 for serviceName, properties in pairs(serviceData) do
     local success, service = pcall(function()
@@ -234,28 +231,24 @@ for serviceName, properties in pairs(serviceData) do
         end
     end
 end
-
-task.wait()
-script:Destroy()
 """
 
     codigo_escapado = saxutils.escape(script_luau)
 
     return f'''
-    <Item class="Script" referent="RBX_SERVICE_CONFIGURATOR_LOOP">
+    <Item class="Script" referent="RBX_SERVICE_CONFIGURATOR_SERVER">
         <Properties>
-            <string name="Name">__ServiceConfiguratorLoop</string>
+            <string name="Name">__ApplyServiceProperties</string>
+            <bool name="Disabled">false</bool>
+            <token name="RunContext">0</token>
             <ProtectedString name="Source">{codigo_escapado}</ProtectedString>
         </Properties>
     </Item>'''
 
 def construir_rbxlx_completo(part_data_dict):
     workspace_content = ""
+    server_script_service_content = gerar_script_server(part_data_dict)
     outros_servicos = ""
-
-    # Adiciona o Script com o loop na Workspace
-    script_loop = gerar_script_com_loop(part_data_dict)
-    workspace_content += script_loop
 
     if isinstance(part_data_dict, dict):
         for servico_nome, servico_dados in part_data_dict.items():
@@ -268,6 +261,8 @@ def construir_rbxlx_completo(part_data_dict):
 
             if servico_nome == "Workspace":
                 workspace_content += processar_objetos_xml(objetos)
+            elif servico_nome == "ServerScriptService":
+                server_script_service_content += processar_objetos_xml(objetos)
             else:
                 classe_servico = SERVICOS_OFICIAIS.get(servico_nome, "Folder")
                 ref_servico = f"RBX_SERVICE_{servico_nome.upper()}"
@@ -289,6 +284,12 @@ def construir_rbxlx_completo(part_data_dict):
             <bool name="FilteringEnabled">true</bool>
         </Properties>
         {workspace_content}
+    </Item>
+    <Item class="ServerScriptService" referent="RBX_SERVICE_SERVERSCRIPTSERVICE">
+        <Properties>
+            <string name="Name">ServerScriptService</string>
+        </Properties>
+        {server_script_service_content}
     </Item>
     {outros_servicos}
 </roblox>'''
