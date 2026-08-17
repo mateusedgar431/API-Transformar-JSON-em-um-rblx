@@ -86,15 +86,23 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
         val_token = normalizar_valor_token(nome_prop, valor)
         return f'\n            <token name="{nome_prop}">{val_token}</token>'
 
-    # 4. FLOATS
+    # 4. TRATAMENTO ESPECÍFICO PARA LIGHTING E PROPRIEDADES NATIVAS DE SERVIÇOS
+    if nome_prop == "ClockTime":
+        return f'\n            <float name="ClockTime">{float(valor)}</float>'
+    if nome_prop == "TimeOfDay":
+        return f'\n            <string name="TimeOfDay">{saxutils.escape(str(valor))}</string>'
+    if nome_prop in ["GeographicLatitude", "Brightness", "ExposureCompensation", "ShadowSoftness"]:
+        return f'\n            <float name="{nome_prop}">{float(valor)}</float>'
+
+    # 5. FLOATS GERAIS
     if isinstance(valor, float):
         return f'\n            <float name="{nome_prop}">{float(valor)}</float>'
 
-    # 5. INTEIROS
+    # 6. INTEIROS
     if isinstance(valor, int):
         return f'\n            <int name="{nome_prop}">{valor}</int>'
 
-    # 6. DICIONÁRIOS (Color3 / Vector3 / UDim2)
+    # 7. DICIONÁRIOS (Color3 / Color3uint8 / Vector3 / UDim2)
     if isinstance(valor, dict):
         if "X" in valor and "Y" in valor and isinstance(valor.get("X"), dict):
             x_dict, y_dict = valor.get("X", {}), valor.get("Y", {})
@@ -113,17 +121,23 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
             </Vector3>'''
 
         if "R" in valor and "G" in valor and "B" in valor:
-            r = valor["R"] / 255.0 if valor["R"] > 1.0 else valor["R"]
-            g = valor["G"] / 255.0 if valor["G"] > 1.0 else valor["G"]
-            b = valor["B"] / 255.0 if valor["B"] > 1.0 else valor["B"]
+            r = valor["R"]
+            g = valor["G"]
+            b = valor["B"]
+            
+            # Converte valores 0-255 para ponto flutuante 0.0 - 1.0 exigido no XML nativo
+            rf = r / 255.0 if r > 1.0 else float(r)
+            gf = g / 255.0 if g > 1.0 else float(g)
+            bf = b / 255.0 if b > 1.0 else float(b)
+
             return f'''
             <Color3 name="{nome_prop}">
-                <R>{r}</R>
-                <G>{g}</G>
-                <B>{b}</B>
+                <R>{rf}</R>
+                <G>{gf}</G>
+                <B>{bf}</B>
             </Color3>'''
 
-    # 7. STRINGS
+    # 8. STRINGS
     if isinstance(valor, str):
         if nome_prop in ["Texture", "Image", "TextureId", "ImageId", "MeshId", "SoundId"] or valor.startswith("rbxassetid://"):
             return f'\n            <Content name="{nome_prop}"><url>{saxutils.escape(valor)}</url></Content>'
@@ -157,9 +171,6 @@ def processar_objetos_xml(TableData):
                 xml_output += '\n  <Properties>'
                 xml_output += f'\n    <string name="Name">{saxutils.escape(str(obj_name))}</string>'
 
-                if class_name in ["Script", "LocalScript"]:
-                    xml_output += '\n    <bool name="Disabled">false</bool>'
-
                 if class_name in ["Part", "WedgePart", "CornerWedgePart", "MeshPart", "SpawnLocation", "BasePart"]:
                     if "Anchored" not in props:
                         props["Anchored"] = True
@@ -183,97 +194,56 @@ def processar_objetos_xml(TableData):
 
     return xml_output
 
-def gerar_script_server(part_data_dict):
-    """Gera o script ativado no ServerScriptService com delay para evitar overwrite da engine."""
-    servicos_config = {}
-
-    if isinstance(part_data_dict, dict):
-        for servico_nome, servico_dados in part_data_dict.items():
-            if isinstance(servico_dados, dict) and "Properties" in servico_dados:
-                props = servico_dados["Properties"]
-                if props:
-                    servicos_config[servico_nome] = props
-
-    if not servicos_config:
-        return ""
-
-    tabela_luau_linhas = ["local serviceData = {"]
-    for s_nome, props in servicos_config.items():
-        tabela_luau_linhas.append(f'    ["{s_nome}"] = {{')
-        for p_nome, val in props.items():
-            if isinstance(val, bool):
-                val_str = "true" if val else "false"
-                tabela_luau_linhas.append(f'        ["{p_nome}"] = {val_str},')
-            elif isinstance(val, (int, float)):
-                tabela_luau_linhas.append(f'        ["{p_nome}"] = {val},')
-            elif isinstance(val, str):
-                tabela_luau_linhas.append(f'        ["{p_nome}"] = "{val}",')
-            elif isinstance(val, dict) and "R" in val and "G" in val and "B" in val:
-                r, g, b = val["R"], val["G"], val["B"]
-                if r <= 1.0 and g <= 1.0 and b <= 1.0:
-                    r, g, b = r * 255, g * 255, b * 255
-                tabela_luau_linhas.append(f'        ["{p_nome}"] = Color3.fromRGB({int(r)}, {int(g)}, {int(b)}),')
-        tabela_luau_linhas.append("    },")
-    tabela_luau_linhas.append("}")
-
-    script_luau = "task.wait(0.5)\n" + "\n".join(tabela_luau_linhas) + """
-
-for serviceName, properties in pairs(serviceData) do
-    local success, service = pcall(function()
-        return game:GetService(serviceName)
-    end)
-    
-    if success and service then
-        for propName, propValue in pairs(properties) do
-            pcall(function()
-                service[propName] = propValue
-            end)
-        end
-    end
-end
-"""
-
-    codigo_escapado = saxutils.escape(script_luau)
-
-    return f'''
-    <Item class="Script" referent="RBX_SERVICE_CONFIGURATOR_SERVER">
-        <Properties>
-            <string name="Name">__ApplyServiceProperties</string>
-            <bool name="Disabled">false</bool>
-            <token name="RunContext">0</token>
-            <ProtectedString name="Source">{codigo_escapado}</ProtectedString>
-        </Properties>
-    </Item>'''
-
 def construir_rbxlx_completo(part_data_dict):
     workspace_content = ""
-    server_script_service_content = gerar_script_server(part_data_dict)
-    outros_servicos = ""
+    servicos_xml = {}
+
+    # Inicializa os serviços
+    for s_nome in SERVICOS_OFICIAIS.keys():
+        if s_nome != "Workspace":
+            servicos_xml[s_nome] = {"props": "", "objects": ""}
 
     if isinstance(part_data_dict, dict):
         for servico_nome, servico_dados in part_data_dict.items():
             objetos = []
+            propriedades_servico = {}
 
             if isinstance(servico_dados, dict):
                 objetos = servico_dados.get("Objects", [])
+                propriedades_servico = servico_dados.get("Properties", {})
             elif isinstance(servico_dados, list):
                 objetos = servico_dados
 
             if servico_nome == "Workspace":
                 workspace_content += processar_objetos_xml(objetos)
-            elif servico_nome == "ServerScriptService":
-                server_script_service_content += processar_objetos_xml(objetos)
             else:
-                classe_servico = SERVICOS_OFICIAIS.get(servico_nome, "Folder")
-                ref_servico = f"RBX_SERVICE_{servico_nome.upper()}"
+                str_props = f'\n    <string name="Name">{servico_nome}</string>'
+                for k, v in propriedades_servico.items():
+                    str_props += processar_propriedade_xml(k, v, propriedades_servico)
 
-                outros_servicos += f'\n<Item class="{classe_servico}" referent="{ref_servico}">'
-                outros_servicos += f'\n  <Properties><string name="Name">{servico_nome}</string></Properties>'
-                outros_servicos += processar_objetos_xml(objetos)
-                outros_servicos += '\n</Item>'
+                str_objs = processar_objetos_xml(objetos)
+
+                servicos_xml[servico_nome] = {
+                    "props": str_props,
+                    "objects": str_objs
+                }
 
     elif isinstance(part_data_dict, list):
-        workspace_content += processar_objetos_xml(part_data_dict)
+        workspace_content = processar_objetos_xml(part_data_dict)
+
+    outros_servicos_str = ""
+    for s_nome, s_classe in SERVICOS_OFICIAIS.items():
+        if s_nome == "Workspace":
+            continue
+
+        dados = servicos_xml.get(s_nome, {"props": f'\n    <string name="Name">{s_nome}</string>', "objects": ""})
+        ref_servico = f"RBX_SERVICE_{s_nome.upper()}"
+
+        outros_servicos_str += f'''
+    <Item class="{s_classe}" referent="{ref_servico}">
+        <Properties>{dados["props"]}
+        </Properties>{dados["objects"]}
+    </Item>'''
 
     rbxlx_str = f'''<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
     <External>null</External>
@@ -284,14 +254,7 @@ def construir_rbxlx_completo(part_data_dict):
             <bool name="FilteringEnabled">true</bool>
         </Properties>
         {workspace_content}
-    </Item>
-    <Item class="ServerScriptService" referent="RBX_SERVICE_SERVERSCRIPTSERVICE">
-        <Properties>
-            <string name="Name">ServerScriptService</string>
-        </Properties>
-        {server_script_service_content}
-    </Item>
-    {outros_servicos}
+    </Item>{outros_servicos_str}
 </roblox>'''
 
     return rbxlx_str.encode('utf-8')
