@@ -19,9 +19,56 @@ SERVICOS_OFICIAIS = {
     "MaterialService": "MaterialService"
 }
 
+# Mapeamento oficial de IDs de Enum do Roblox para os nomes de Token no XML
+ENUM_MAP = {
+    "Material": {
+        256: "Plastic", 272: "SmoothPlastic", 288: "Neon", 512: "Wood", 528: "WoodPlanks",
+        784: "Marble", 788: "Basalt", 800: "Slate", 816: "CrackedLava", 832: "Concrete",
+        848: "Limestone", 864: "Granite", 880: "Pavement", 896: "Brick", 912: "Pebble",
+        928: "Sand", 1040: "Glass", 1056: "ForceField", 1072: "Ice", 1088: "Foil",
+        1280: "Metal", 1296: "CorrodedMetal", 1312: "DiamondPlate", 1328: "Fabric",
+        1344: "Foil", 1536: "Grass", 1552: "LeafyGrass", 1568: "Sandstone", 1584: "Mud",
+        1600: "Snow", 1616: "Ground", 1792: "Asphalt", 2048: "Salt"
+    },
+    "Shape": {
+        0: "Ball", 1: "Block", 2: "Cylinder"
+    },
+    "PartType": {
+        0: "Ball", 1: "Block", 2: "Cylinder"
+    },
+    "SurfaceType": {
+        0: "Smooth", 1: "Glue", 2: "Weld", 3: "Studs", 4: "Inlet", 5: "Universal", 6: "Hinge", 7: "Motor", 8: "SteppingMotor"
+    },
+    "TopSurface": {0: "Smooth", 1: "Glue", 2: "Weld", 3: "Studs", 4: "Inlet", 5: "Universal", 6: "Hinge", 7: "Motor", 8: "SteppingMotor"},
+    "BottomSurface": {0: "Smooth", 1: "Glue", 2: "Weld", 3: "Studs", 4: "Inlet", 5: "Universal", 6: "Hinge", 7: "Motor", 8: "SteppingMotor"},
+    "LeftSurface": {0: "Smooth", 1: "Glue", 2: "Weld", 3: "Studs", 4: "Inlet", 5: "Universal", 6: "Hinge", 7: "Motor", 8: "SteppingMotor"},
+    "RightSurface": {0: "Smooth", 1: "Glue", 2: "Weld", 3: "Studs", 4: "Inlet", 5: "Universal", 6: "Hinge", 7: "Motor", 8: "SteppingMotor"},
+    "FrontSurface": {0: "Smooth", 1: "Glue", 2: "Weld", 3: "Studs", 4: "Inlet", 5: "Universal", 6: "Hinge", 7: "Motor", 8: "SteppingMotor"},
+    "BackSurface": {0: "Smooth", 1: "Glue", 2: "Weld", 3: "Studs", 4: "Inlet", 5: "Universal", 6: "Hinge", 7: "Motor", 8: "SteppingMotor"}
+}
+
+def extrair_nome_enum(nome_prop, valor):
+    # Se o valor veio como string "Enum.Material.Neon" ou "Neon"
+    if isinstance(valor, str):
+        return valor.split(".")[-1]
+    
+    # Se veio como dicionário {"Value": 288, "Name": "Neon"}
+    if isinstance(valor, dict):
+        if "Name" in valor and valor["Name"]:
+            return valor["Name"]
+        if "Value" in valor:
+            valor = valor["Value"]
+
+    # Se veio como inteiro (ID do Enum)
+    if isinstance(valor, int):
+        if nome_prop in ENUM_MAP and valor in ENUM_MAP[nome_prop]:
+            return ENUM_MAP[nome_prop][valor]
+        return str(valor)
+
+    return str(valor)
+
 def processar_propriedade_xml(nome_prop, valor, props_dict):
-    # Ignora valores nulos, propriedades de controle e propriedades descontinuadas (como FormFactor)
-    if valor is None or nome_prop in ["ClassName", "Name", "Parent", "FormFactor"]:
+    if valor is None or nome_prop in ["ClassName", "Name", "Parent"]:
         return ""
 
     if isinstance(props_dict, dict) and "CFrame" in props_dict and nome_prop in ["Position", "Orientation", "Rotation"]:
@@ -42,35 +89,24 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
         val_str = "true" if valor else "false"
         return f'\n            <bool name="{nome_prop}">{val_str}</bool>'
 
-    # 3. TRATAMENTO DE FACES E AXES (Trata objetos complexos de Enum.Faces e Enum.Axes)
-    if nome_prop in ["Faces", "Face"] and isinstance(valor, (dict, str, int)):
-        if isinstance(valor, dict):
-            top = "true" if valor.get("Top") else "false"
-            bottom = "true" if valor.get("Bottom") else "false"
-            left = "true" if valor.get("Left") else "false"
-            right = "true" if valor.get("Right") else "false"
-            front = "true" if valor.get("Front") else "false"
-            back = "true" if valor.get("Back") else "false"
-            return f'''
-            <Faces name="{nome_prop}">
-                <Faces>{(1 if valor.get("Right") else 0) | (2 if valor.get("Top") else 0) | (4 if valor.get("Back") else 0) | (8 if valor.get("Left") else 0) | (16 if valor.get("Bottom") else 0) | (32 if valor.get("Front") else 0)}</Faces>
-            </Faces>'''
-        # Se a propriedade for 'Face' individual (Enum.NormalId), mapeia diretamente para token
-        elif isinstance(valor, int):
-            return f'\n            <token name="{nome_prop}">{valor}</token>'
+    # 3. VERIFICAÇÃO E CONVERSÃO DE ENUMS
+    is_enum = (
+        nome_prop in ["Material", "Shape", "Font", "FormFactor", "PartType"] or
+        nome_prop.endswith("Surface") or
+        nome_prop.endswith("Type") or 
+        nome_prop.endswith("Style") or 
+        nome_prop.endswith("Mode") or 
+        nome_prop.endswith("Alignment") or 
+        nome_prop.endswith("Direction")
+    )
 
-    # 4. ENUMITEM SERIALIZADO COMO DICIONÁRIO OU NÚMERO (Enum.NormalId, Material, etc.)
-    if isinstance(valor, dict) and ("Value" in valor or "EnumType" in valor or "Name" in valor):
-        enum_val = valor.get("Value") if valor.get("Value") is not None else valor.get("Name", "")
-        return f'\n            <token name="{nome_prop}">{enum_val}</token>'
+    if is_enum or (isinstance(valor, str) and "Enum." in valor):
+        token_val = extrair_nome_enum(nome_prop, valor)
+        return f'\n            <token name="{nome_prop}">{token_val}</token>'
 
+    # 4. INTEIROS PURAMENTE NUMÉRICOS
     if isinstance(valor, int):
-        props_int_explicitas = ["ZIndex", "LayoutOrder", "BorderSizePixel", "TextSize"]
-        if nome_prop in props_int_explicitas:
-            return f'\n            <int name="{nome_prop}">{valor}</int>'
-        
-        # Converte IDs de Enum (como NormalId) para a tag <token> exigida pelo XML
-        return f'\n            <token name="{nome_prop}">{valor}</token>'
+        return f'\n            <int name="{nome_prop}">{valor}</int>'
 
     # 5. FLOATS
     if isinstance(valor, float):
@@ -105,7 +141,7 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
                 <B>{b}</B>
             </Color3>'''
 
-    # 7. STRINGS E MÍDIA
+    # 7. STRINGS E CONTEÚDOS DE MÍDIA
     if isinstance(valor, str):
         if nome_prop in ["Texture", "Image", "TextureId", "ImageId", "MeshId", "SoundId"] or valor.startswith("rbxassetid://"):
             return f'\n            <Content name="{nome_prop}"><url>{saxutils.escape(valor)}</url></Content>'
