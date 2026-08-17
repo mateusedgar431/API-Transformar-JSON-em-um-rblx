@@ -15,8 +15,7 @@ SERVICOS_OFICIAIS = {
     "StarterPlayer": "StarterPlayer",
     "StarterPack": "StarterPack",
     "Teams": "Teams",
-    "SoundService": "SoundService",
-    "MaterialService": "MaterialService"
+    "SoundService": "SoundService"
 }
 
 # Tabela de conversão: Nome do Enum -> Valor Inteiro Oficial no XML do Roblox
