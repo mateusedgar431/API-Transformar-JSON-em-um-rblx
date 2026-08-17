@@ -16,148 +16,86 @@ SERVICOS_OFICIAIS = {
     "StarterPack": "StarterPack",
     "Teams": "Teams",
     "SoundService": "SoundService",
-    "MaterialService": "MaterialService",
-    "HttpService": "HttpService",
-    "TestService": "TestService",
-    "VoiceChatService": "VoiceChatService",
-    "LocalizationService": "LocalizationService"
+    "MaterialService": "MaterialService"
 }
 
-MAPA_ENUM_TEXTO_PARA_ID = {
-    "Right": 0, "Top": 1, "Back": 2, "Left": 3, "Bottom": 4, "Front": 5,
+MAPA_ENUM = {
+    "ShadowMap": 1, "Compatibility": 0, "Future": 2, "Voxel": 3,
     "Smooth": 0, "Glue": 1, "Weld": 2, "Studs": 3, "Inlet": 4, 
     "Universal": 5, "Hinge": 6, "Motor": 7, "SteppingMotor": 8,
-    "Ball": 0, "Block": 1, "Cylinder": 2, "Wedge": 3,
-    "Linear": 0, "In": 0, "Out": 1, "InOut": 2, "Sine": 1, "Quad": 3,
-    "ShadowMap": 1, "Compatibility": 0, "Future": 2, "Voxel": 3,
-    "Fixed": 0, "Attach": 1, "Watch": 2, "Track": 3, "Follow": 4, "Custom": 5, "Scriptable": 6
+    "Right": 0, "Top": 1, "Back": 2, "Left": 3, "Bottom": 4, "Front": 5
 }
 
-def normalizar_valor_token(nome_prop, valor):
-    if isinstance(valor, dict):
-        valor = valor.get("Name", valor.get("Value", valor))
-
-    if isinstance(valor, str):
-        nome_limpo = valor.split(".")[-1]
-        if nome_prop == "Material":
-            return nome_limpo
-        if nome_limpo in MAPA_ENUM_TEXTO_PARA_ID:
-            return str(MAPA_ENUM_TEXTO_PARA_ID[nome_limpo])
-        if nome_limpo.isdigit():
-            return nome_limpo
-        return nome_limpo
-
-    if isinstance(valor, (int, float)):
-        return str(int(valor))
-
-    return str(valor)
-
-def processar_propriedade_xml(nome_prop, valor, props_dict):
+def tratar_propriedade_individual(nome_prop, valor):
     if valor is None or nome_prop in ["ClassName", "Name", "Parent", "FormFactor"]:
         return ""
 
-    if isinstance(props_dict, dict) and "CFrame" in props_dict and nome_prop in ["Position", "Orientation", "Rotation"]:
-        return ""
-
-    # Trata ClockTime gerando tanto o float quanto a TimeOfDay string para o Lighting
+    # Converte ClockTime estritamente para TimeOfDay string (exigido pelo parser do Roblox)
     if nome_prop == "ClockTime":
         horas = float(valor)
         h = int(horas)
         m = int((horas - h) * 60)
         s = int((((horas - h) * 60) - m) * 60)
-        time_str = f"{h:02d}:{m:02d}:{s:02d}"
-        return f'\n            <float name="ClockTime">{horas}</float>\n            <string name="TimeOfDay">{time_str}</string>'
+        return f'<string name="TimeOfDay">{h:02d}:{m:02d}:{s:02d}</string>'
 
-    # Trata CFrame de 12 elementos
-    if nome_prop == "CFrame" and isinstance(valor, list) and len(valor) >= 12:
-        return f'''
-            <CoordinateFrame name="CFrame">
-                <X>{valor[0]}</X><Y>{valor[1]}</Y><Z>{valor[2]}</Z>
-                <R00>{valor[3]}</R00><R01>{valor[4]}</R01><R02>{valor[5]}</R02>
-                <R10>{valor[6]}</R10><R11>{valor[7]}</R11><R12>{valor[8]}</R12>
-                <R20>{valor[9]}</R20><R21>{valor[10]}</R21><R22>{valor[11]}</R22>
-            </CoordinateFrame>'''
+    if nome_prop == "TimeOfDay":
+        return f'<string name="TimeOfDay">{saxutils.escape(str(valor))}</string>'
 
-    # Booleano
     if isinstance(valor, bool):
-        val_str = "true" if valor else "false"
-        return f'\n            <bool name="{nome_prop}">{val_str}</bool>'
+        return f'<bool name="{nome_prop}">{"true" if valor else "false"}</bool>'
 
-    # Objetos estruturados (Color3, Vector3, Vector2, UDim2)
+    if isinstance(valor, (int, float)):
+        if nome_prop == "Technology":
+            token_id = MAPA_ENUM.get(str(valor), int(valor) if str(valor).isdigit() else 1)
+            return f'<token name="Technology">{token_id}</token>'
+        if isinstance(valor, int) and nome_prop not in ["Brightness", "FogStart", "FogEnd"]:
+            return f'<int name="{nome_prop}">{valor}</int>'
+        return f'<float name="{nome_prop}">{float(valor)}</float>'
+
+    if isinstance(valor, str):
+        val_clean = valor.split(".")[-1]
+        if val_clean in MAPA_ENUM or "Enum." in valor:
+            return f'<token name="{nome_prop}">{MAPA_ENUM.get(val_clean, 0)}</token>'
+        return f'<string name="{nome_prop}">{saxutils.escape(valor)}</string>'
+
     if isinstance(valor, dict):
         if "R" in valor and "G" in valor and "B" in valor:
             r, g, b = valor["R"], valor["G"], valor["B"]
             rf = r / 255.0 if r > 1.0 else float(r)
             gf = g / 255.0 if g > 1.0 else float(g)
             bf = b / 255.0 if b > 1.0 else float(b)
-            return f'''
-            <Color3 name="{nome_prop}">
-                <R>{rf}</R>
-                <G>{gf}</G>
-                <B>{bf}</B>
-            </Color3>'''
+            return f'<Color3 name="{nome_prop}"><R>{rf}</R><G>{gf}</G><B>{bf}</B></Color3>'
 
         if "X" in valor and "Y" in valor and "Z" in valor:
-            return f'''
-            <Vector3 name="{nome_prop}">
-                <X>{valor.get("X", 0)}</X><Y>{valor.get("Y", 0)}</Y><Z>{valor.get("Z", 0)}</Z>
-            </Vector3>'''
+            return f'<Vector3 name="{nome_prop}"><X>{valor["X"]}</X><Y>{valor["Y"]}</Y><Z>{valor["Z"]}</Z></Vector3>'
 
-        if "X" in valor and "Y" in valor and isinstance(valor.get("X"), dict):
-            x_dict, y_dict = valor.get("X", {}), valor.get("Y", {})
-            return f'''
-            <UDim2 name="{nome_prop}">
-                <XS>{x_dict.get("Scale", 0)}</XS>
-                <XO>{x_dict.get("Offset", 0)}</XO>
-                <YS>{y_dict.get("Scale", 0)}</YS>
-                <YO>{y_dict.get("Offset", 0)}</YO>
-            </UDim2>'''
-
-    # Listas/Tuplas para Color3 ou Vector3
-    if isinstance(valor, (list, tuple)):
-        if len(valor) == 3:
-            if nome_prop in ["Ambient", "OutdoorAmbient", "Color", "ColorShift_Bottom", "ColorShift_Top", "FogColor"]:
-                r, g, b = valor[0], valor[1], valor[2]
-                rf = r / 255.0 if r > 1.0 else float(r)
-                gf = g / 255.0 if g > 1.0 else float(g)
-                bf = b / 255.0 if b > 1.0 else float(b)
-                return f'''
-            <Color3 name="{nome_prop}">
-                <R>{rf}</R>
-                <G>{gf}</G>
-                <B>{bf}</B>
-            </Color3>'''
-            else:
-                return f'''
-            <Vector3 name="{nome_prop}">
-                <X>{valor[0]}</X><Y>{valor[1]}</Y><Z>{valor[2]}</Z>
-            </Vector3>'''
-
-    # Enums e Tokens
-    e_enum = (
-        nome_prop in ["Shape", "Font", "PartType", "Face", "NormalId", "Technology", "CameraType"] or
-        nome_prop.endswith("Surface") or nome_prop.endswith("Type") or 
-        nome_prop.endswith("Style") or nome_prop.endswith("Mode")
-    )
-
-    if e_enum or (isinstance(valor, str) and "Enum." in valor):
-        val_token = normalizar_valor_token(nome_prop, valor)
-        return f'\n            <token name="{nome_prop}">{val_token}</token>'
-
-    # Floats e Inteiros
-    if isinstance(valor, float):
-        return f'\n            <float name="{nome_prop}">{valor}</float>'
-
-    if isinstance(valor, int):
-        return f'\n            <int name="{nome_prop}">{valor}</int>'
-
-    # Strings e URLs
-    if isinstance(valor, str):
-        if nome_prop in ["Texture", "Image", "TextureId", "ImageId", "MeshId", "SoundId"] or valor.startswith("rbxassetid://"):
-            return f'\n            <Content name="{nome_prop}"><url>{saxutils.escape(valor)}</url></Content>'
-        return f'\n            <string name="{nome_prop}">{saxutils.escape(str(valor))}</string>'
+    if isinstance(valor, (list, tuple)) and len(valor) == 3:
+        if nome_prop in ["Ambient", "OutdoorAmbient", "FogColor", "ColorShift_Bottom", "ColorShift_Top"]:
+            r, g, b = valor[0], valor[1], valor[2]
+            rf = r / 255.0 if r > 1.0 else float(r)
+            gf = g / 255.0 if g > 1.0 else float(g)
+            bf = b / 255.0 if b > 1.0 else float(b)
+            return f'<Color3 name="{nome_prop}"><R>{rf}</R><G>{gf}</G><B>{bf}</B></Color3>'
+        return f'<Vector3 name="{nome_prop}"><X>{valor[0]}</X><Y>{valor[1]}</Y><Z>{valor[2]}</Z></Vector3>'
 
     return ""
+
+def processar_dicionario_propriedades(props_dict):
+    xml_props = ""
+    chaves_processadas = set()
+
+    if "ClockTime" in props_dict and "TimeOfDay" in props_dict:
+        chaves_processadas.add("TimeOfDay")
+
+    for k, v in props_dict.items():
+        if k in chaves_processadas:
+            continue
+        chaves_processadas.add(k)
+        no_xml = tratar_propriedade_individual(k, v)
+        if no_xml:
+            xml_props += f"\n            {no_xml}"
+
+    return xml_props
 
 def processar_objetos_xml(TableData):
     xml_output = ""
@@ -179,13 +117,11 @@ def processar_objetos_xml(TableData):
                 xml_output += f'\n<Item class="{class_name}" referent="{ref_id}">'
                 xml_output += '\n  <Properties>'
                 xml_output += f'\n    <string name="Name">{saxutils.escape(str(obj_name))}</string>'
-
-                for nome_prop, val_prop in props.items():
-                    xml_output += processar_propriedade_xml(nome_prop, val_prop, props)
+                xml_output += processar_dicionario_propriedades(props)
 
                 if script_code or class_name in ["Script", "LocalScript", "ModuleScript"]:
                     codigo_str = str(script_code) if script_code is not None else ""
-                    xml_output += f'\n            <ProtectedString name="Source">{saxutils.escape(codigo_str)}</ProtectedString>'
+                    xml_output += f'\n    <ProtectedString name="Source">{saxutils.escape(codigo_str)}</ProtectedString>'
 
                 xml_output += '\n  </Properties>'
 
@@ -214,15 +150,9 @@ def construir_rbxlx_completo(part_data_dict):
             if servico_nome == "Workspace":
                 workspace_content += processar_objetos_xml(objetos)
             elif servico_nome in SERVICOS_OFICIAIS:
-                str_props = ""
-                for k, v in propriedades_servico.items():
-                    str_props += processar_propriedade_xml(k, v, propriedades_servico)
-
-                str_objs = processar_objetos_xml(objetos)
-
                 servicos_xml[servico_nome] = {
-                    "props": str_props,
-                    "objects": str_objs
+                    "props": processar_dicionario_propriedades(propriedades_servico),
+                    "objects": processar_objetos_xml(objetos)
                 }
 
     elif isinstance(part_data_dict, list):
