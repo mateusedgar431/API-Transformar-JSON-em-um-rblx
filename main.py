@@ -24,7 +24,7 @@ SERVICOS_MESTRES = {
     "chat": "Chat"
 }
 
-# Propriedades minimas obrigatorias para o parser do Roblox aceitar os servicos
+# Propriedades padrao obrigatorias para todos os servicos do Roblox
 PROPRIEDADES_PADRAO = {
     "Lighting": {
         "Ambient": [0.5, 0.5, 0.5],
@@ -49,7 +49,38 @@ PROPRIEDADES_PADRAO = {
         "DistanceFactor": 3.33,
         "DopplerScale": 1.0,
         "RespectFilteringEnabled": True
-    }
+    },
+    "StarterGui": {
+        "ResetPlayerGuiOnSpawn": True,
+        "ScreenOrientation": 0
+    },
+    "StarterPlayer": {
+        "CameraMaxZoomDistance": 128.0,
+        "CameraMinZoomDistance": 0.5,
+        "CameraMode": 0,
+        "EnableMouseLockOption": True,
+        "HealthDisplayDistance": 100.0,
+        "NameDisplayDistance": 100.0,
+        "UserEmotesEnabled": True
+    },
+    "HttpService": {
+        "HttpEnabled": False
+    },
+    "VoiceChatService": {
+        "EnableDefaultVoice": True
+    },
+    "MaterialService": {
+        "Use2022Materials": True
+    },
+    "ReplicatedFirst": {},
+    "ReplicatedStorage": {},
+    "ServerScriptService": {},
+    "ServerStorage": {},
+    "StarterPack": {},
+    "Teams": {},
+    "TestService": {},
+    "LocalizationService": {},
+    "Chat": {}
 }
 
 MAPA_ENUM = {
