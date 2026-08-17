@@ -35,13 +35,10 @@ MAPA_ENUM = {
 }
 
 def converter_para_cor_xml(nome_prop, r, g, b):
-    # Trata valores 0-255 convertendo para inteiro 32-bit (ARGB/RGB) aceito no XML
-    r_int = int(r * 255) if isinstance(r, float) and r <= 1.0 else int(r)
-    g_int = int(g * 255) if isinstance(g, float) and g <= 1.0 else int(g)
-    b_int = int(b * 255) if isinstance(b, float) and b <= 1.0 else int(b)
-    
-    val_int = (r_int << 16) | (g_int << 8) | b_int
-    return f'<Color3uint8 name="{nome_prop}">{val_int}</Color3uint8>'
+    rf = r / 255.0 if r > 1.0 else float(r)
+    gf = g / 255.0 if g > 1.0 else float(g)
+    bf = b / 255.0 if b > 1.0 else float(b)
+    return f'<Color3 name="{nome_prop}"><R>{rf}</R><G>{gf}</G><B>{bf}</B></Color3>'
 
 def tratar_propriedade_individual(nome_prop, valor, props_dict=None):
     if valor is None or nome_prop in ["ClassName", "Name", "Parent", "FormFactor"]:
@@ -63,8 +60,7 @@ def tratar_propriedade_individual(nome_prop, valor, props_dict=None):
         h = int(horas)
         m = int((horas - h) * 60)
         s = int((((horas - h) * 60) - m) * 60)
-        time_str = f"{h:02d}:{m:02d}:{s:02d}"
-        return f'<float name="ClockTime">{horas}</float>\n            <string name="TimeOfDay">{time_str}</string>'
+        return f'<float name="ClockTime">{horas}</float>\n            <string name="TimeOfDay">{h:02d}:{m:02d}:{s:02d}</string>'
 
     if nome_prop == "TimeOfDay":
         return f'<string name="TimeOfDay">{saxutils.escape(str(valor))}</string>'
