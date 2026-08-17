@@ -19,8 +19,29 @@ SERVICOS_OFICIAIS = {
     "MaterialService": "MaterialService"
 }
 
-# Mapeamentos Oficiais
-ID_PARA_NOME_ENUM = {
+# Tabela Mestra de Mapeamento de Enums (Texto -> ID Numérico)
+MAPA_ENUM_TEXTO_PARA_ID = {
+    # NormalId / Face
+    "Right": 0, "Top": 1, "Back": 2, "Left": 3, "Bottom": 4, "Front": 5,
+    # SurfaceType
+    "Smooth": 0, "Glue": 1, "Weld": 2, "Studs": 3, "Inlet": 4, 
+    "Universal": 5, "Hinge": 6, "Motor": 7, "SteppingMotor": 8,
+    # Shape / PartType
+    "Ball": 0, "Block": 1, "Cylinder": 2, "Wedge": 3,
+    # Material (IDs internos mantidos)
+    "Plastic": 256, "SmoothPlastic": 272, "Neon": 288, "Wood": 512, "WoodPlanks": 528,
+    "Marble": 784, "Basalt": 788, "Slate": 800, "CrackedLava": 816, "Concrete": 832,
+    "Limestone": 848, "Granite": 864, "Pavement": 880, "Brick": 896, "Pebble": 912,
+    "Sand": 928, "Glass": 1040, "ForceField": 1056, "Ice": 1072, "Foil": 1088,
+    "Metal": 1280, "CorrodedMetal": 1296, "DiamondPlate": 1312, "Fabric": 1328,
+    "Grass": 1536, "LeafyGrass": 1552, "Sandstone": 1568, "Mud": 1584,
+    "Snow": 1600, "Ground": 1616, "Asphalt": 1792, "Salt": 2048,
+    # EasingStyle / EasingDirection
+    "Linear": 0, "In": 0, "Out": 1, "InOut": 2, "Sine": 1, "BackStyle": 2, "Quad": 3, "Quart": 4, "Quint": 5, "Bounce": 6, "Elastic": 7
+}
+
+# Tabela Mestra de Mapeamento (ID Numérico -> Nome do Token, quando o Roblox exige texto)
+MAPA_ENUM_ID_PARA_TEXTO = {
     "Material": {
         256: "Plastic", 272: "SmoothPlastic", 288: "Neon", 512: "Wood", 528: "WoodPlanks",
         784: "Marble", 788: "Basalt", 800: "Slate", 816: "CrackedLava", 832: "Concrete",
@@ -29,57 +50,38 @@ ID_PARA_NOME_ENUM = {
         1280: "Metal", 1296: "CorrodedMetal", 1312: "DiamondPlate", 1328: "Fabric",
         1536: "Grass", 1552: "LeafyGrass", 1568: "Sandstone", 1584: "Mud",
         1600: "Snow", 1616: "Ground", 1792: "Asphalt", 2048: "Salt"
-    },
-    "Surface": {
-        0: "Smooth", 1: "Glue", 2: "Weld", 3: "Studs", 4: "Inlet", 
-        5: "Universal", 6: "Hinge", 7: "Motor", 8: "SteppingMotor"
-    },
-    "Shape": {0: "Ball", 1: "Block", 2: "Cylinder"}
+    }
 }
-
-# Mapeamento estrito do Enum.NormalId / Enum.FaceId para o XML do Roblox
-FACE_NAME_TO_INT = {
-    "Right": 0,
-    "Top": 1,
-    "Back": 2,
-    "Left": 3,
-    "Bottom": 4,
-    "Front": 5
-}
-
-FACE_INT_TO_NAME = {v: k for k, v in FACE_NAME_TO_INT.items()}
 
 def normalizar_valor_token(nome_prop, valor):
-    # Se for dicionário do Luau com Name/Value
+    # Extract de Dicionários do Luau
     if isinstance(valor, dict):
         if "Name" in valor and valor["Name"]:
             valor = valor["Name"]
         elif "Value" in valor:
             valor = valor["Value"]
 
-    # Tratamento Específico para Face / NormalId
-    if nome_prop in ["Face", "NormalId"]:
-        if isinstance(valor, str):
-            nome_limpo = valor.split(".")[-1]
-            if nome_limpo in FACE_NAME_TO_INT:
-                return str(FACE_NAME_TO_INT[nome_limpo])
-            if nome_limpo.isdigit():
-                return nome_limpo
-        if isinstance(valor, int):
-            return str(valor)
-
-    # Tratamento para outras strings de Enum
+    # Processamento de Strings
     if isinstance(valor, str):
-        return valor.split(".")[-1]
+        nome_limpo = valor.split(".")[-1]
+        
+        # Para Material, o Roblox costuma preferir a string do Enum
+        if nome_prop == "Material":
+            return nome_limpo
 
-    # Tratamento para inteiros gerais
+        # Para Enums baseados em índice numérico (Face, NormalId, Surfaces, Shapes, Styles)
+        if nome_limpo in MAPA_ENUM_TEXTO_PARA_ID:
+            return str(MAPA_ENUM_TEXTO_PARA_ID[nome_limpo])
+
+        if nome_limpo.isdigit():
+            return nome_limpo
+
+        return nome_limpo
+
+    # Processamento de Inteiros
     if isinstance(valor, int):
-        if nome_prop == "Material" and valor in ID_PARA_NOME_ENUM["Material"]:
-            return ID_PARA_NOME_ENUM["Material"][valor]
-        if nome_prop.endswith("Surface") and valor in ID_PARA_NOME_ENUM["Surface"]:
-            return ID_PARA_NOME_ENUM["Surface"][valor]
-        if nome_prop in ["Shape", "PartType"] and valor in ID_PARA_NOME_ENUM["Shape"]:
-            return ID_PARA_NOME_ENUM["Shape"][valor]
+        if nome_prop == "Material" and valor in MAPA_ENUM_ID_PARA_TEXTO["Material"]:
+            return MAPA_ENUM_ID_PARA_TEXTO["Material"][valor]
         return str(valor)
 
     return str(valor)
@@ -106,9 +108,9 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
         val_str = "true" if valor else "false"
         return f'\n            <bool name="{nome_prop}">{val_str}</bool>'
 
-    # 3. ENUMS / TOKENS
+    # 3. ENUMS / TOKENS (Filtra qualquer tipo de Enum)
     e_enum = (
-        nome_prop in ["Material", "Shape", "Font", "PartType", "Face", "NormalId"] or
+        nome_prop in ["Material", "Shape", "Font", "PartType", "Face", "NormalId", "Technology", "CameraType"] or
         nome_prop.endswith("Surface") or
         nome_prop.endswith("Type") or 
         nome_prop.endswith("Style") or 
@@ -157,6 +159,12 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
                 <G>{g}</G>
                 <B>{b}</B>
             </Color3>'''
+
+        if "R" in valor and "G" in valor and "B" in valor and "A" in valor:
+            return f'''
+            <Color4 name="{nome_prop}">
+                <R>{valor["R"]}</R><G>{valor["G"]}</G><B>{valor["B"]}</B><A>{valor["A"]}</A>
+            </Color4>'''
 
     # 7. STRINGS
     if isinstance(valor, str):
@@ -221,7 +229,19 @@ def construir_rbxlx_completo(part_data_dict):
 
     if isinstance(part_data_dict, dict):
         for servico_nome, servico_dados in part_data_dict.items():
-            objetos = servico_dados.get("Objects", []) if isinstance(servico_dados, dict) else servico_dados
+            objetos = []
+            propriedades_servico = {}
+
+            if isinstance(servico_dados, dict):
+                objetos = servico_dados.get("Objects", [])
+                propriedades_servico = servico_dados.get("Properties", {})
+            elif isinstance(servico_dados, list):
+                objetos = servico_dados
+
+            # Compila as propriedades do próprio serviço (ex: Lighting.ClockTime, etc.)
+            str_props_servico = f'\n    <string name="Name">{servico_nome}</string>'
+            for k, v in propriedades_servico.items():
+                str_props_servico += processar_propriedade_xml(k, v, propriedades_servico)
 
             if servico_nome == "Workspace":
                 workspace_content += processar_objetos_xml(objetos)
@@ -230,7 +250,7 @@ def construir_rbxlx_completo(part_data_dict):
                 ref_servico = f"RBX_SERVICE_{servico_nome.upper()}"
 
                 outros_servicos += f'\n<Item class="{classe_servico}" referent="{ref_servico}">'
-                outros_servicos += f'\n  <Properties><string name="Name">{servico_nome}</string></Properties>'
+                outros_servicos += f'\n  <Properties>{str_props_servico}\n  </Properties>'
                 outros_servicos += processar_objetos_xml(objetos)
                 outros_servicos += '\n</Item>'
 
