@@ -24,6 +24,7 @@ SERVICOS_MESTRES = {
     "chat": "Chat"
 }
 
+# Deixei só como fallback. Agora o Python aceita qualquer coisa que vier do Lua
 PROPRIEDADES_PADRAO = {
     "Lighting": {
         "Ambient": [0.5, 0.5, 0.5],
@@ -62,15 +63,9 @@ PROPRIEDADES_PADRAO = {
         "NameDisplayDistance": 100.0,
         "UserEmotesEnabled": True
     },
-    "HttpService": {
-        "HttpEnabled": False
-    },
-    "VoiceChatService": {
-        "EnableDefaultVoice": True
-    },
-    "MaterialService": {
-        "Use2022Materials": True
-    },
+    "HttpService": {"HttpEnabled": False},
+    "VoiceChatService": {"EnableDefaultVoice": True},
+    "MaterialService": {"Use2022Materials": True},
     "ReplicatedFirst": {},
     "ReplicatedStorage": {},
     "ServerScriptService": {},
@@ -84,7 +79,7 @@ PROPRIEDADES_PADRAO = {
 
 MAPA_ENUM = {
     "Compatibility": 0, "Voxel": 1, "ShadowMap": 2, "Future": 3,
-    "Smooth": 0, "Glue": 1, "Weld": 2, "Studs": 3, "Inlet": 4, 
+    "Smooth": 0, "Glue": 1, "Weld": 2, "Studs": 3, "Inlet": 4,
     "Universal": 5, "Hinge": 6, "Motor": 7, "SteppingMotor": 8,
     "Right": 0, "Top": 1, "Back": 2, "Left": 3, "Bottom": 4, "Front": 5,
     "Plastic": 256, "SmoothPlastic": 272, "Neon": 288, "Wood": 512, "Metal": 1088, "Grass": 1280,
@@ -98,34 +93,26 @@ PROPS_FLOAT = {
     "ExposureCompensation", "GeographicLatitude", "ShadowSoftness",
     "DistanceFactor", "DopplerScale", "CameraMaxZoomDistance",
     "CameraMinZoomDistance", "HealthDisplayDistance", "NameDisplayDistance",
-    "Transparency", "Reflectance", "Volume"
+    "Transparency", "Reflectance", "Volume", "Gravity"
 }
 
 PROPS_COR = {
     "Ambient", "OutdoorAmbient", "FogColor", "Color",
-    "ColorShift_Bottom", "ColorShift_Top", "Color3"
+    "ColorShift_Bottom", "ColorShift_Top", "Color3", "BaseMaterialColor3"
 }
 
 CORES_NOMEADAS = {
-    "preto": (0.0, 0.0, 0.0),
-    "black": (0.0, 0.0, 0.0),
-    "branco": (255.0, 255.0, 255.0),
-    "white": (255.0, 255.0, 255.0),
-    "vermelho": (255.0, 0.0, 0.0),
-    "red": (255.0, 0.0, 0.0),
-    "verde": (0.0, 255.0, 0.0),
-    "green": (0.0, 255.0, 0.0),
-    "azul": (0.0, 0.0, 255.0),
-    "blue": (0.0, 0.0, 255.0),
-    "amarelo": (255.0, 255.0, 0.0),
-    "yellow": (255.0, 255.0, 0.0),
-    "cinza": (128.0, 128.0, 128.0),
-    "gray": (128.0, 128.0, 128.0)
+    "preto": (0.0, 0.0, 0.0), "black": (0.0, 0.0, 0.0),
+    "branco": (255.0, 255.0, 255.0), "white": (255.0, 255.0, 255.0),
+    "vermelho": (255.0, 0.0, 0.0), "red": (255.0, 0.0, 0.0),
+    "verde": (0.0, 255.0, 0.0), "green": (0.0, 255.0, 0.0),
+    "azul": (0.0, 0.0, 255.0), "blue": (0.0, 0.0, 255.0),
+    "amarelo": (255.0, 255.0, 0.0), "yellow": (255.0, 255.0, 0.0),
+    "cinza": (128.0, 128.0, 128.0), "gray": (128.0, 128.0, 128.0)
 }
 
 def converter_para_cor_xml(nome_prop, valor):
     r, g, b = 0.0, 0.0, 0.0
-
     if isinstance(valor, (list, tuple)) and len(valor) >= 3:
         r, g, b = valor[0], valor[1], valor[2]
     elif isinstance(valor, dict):
@@ -150,11 +137,9 @@ def converter_para_cor_xml(nome_prop, valor):
                     r, g, b = float(partes[0]), float(partes[1]), float(partes[2])
                 except ValueError:
                     pass
-
     rf = float(r) / 255.0 if float(r) > 1.0 else float(r)
     gf = float(g) / 255.0 if float(g) > 1.0 else float(g)
     bf = float(b) / 255.0 if float(b) > 1.0 else float(b)
-
     return f'<Color3 name="{nome_prop}"><R>{rf}</R><G>{gf}</G><B>{bf}</B></Color3>'
 
 def gerar_cframe_xml(nome_prop, valor):
@@ -162,7 +147,6 @@ def gerar_cframe_xml(nome_prop, valor):
     r00, r01, r02 = 1.0, 0.0, 0.0
     r10, r11, r12 = 0.0, 1.0, 0.0
     r20, r21, r22 = 0.0, 0.0, 1.0
-
     if isinstance(valor, (list, tuple)):
         if len(valor) >= 12:
             x, y, z = float(valor[0]), float(valor[1]), float(valor[2])
@@ -175,7 +159,6 @@ def gerar_cframe_xml(nome_prop, valor):
         x = float(valor.get("X", 0.0))
         y = float(valor.get("Y", 0.0))
         z = float(valor.get("Z", 0.0))
-
     return f'''<CoordinateFrame name="{nome_prop}">
         <X>{x}</X><Y>{y}</Y><Z>{z}</Z>
         <R00>{r00}</R00><R01>{r01}</R01><R02>{r02}</R02>
@@ -186,27 +169,21 @@ def gerar_cframe_xml(nome_prop, valor):
 def tratar_propriedade_individual(nome_prop, valor, props_dict=None):
     if valor is None or nome_prop in ["ClassName", "Name", "Parent", "FormFactor"]:
         return ""
-
     if nome_prop in PROPS_COR or nome_prop.endswith("Color"):
         return converter_para_cor_xml(nome_prop, valor)
-
     if nome_prop == "CFrame":
         return gerar_cframe_xml("CFrame", valor)
-
     if nome_prop in ["Position", "Orientation", "Rotation"] and props_dict and "CFrame" in props_dict:
         return ""
-
     if nome_prop == "Position" and props_dict and "CFrame" not in props_dict:
         xml_pos = ""
         if isinstance(valor, (list, tuple)) and len(valor) == 3:
-            xml_pos = f'<Vector3 name="Position"><X>{valor[0]}</X><Y>{valor[1]}</Y><Z>{valor[2]}</Z></Vector3>\n            '
+            xml_pos = f'<Vector3 name="Position"><X>{valor[0]}</X><Y>{valor[1]}</Y><Z>{valor[2]}</Z></Vector3>\n '
         elif isinstance(valor, dict) and "X" in valor and "Y" in valor and "Z" in valor:
-            xml_pos = f'<Vector3 name="Position"><X>{valor["X"]}</X><Y>{valor["Y"]}</Y><Z>{valor["Z"]}</Z></Vector3>\n            '
+            xml_pos = f'<Vector3 name="Position"><X>{valor["X"]}</X><Y>{valor["Y"]}</Y><Z>{valor["Z"]}</Z></Vector3>\n '
         return xml_pos + gerar_cframe_xml("CFrame", valor)
-
     if isinstance(valor, bool):
         return f'<bool name="{nome_prop}">{"true" if valor else "false"}</bool>'
-
     if nome_prop in PROPS_FLOAT:
         try:
             val_float = float(valor)
@@ -214,25 +191,21 @@ def tratar_propriedade_individual(nome_prop, valor, props_dict=None):
                 h = int(val_float) % 24
                 m = int((val_float - int(val_float)) * 60)
                 s = int((((val_float - int(val_float)) * 60) - m) * 60)
-                return f'<float name="ClockTime">{val_float}</float>\n            <string name="TimeOfDay">{h:02d}:{m:02d}:{s:02d}</string>'
+                return f'<float name="ClockTime">{val_float}</float>\n <string name="TimeOfDay">{h:02d}:{m:02d}:{s:02d}</string>'
             return f'<float name="{nome_prop}">{val_float}</float>'
         except (ValueError, TypeError):
             pass
-
     if nome_prop == "TimeOfDay":
         return f'<string name="TimeOfDay">{saxutils.escape(str(valor))}</string>'
-
     if isinstance(valor, dict):
         if "X" in valor and "Y" in valor and "Z" in valor:
             return f'<Vector3 name="{nome_prop}"><X>{valor["X"]}</X><Y>{valor["Y"]}</Y><Z>{valor["Z"]}</Z></Vector3>'
-
         if "X" in valor and "Y" in valor and isinstance(valor.get("X"), dict):
             x_dict, y_dict = valor.get("X", {}), valor.get("Y", {})
             return f'''<UDim2 name="{nome_prop}">
                 <XS>{x_dict.get("Scale", 0)}</XS><XO>{x_dict.get("Offset", 0)}</XO>
                 <YS>{y_dict.get("Scale", 0)}</YS><YO>{y_dict.get("Offset", 0)}</YO>
             </UDim2>'''
-
     if isinstance(valor, (list, tuple)):
         if len(valor) == 3:
             return f'<Vector3 name="{nome_prop}"><X>{valor[0]}</X><Y>{valor[1]}</Y><Z>{valor[2]}</Z></Vector3>'
@@ -241,45 +214,37 @@ def tratar_propriedade_individual(nome_prop, valor, props_dict=None):
                 <XS>{valor[0]}</XS><XO>{valor[1]}</XO>
                 <YS>{valor[2]}</YS><YO>{valor[3]}</YO>
             </UDim2>'''
-
     e_enum = (
-        nome_prop in ["Shape", "Font", "PartType", "Face", "NormalId", "Technology", "CameraType", "Material", "AmbientReverb"] or
-        nome_prop.endswith("Surface") or nome_prop.endswith("Type") or 
+        nome_prop in ["Shape", "Font", "PartType", "Face", "NormalId", "Technology", "CameraType", "Material", "AmbientReverb", "CameraMode", "ScreenOrientation"] or
+        nome_prop.endswith("Surface") or nome_prop.endswith("Type") or
         nome_prop.endswith("Style") or nome_prop.endswith("Mode")
     )
     if e_enum or (isinstance(valor, str) and "Enum." in valor):
         val_clean = str(valor).split(".")[-1]
         token_val = MAPA_ENUM.get(val_clean, val_clean)
         return f'<token name="{nome_prop}">{token_val}</token>'
-
     if isinstance(valor, float):
         return f'<float name="{nome_prop}">{valor}</float>'
-
     if isinstance(valor, int):
         return f'<int name="{nome_prop}">{valor}</int>'
-
     if isinstance(valor, str):
         if nome_prop in ["Texture", "Image", "TextureId", "ImageId", "MeshId", "SoundId"] or valor.startswith("rbxassetid://"):
             return f'<Content name="{nome_prop}"><url>{saxutils.escape(valor)}</url></Content>'
         return f'<string name="{nome_prop}">{saxutils.escape(valor)}</string>'
-
     return ""
 
 def processar_dicionario_propriedades(props_dict):
     xml_props = ""
     chaves_processadas = set()
-
     if "ClockTime" in props_dict and "TimeOfDay" in props_dict:
         chaves_processadas.add("TimeOfDay")
-
     for k, v in props_dict.items():
         if k in chaves_processadas:
             continue
         chaves_processadas.add(k)
         no_xml = tratar_propriedade_individual(k, v, props_dict)
         if no_xml:
-            xml_props += f"\n            {no_xml}"
-
+            xml_props += f"\n {no_xml}"
     return xml_props
 
 def processar_objetos_xml(TableData):
@@ -290,31 +255,22 @@ def processar_objetos_xml(TableData):
                 props = a.get("Properties", {})
                 children = a.get("Children", []) or a.get("Objects", [])
                 script_code = a.get("Script") or (props.get("Source") if isinstance(props, dict) else None)
-
                 if not isinstance(props, dict):
                     props = {}
-
                 class_name = props.get("ClassName", "Part")
                 obj_name = props.get("Name", f"Object_{idx}")
-
                 ref_id = f"RBX_OBJ_{idx}_{abs(hash(obj_name))}"
-
                 xml_output += f'\n<Item class="{class_name}" referent="{ref_id}">'
-                xml_output += '\n  <Properties>'
-                xml_output += f'\n    <string name="Name">{saxutils.escape(str(obj_name))}</string>'
+                xml_output += '\n <Properties>'
+                xml_output += f'\n <string name="Name">{saxutils.escape(str(obj_name))}</string>'
                 xml_output += processar_dicionario_propriedades(props)
-
                 if script_code or class_name in ["Script", "LocalScript", "ModuleScript"]:
                     codigo_str = str(script_code) if script_code is not None else ""
-                    xml_output += f'\n    <ProtectedString name="Source">{saxutils.escape(codigo_str)}</ProtectedString>'
-
-                xml_output += '\n  </Properties>'
-
+                    xml_output += f'\n <ProtectedString name="Source">{saxutils.escape(codigo_str)}</ProtectedString>'
+                xml_output += '\n </Properties>'
                 if children and isinstance(children, list):
                     xml_output += processar_objetos_xml(children)
-
                 xml_output += '\n</Item>'
-
     return xml_output
 
 def construir_rbxlx_completo(part_data_dict):
@@ -322,18 +278,19 @@ def construir_rbxlx_completo(part_data_dict):
     workspace_props = ""
     servicos_dados_finais = {}
 
+    # 1. COMEÇA COM O PADRAO
     for s_nome in SERVICOS_MESTRES.values():
-        if s_nome != "Workspace":
+        if s_nome!= "Workspace":
             servicos_dados_finais[s_nome] = {
                 "props": PROPRIEDADES_PADRAO.get(s_nome, {}).copy(),
                 "objects": []
             }
 
+    # 2. AGORA SOBRESCREVE COM TUDO QUE VEIO DO LUA
     if isinstance(part_data_dict, dict):
         for chave_entrada, servico_dados in part_data_dict.items():
             chave_low = str(chave_entrada).strip().lower()
             servico_oficial = SERVICOS_MESTRES.get(chave_low)
-
             if not servico_oficial:
                 continue
 
@@ -342,9 +299,10 @@ def construir_rbxlx_completo(part_data_dict):
 
             if isinstance(servico_dados, dict):
                 objetos = servico_dados.get("Objects", []) or servico_dados.get("Children", [])
-                if "Properties" in servico_dados and isinstance(servico_dados["Properties"], dict):
-                    propriedades_recebidas = servico_dados["Properties"]
-                else:
+                # MUDANCA PRINCIPAL: Pega TUDO de Properties, nao so o padrao
+                propriedades_recebidas = servico_dados.get("Properties", {})
+                # Se nao tiver Properties, pega tudo menos Objects/Children
+                if not propriedades_recebidas:
                     propriedades_recebidas = {k: v for k, v in servico_dados.items() if k not in ["Objects", "Children"]}
 
             elif isinstance(servico_dados, list):
@@ -354,6 +312,7 @@ def construir_rbxlx_completo(part_data_dict):
                 workspace_content += processar_objetos_xml(objetos)
                 workspace_props = processar_dicionario_propriedades(propriedades_recebidas)
             else:
+                # Atualiza o padrao com o que veio do Lua
                 servicos_dados_finais[servico_oficial]["props"].update(propriedades_recebidas)
                 servicos_dados_finais[servico_oficial]["objects"] = objetos
 
@@ -365,7 +324,6 @@ def construir_rbxlx_completo(part_data_dict):
         ref_servico = f"RBX_SERVICE_{s_nome.upper()}"
         props_xml = processar_dicionario_propriedades(dados["props"])
         objs_xml = processar_objetos_xml(dados["objects"])
-
         outros_servicos_str += f'''
     <Item class="{s_nome}" referent="{ref_servico}">
         <Properties>
@@ -384,7 +342,6 @@ def construir_rbxlx_completo(part_data_dict):
         {workspace_content}
     </Item>{outros_servicos_str}
 </roblox>'''
-
     return rbxlx_str.encode('utf-8')
 
 @app.route('/publicar', methods=['POST'])
@@ -394,26 +351,20 @@ def publicar():
         api_key = request.headers.get('x-api-key')
         universe_id = request.headers.get('universe-id')
         place_id = request.headers.get('place-id')
-
         if not api_key or not universe_id or not place_id:
             return jsonify({"erro": "Headers obrigatorios faltando."}), 400
-
         conteudo_rbxlx = construir_rbxlx_completo(dados_json)
-
         url_roblox = f"https://apis.roblox.com/universes/v1/{universe_id}/places/{place_id}/versions?versionType=Published"
         headers_roblox = {
             "x-api-key": api_key,
             "Content-Type": "application/xml",
             "User-Agent": "RobloxOpenCloudClient/1.0"
         }
-
         resposta = requests.post(url_roblox, headers=headers_roblox, data=conteudo_rbxlx)
-
         return jsonify({
             "status": resposta.status_code,
             "resposta_roblox": resposta.text
         })
-
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
