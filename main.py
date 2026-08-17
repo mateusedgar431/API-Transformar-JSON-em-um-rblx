@@ -83,6 +83,7 @@ def tratar_propriedade_individual(nome_prop, valor, props_dict=None):
             </UDim2>'''
 
     if isinstance(valor, (list, tuple)) and len(valor) == 3:
+        # Se for lista, aceita tanto Cor quanto Vector3
         if nome_prop in ["Ambient", "OutdoorAmbient", "FogColor", "Color", "ColorShift_Bottom", "ColorShift_Top"]:
             return converter_para_cor_xml(nome_prop, valor[0], valor[1], valor[2])
         return f'<Vector3 name="{nome_prop}"><X>{valor[0]}</X><Y>{valor[1]}</Y><Z>{valor[2]}</Z></Vector3>'
@@ -181,9 +182,16 @@ def construir_rbxlx_completo(part_data_dict):
 
             if isinstance(servico_dados, dict):
                 objetos = servico_dados.get("Objects", []) or servico_dados.get("Children", [])
-                propriedades_servico = servico_dados.get("Properties", {})
+                # Tenta pegar "Properties" ou assume o próprio dict se não houver subchaves
+                if "Properties" in servico_dados and isinstance(servico_dados["Properties"], dict):
+                    propriedades_servico = servico_dados["Properties"]
+                else:
+                    propriedades_servico = {k: v for k, v in servico_dados.items() if k not in ["Objects", "Children"]}
+
             elif isinstance(servico_dados, list):
                 objetos = servico_dados
+
+            print(f"[DEBUG] Servico extraido: {servico_oficial} | Propriedades: {propriedades_servico}")
 
             if servico_oficial == "Workspace":
                 workspace_content += processar_objetos_xml(objetos)
