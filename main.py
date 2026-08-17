@@ -41,7 +41,7 @@ PROPRIEDADES_PADRAO = {
         "GlobalShadows": True,
         "OutdoorAmbient": [0.5, 0.5, 0.5],
         "ShadowSoftness": 0.5,
-        "Technology": 1
+        "Technology": 2
     },
     "SoundService": {
         "AmbientReverb": 0,
@@ -83,7 +83,7 @@ PROPRIEDADES_PADRAO = {
 }
 
 MAPA_ENUM = {
-    "Compatibility": 0, "ShadowMap": 1, "Future": 2, "Voxel": 3,
+    "Compatibility": 0, "Voxel": 1, "ShadowMap": 2, "Future": 3,
     "Smooth": 0, "Glue": 1, "Weld": 2, "Studs": 3, "Inlet": 4, 
     "Universal": 5, "Hinge": 6, "Motor": 7, "SteppingMotor": 8,
     "Right": 0, "Top": 1, "Back": 2, "Left": 3, "Bottom": 4, "Front": 5,
@@ -92,7 +92,6 @@ MAPA_ENUM = {
     "NoReverb": 0, "Generic": 1000, "PaddedCell": 2000, "Room": 3000, "Bathroom": 4000, "Cave": 8000
 }
 
-# Lista de propriedades numericas que OBRIGATORIAMENTE precisam ir como <float> no XML
 PROPS_FLOAT = {
     "FogEnd", "FogStart", "Brightness", "ClockTime",
     "EnvironmentDiffuseScale", "EnvironmentSpecularScale",
@@ -102,10 +101,60 @@ PROPS_FLOAT = {
     "Transparency", "Reflectance", "Volume"
 }
 
-def converter_para_cor_xml(nome_prop, r, g, b):
-    rf = r / 255.0 if r > 1.0 else float(r)
-    gf = g / 255.0 if g > 1.0 else float(g)
-    bf = b / 255.0 if b > 1.0 else float(b)
+PROPS_COR = {
+    "Ambient", "OutdoorAmbient", "FogColor", "Color",
+    "ColorShift_Bottom", "ColorShift_Top", "Color3"
+}
+
+CORES_NOMEADAS = {
+    "preto": (0.0, 0.0, 0.0),
+    "black": (0.0, 0.0, 0.0),
+    "branco": (255.0, 255.0, 255.0),
+    "white": (255.0, 255.0, 255.0),
+    "vermelho": (255.0, 0.0, 0.0),
+    "red": (255.0, 0.0, 0.0),
+    "verde": (0.0, 255.0, 0.0),
+    "green": (0.0, 255.0, 0.0),
+    "azul": (0.0, 0.0, 255.0),
+    "blue": (0.0, 0.0, 255.0),
+    "amarelo": (255.0, 255.0, 0.0),
+    "yellow": (255.0, 255.0, 0.0),
+    "cinza": (128.0, 128.0, 128.0),
+    "gray": (128.0, 128.0, 128.0)
+}
+
+def converter_para_cor_xml(nome_prop, valor):
+    r, g, b = 0.0, 0.0, 0.0
+
+    if isinstance(valor, (list, tuple)) and len(valor) >= 3:
+        r, g, b = valor[0], valor[1], valor[2]
+    elif isinstance(valor, dict):
+        r = valor.get("R", valor.get("r", 0))
+        g = valor.get("G", valor.get("g", 0))
+        b = valor.get("B", valor.get("b", 0))
+    elif isinstance(valor, str):
+        v_clean = valor.strip().lower()
+        if v_clean in CORES_NOMEADAS:
+            r, g, b = CORES_NOMEADAS[v_clean]
+        elif v_clean.startswith("#") and len(v_clean) == 7:
+            try:
+                r = int(v_clean[1:3], 16)
+                g = int(v_clean[3:5], 16)
+                b = int(v_clean[5:7], 16)
+            except ValueError:
+                pass
+        elif "," in v_clean:
+            partes = v_clean.split(",")
+            if len(partes) == 3:
+                try:
+                    r, g, b = float(partes[0]), float(partes[1]), float(partes[2])
+                except ValueError:
+                    pass
+
+    rf = float(r) / 255.0 if float(r) > 1.0 else float(r)
+    gf = float(g) / 255.0 if float(g) > 1.0 else float(g)
+    bf = float(b) / 255.0 if float(b) > 1.0 else float(b)
+
     return f'<Color3 name="{nome_prop}"><R>{rf}</R><G>{gf}</G><B>{bf}</B></Color3>'
 
 def gerar_cframe_xml(nome_prop, valor):
@@ -138,6 +187,9 @@ def tratar_propriedade_individual(nome_prop, valor, props_dict=None):
     if valor is None or nome_prop in ["ClassName", "Name", "Parent", "FormFactor"]:
         return ""
 
+    if nome_prop in PROPS_COR or nome_prop.endswith("Color"):
+        return converter_para_cor_xml(nome_prop, valor)
+
     if nome_prop == "CFrame":
         return gerar_cframe_xml("CFrame", valor)
 
@@ -155,14 +207,13 @@ def tratar_propriedade_individual(nome_prop, valor, props_dict=None):
     if isinstance(valor, bool):
         return f'<bool name="{nome_prop}">{"true" if valor else "false"}</bool>'
 
-    # Converte propriedades decimais para <float> obrigatoriamente
     if nome_prop in PROPS_FLOAT:
         try:
             val_float = float(valor)
             if nome_prop == "ClockTime":
-                h = int(val_float)
-                m = int((val_float - h) * 60)
-                s = int((((val_float - h) * 60) - m) * 60)
+                h = int(val_float) % 24
+                m = int((val_float - int(val_float)) * 60)
+                s = int((((val_float - int(val_float)) * 60) - m) * 60)
                 return f'<float name="ClockTime">{val_float}</float>\n            <string name="TimeOfDay">{h:02d}:{m:02d}:{s:02d}</string>'
             return f'<float name="{nome_prop}">{val_float}</float>'
         except (ValueError, TypeError):
@@ -172,9 +223,6 @@ def tratar_propriedade_individual(nome_prop, valor, props_dict=None):
         return f'<string name="TimeOfDay">{saxutils.escape(str(valor))}</string>'
 
     if isinstance(valor, dict):
-        if "R" in valor and "G" in valor and "B" in valor:
-            return converter_para_cor_xml(nome_prop, valor["R"], valor["G"], valor["B"])
-
         if "X" in valor and "Y" in valor and "Z" in valor:
             return f'<Vector3 name="{nome_prop}"><X>{valor["X"]}</X><Y>{valor["Y"]}</Y><Z>{valor["Z"]}</Z></Vector3>'
 
@@ -187,8 +235,6 @@ def tratar_propriedade_individual(nome_prop, valor, props_dict=None):
 
     if isinstance(valor, (list, tuple)):
         if len(valor) == 3:
-            if nome_prop in ["Ambient", "OutdoorAmbient", "FogColor", "Color", "ColorShift_Bottom", "ColorShift_Top"]:
-                return converter_para_cor_xml(nome_prop, valor[0], valor[1], valor[2])
             return f'<Vector3 name="{nome_prop}"><X>{valor[0]}</X><Y>{valor[1]}</Y><Z>{valor[2]}</Z></Vector3>'
         elif len(valor) == 4 and nome_prop in ["Position", "Size", "AnchorPoint"]:
             return f'''<UDim2 name="{nome_prop}">
