@@ -24,12 +24,12 @@ SERVICOS_MESTRES = {
     "chat": "Chat"
 }
 
-# Propriedades padrao obrigatorias para evitar que o parser do Roblox descarte o servico
+# Tabela completa de propriedades padrao automatica para todos os serviços do Roblox
 PROPRIEDADES_PADRAO = {
     "Lighting": {
         "Ambient": [0.5, 0.5, 0.5],
         "Brightness": 2.0,
-        "ClockTime": 14,
+        "ClockTime": 14.0,
         "ColorShift_Bottom": [0.0, 0.0, 0.0],
         "ColorShift_Top": [0.0, 0.0, 0.0],
         "EnvironmentDiffuseScale": 1.0,
@@ -49,7 +49,45 @@ PROPRIEDADES_PADRAO = {
         "DistanceFactor": 3.33,
         "DopplerScale": 1.0,
         "RespectFilteringEnabled": True
-    }
+    },
+    "StarterPlayer": {
+        "AllowUserEmotes": True,
+        "AutoJumpEnabled": True,
+        "CameraMaxZoomDistance": 128.0,
+        "CameraMinZoomDistance": 0.5,
+        "CameraMode": 0,
+        "CharacterExplicitAutoLoads": True,
+        "EnableMouseLockOption": True,
+        "HealthDisplayDistance": 100.0,
+        "NameDisplayDistance": 100.0,
+        "UserEmotesEnabled": True
+    },
+    "StarterGui": {
+        "ResetPlayerGuiOnSpawn": True,
+        "ScreenOrientation": 0,
+        "ShowDevelopmentGui": True
+    },
+    "HttpService": {
+        "HttpEnabled": False
+    },
+    "VoiceChatService": {
+        "EnableVoiceChat": False
+    },
+    "MaterialService": {
+        "Use2022Materials": False
+    },
+    "Chat": {
+        "IsAutoSetup": True,
+        "LoadDefaultChat": True
+    },
+    "ReplicatedFirst": {},
+    "ReplicatedStorage": {},
+    "ServerScriptService": {},
+    "ServerStorage": {},
+    "StarterPack": {},
+    "Teams": {},
+    "TestService": {},
+    "LocalizationService": {}
 }
 
 MAPA_ENUM = {
@@ -97,7 +135,7 @@ def tratar_propriedade_individual(nome_prop, valor, props_dict=None):
         return f'<Vector3 name="{nome_prop}"><X>{valor[0]}</X><Y>{valor[1]}</Y><Z>{valor[2]}</Z></Vector3>'
 
     e_enum = (
-        nome_prop in ["Shape", "Font", "PartType", "Face", "NormalId", "Technology", "CameraType", "Material", "AmbientReverb"] or
+        nome_prop in ["Shape", "Font", "PartType", "Face", "NormalId", "Technology", "CameraType", "Material", "AmbientReverb", "CameraMode", "ScreenOrientation"] or
         nome_prop.endswith("Surface") or nome_prop.endswith("Type") or nome_prop.endswith("Style") or nome_prop.endswith("Mode")
     )
     if e_enum or (isinstance(valor, str) and "Enum." in valor):
@@ -163,7 +201,7 @@ def construir_rbxlx_completo(part_data_dict):
     workspace_props = ""
     servicos_dados_finais = {}
 
-    # Preenche todos os servicos conhecidos com suas propriedades padrao
+    # Inicializa todos os servicos com suas propriedades obrigatorias
     for s_nome in SERVICOS_MESTRES.values():
         if s_nome != "Workspace":
             servicos_dados_finais[s_nome] = {
@@ -196,7 +234,7 @@ def construir_rbxlx_completo(part_data_dict):
                 workspace_content += processar_objetos_xml(objetos)
                 workspace_props = processar_dicionario_propriedades(propriedades_recebidas)
             else:
-                # Sobrescreve apenas as propriedades enviadas mantendo o bloco completo
+                # Atualiza as propriedades sem alterar as Parts
                 servicos_dados_finais[servico_oficial]["props"].update(propriedades_recebidas)
                 servicos_dados_finais[servico_oficial]["objects"] = objetos
 
