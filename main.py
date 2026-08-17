@@ -24,7 +24,6 @@ SERVICOS_MESTRES = {
     "chat": "Chat"
 }
 
-# Propriedades padrao automaticas para todos os Services (evita rejeicao da Open Cloud)
 PROPRIEDADES_PADRAO_SERVICOS = {
     "Lighting": {
         "Ambient": [0.5, 0.5, 0.5],
@@ -49,46 +48,23 @@ PROPRIEDADES_PADRAO_SERVICOS = {
         "DistanceFactor": 3.33,
         "DopplerScale": 1.0,
         "RespectFilteringEnabled": True
-    },
-    "StarterPlayer": {
-        "AllowUserEmotes": True,
-        "AutoJumpEnabled": True,
-        "CameraMaxZoomDistance": 128.0,
-        "CameraMinZoomDistance": 0.5,
-        "CameraMode": 0,
-        "CharacterExplicitAutoLoads": True,
-        "EnableMouseLockOption": True,
-        "HealthDisplayDistance": 100.0,
-        "NameDisplayDistance": 100.0,
-        "UserEmotesEnabled": True
-    },
-    "StarterGui": {
-        "ResetPlayerGuiOnSpawn": True,
-        "ScreenOrientation": 0,
-        "ShowDevelopmentGui": True
-    },
-    "HttpService": {
-        "HttpEnabled": False
-    },
-    "VoiceChatService": {
-        "EnableVoiceChat": False
-    },
-    "MaterialService": {
-        "Use2022Materials": False
-    },
-    "Chat": {
-        "IsAutoSetup": True,
-        "LoadDefaultChat": True
-    },
-    "ReplicatedFirst": {},
-    "ReplicatedStorage": {},
-    "ServerScriptService": {},
-    "ServerStorage": {},
-    "StarterPack": {},
-    "Teams": {},
-    "TestService": {},
-    "LocalizationService": {}
+    }
 }
+
+BASEPLATE_PADRAO = [
+    {
+        "Properties": {
+            "ClassName": "Part",
+            "Name": "Baseplate",
+            "Anchored": True,
+            "CanCollide": True,
+            "Size": [2048, 1, 2048],
+            "Position": [0, -0.5, 0],
+            "Color": [163, 162, 165],
+            "Material": "Plastic"
+        }
+    }
+]
 
 MAPA_ENUM = {
     "Compatibility": 0, "ShadowMap": 1, "Future": 2, "Voxel": 3,
@@ -135,7 +111,7 @@ def tratar_propriedade_individual(nome_prop, valor, props_dict=None):
         return f'<Vector3 name="{nome_prop}"><X>{valor[0]}</X><Y>{valor[1]}</Y><Z>{valor[2]}</Z></Vector3>'
 
     e_enum = (
-        nome_prop in ["Shape", "Font", "PartType", "Face", "NormalId", "Technology", "CameraType", "Material", "AmbientReverb", "CameraMode", "ScreenOrientation"] or
+        nome_prop in ["Shape", "Font", "PartType", "Face", "NormalId", "Technology", "CameraType", "Material", "AmbientReverb"] or
         nome_prop.endswith("Surface") or nome_prop.endswith("Type") or nome_prop.endswith("Style") or nome_prop.endswith("Mode")
     )
     if e_enum or (isinstance(valor, str) and "Enum." in valor):
@@ -172,15 +148,19 @@ def processar_dicionario_propriedades(props_dict):
     return xml_props
 
 def processar_objetos_xml(TableData):
-    """Processa apenas o que foi enviado no JSON para Parts/Instancias, sem injetar padroes."""
     xml_output = ""
     if isinstance(TableData, list):
         for idx, a in enumerate(TableData):
             if isinstance(a, dict):
-                props = a.get("Properties", {})
+                props = a.get("Properties", {}).copy()
                 children = a.get("Children", []) or a.get("Objects", [])
                 class_name = props.get("ClassName", "Part")
                 obj_name = props.get("Name", f"Object_{idx}")
+
+                # Garante que peças não caiam no vácuo se 'Anchored' não for fornecido
+                if class_name in ["Part", "WedgePart", "CornerWedgePart", "MeshPart", "SpawnLocation"]:
+                    props.setdefault("Anchored", True)
+                    props.setdefault("CanCollide", True)
 
                 ref_id = f"RBX_OBJ_{idx}_{abs(hash(obj_name))}"
 
@@ -202,7 +182,6 @@ def construir_rbxlx_completo(part_data_dict):
     workspace_props = ""
     servicos_dados_finais = {}
 
-    # 1. Carrega todas as propriedades padrao para SERVICOS (Lighting, StarterPlayer, etc.)
     for s_nome in SERVICOS_MESTRES.values():
         if s_nome != "Workspace":
             servicos_dados_finais[s_nome] = {
@@ -210,7 +189,8 @@ def construir_rbxlx_completo(part_data_dict):
                 "objects": []
             }
 
-    # 2. Processa a entrada do JSON
+    workspace_objetos = []
+
     if isinstance(part_data_dict, dict):
         for chave_entrada, servico_dados in part_data_dict.items():
             chave_low = str(chave_entrada).strip().lower()
@@ -233,12 +213,17 @@ def construir_rbxlx_completo(part_data_dict):
                 objetos = servico_dados
 
             if servico_oficial == "Workspace":
-                workspace_content += processar_objetos_xml(objetos)
+                workspace_objetos.extend(objetos)
                 workspace_props = processar_dicionario_propriedades(propriedades_recebidas)
             else:
-                # Atualiza os Servicos com os dados do JSON mantendo o schema minimo
                 servicos_dados_finais[servico_oficial]["props"].update(propriedades_recebidas)
                 servicos_dados_finais[servico_oficial]["objects"] = objetos
+
+    # Se nenhum objeto foi enviado para o Workspace, insere a Baseplate padrão
+    if not workspace_objetos:
+        workspace_objetos = BASEPLATE_PADRAO
+
+    workspace_content = processar_objetos_xml(workspace_objetos)
 
     outros_servicos_str = ""
     for s_nome, dados in servicos_dados_finais.items():
