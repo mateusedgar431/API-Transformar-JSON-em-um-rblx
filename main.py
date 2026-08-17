@@ -19,54 +19,56 @@ SERVICOS_OFICIAIS = {
     "MaterialService": "MaterialService"
 }
 
-# Dicionário de mapeamento direto de EnumItem IDs para Nomes de Tokens no XML
-MAPA_ENUMS = {
-    "Material": {
-        256: "Plastic", 272: "SmoothPlastic", 288: "Neon", 512: "Wood", 528: "WoodPlanks",
-        784: "Marble", 788: "Basalt", 800: "Slate", 816: "CrackedLava", 832: "Concrete",
-        848: "Limestone", 864: "Granite", 880: "Pavement", 896: "Brick", 912: "Pebble",
-        928: "Sand", 1040: "Glass", 1056: "ForceField", 1072: "Ice", 1088: "Foil",
-        1280: "Metal", 1296: "CorrodedMetal", 1312: "DiamondPlate", 1328: "Fabric",
-        1536: "Grass", 1552: "LeafyGrass", 1568: "Sandstone", 1584: "Mud",
-        1600: "Snow", 1616: "Ground", 1792: "Asphalt", 2048: "Salt"
-    },
-    "Shape": {0: "Ball", 1: "Block", 2: "Cylinder"},
-    "PartType": {0: "Ball", 1: "Block", 2: "Cylinder"},
-    "SurfaceType": {
-        0: "Smooth", 1: "Glue", 2: "Weld", 3: "Studs", 4: "Inlet", 5: "Universal", 6: "Hinge", 7: "Motor", 8: "SteppingMotor"
-    }
+# Tabela de conversão: Nome do Enum -> Valor Inteiro Oficial no XML do Roblox
+MATERIAL_NAME_TO_ID = {
+    "Plastic": 256, "SmoothPlastic": 272, "Neon": 288, "Wood": 512, "WoodPlanks": 528,
+    "Marble": 784, "Basalt": 788, "Slate": 800, "CrackedLava": 816, "Concrete": 832,
+    "Limestone": 848, "Granite": 864, "Pavement": 880, "Brick": 896, "Pebble": 912,
+    "Sand": 928, "Glass": 1040, "ForceField": 1056, "Ice": 1072, "Foil": 1088,
+    "Metal": 1280, "CorrodedMetal": 1296, "DiamondPlate": 1312, "Fabric": 1328,
+    "Grass": 1536, "LeafyGrass": 1552, "Sandstone": 1568, "Mud": 1584,
+    "Snow": 1600, "Ground": 1616, "Asphalt": 1792, "Salt": 2048
 }
 
-def resolver_enum_token(nome_prop, valor):
-    # Se o valor vier como dicionário enviado pelo Luau
-    if isinstance(valor, dict):
-        if "Name" in valor and valor["Name"]:
-            return str(valor["Name"])
-        if "Value" in valor:
-            valor = valor["Value"]
+SURFACE_NAME_TO_ID = {
+    "Smooth": 0, "Glue": 1, "Weld": 2, "Studs": 3, "Inlet": 4, 
+    "Universal": 5, "Hinge": 6, "Motor": 7, "SteppingMotor": 8
+}
 
-    # Se o valor for string "Enum.Material.Neon" ou "Neon"
-    if isinstance(valor, str):
-        if "." in valor:
-            return valor.split(".")[-1]
+SHAPE_NAME_TO_ID = {"Ball": 0, "Block": 1, "Cylinder": 2}
+
+def obter_int_do_enum(nome_prop, valor):
+    # Case 1: Valor já é um número inteiro enviado pelo Luau
+    if isinstance(valor, int):
         return valor
 
-    # Se for um número inteiro (ID interno do Enum)
-    if isinstance(valor, int):
-        # Verifica se temos o mapeamento nominal para a propriedade
-        if nome_prop in MAPA_ENUMS and valor in MAPA_ENUMS[nome_prop]:
-            return MAPA_ENUMS[nome_prop][valor]
-        
-        # Mapeamento para propriedades de superfície (TopSurface, BottomSurface, etc.)
-        if nome_prop.endswith("Surface") and valor in MAPA_ENUMS["SurfaceType"]:
-            return MAPA_ENUMS["SurfaceType"][valor]
-            
-        return str(valor)
+    # Case 2: Valor é um dicionário contendo {"Value": int} ou {"Name": str}
+    if isinstance(valor, dict):
+        if "Value" in valor and isinstance(valor["Value"], int):
+            return valor["Value"]
+        if "Name" in valor:
+            valor = valor["Name"]
 
-    return str(valor)
+    # Case 3: Valor é uma String (ex: "Enum.Material.Neon" ou "Neon")
+    if isinstance(valor, str):
+        nome_limpo = valor.split(".")[-1]
+
+        if nome_prop == "Material" and nome_limpo in MATERIAL_NAME_TO_ID:
+            return MATERIAL_NAME_TO_ID[nome_limpo]
+        
+        if nome_prop.endswith("Surface") and nome_limpo in SURFACE_NAME_TO_ID:
+            return SURFACE_NAME_TO_ID[nome_limpo]
+
+        if nome_prop in ["Shape", "PartType"] and nome_limpo in SHAPE_NAME_TO_ID:
+            return SHAPE_NAME_TO_ID[nome_limpo]
+
+        # Tenta conversão direta caso venha string de número "288"
+        if nome_limpo.isdigit():
+            return int(nome_limpo)
+
+    return 0
 
 def processar_propriedade_xml(nome_prop, valor, props_dict):
-    # Ignora propriedades de controle ou obsoletas que travam o parse
     if valor is None or nome_prop in ["ClassName", "Name", "Parent", "FormFactor"]:
         return ""
 
@@ -88,7 +90,7 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
         val_str = "true" if valor else "false"
         return f'\n            <bool name="{nome_prop}">{val_str}</bool>'
 
-    # 3. PROCESSAMENTO DE ENUMS (Garante que todo Enum vire um <token> com string/nome aceito)
+    # 3. ENUMS (Garante conversão estrita para número inteiro dentro da tag <token>)
     e_enum = (
         nome_prop in ["Material", "Shape", "Font", "PartType"] or
         nome_prop.endswith("Surface") or
@@ -100,8 +102,8 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
     )
 
     if e_enum or (isinstance(valor, str) and "Enum." in valor):
-        token_str = resolver_enum_token(nome_prop, valor)
-        return f'\n            <token name="{nome_prop}">{token_str}</token>'
+        enum_int_val = obter_int_do_enum(nome_prop, valor)
+        return f'\n            <token name="{nome_prop}">{enum_int_val}</token>'
 
     # 4. INTEIROS
     if isinstance(valor, int):
@@ -148,7 +150,6 @@ def processar_propriedade_xml(nome_prop, valor, props_dict):
         return f'\n            <string name="{nome_prop}">{saxutils.escape(valor)}</string>'
 
     return ""
-
 
 def processar_objetos_xml(TableData):
     xml_output = ""
@@ -204,7 +205,6 @@ def processar_objetos_xml(TableData):
 
     return xml_output
 
-
 def construir_rbxlx_completo(part_data_dict):
     workspace_content = ""
     outros_servicos = ""
@@ -242,7 +242,6 @@ def construir_rbxlx_completo(part_data_dict):
 
     return rbxlx_str.encode('utf-8')
 
-
 @app.route('/publicar', methods=['POST'])
 def publicar():
     try:
@@ -272,7 +271,6 @@ def publicar():
 
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
-
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
