@@ -26,51 +26,45 @@ SERVICOS_MESTRES = {
 
 PROPRIEDADES_PADRAO = {
     "Lighting": {
-        "Ambient": [0.5, 0.5, 0.5],
+        "Ambient": {"R": 0.5, "G": 0.5, "B": 0.5},
         "Brightness": 2.0,
         "ClockTime": 14.0,
-        "ColorShift_Bottom": [0.0, 0.0, 0.0],
-        "ColorShift_Top": [0.0, 0.0, 0.0],
+        "ColorShift_Bottom": {"R": 0.0, "G": 0.0, "B": 0.0},
+        "ColorShift_Top": {"R": 0.0, "G": 0.0, "B": 0.0},
         "EnvironmentDiffuseScale": 1.0,
         "EnvironmentSpecularScale": 1.0,
         "ExposureCompensation": 0.0,
-        "FogColor": [0.75, 0.75, 0.75],
+        "FogColor": {"R": 0.75, "G": 0.75, "B": 0.75},
         "FogEnd": 100000.0,
         "FogStart": 0.0,
         "GeographicLatitude": 41.73,
         "GlobalShadows": True,
-        "OutdoorAmbient": [0.5, 0.5, 0.5],
+        "OutdoorAmbient": {"R": 0.5, "G": 0.5, "B": 0.5},
         "ShadowSoftness": 0.5,
-        "Technology": 2
+        "Technology": "ShadowMap"
     },
     "SoundService": {
-        "AmbientReverb": 0,
+        "AmbientReverb": "NoReverb",
         "DistanceFactor": 3.33,
         "DopplerScale": 1.0,
         "RespectFilteringEnabled": True
     },
     "StarterGui": {
         "ResetPlayerGuiOnSpawn": True,
-        "ScreenOrientation": 0
+        "ScreenOrientation": "LandscapeSensor"
     },
     "StarterPlayer": {
         "CameraMaxZoomDistance": 128.0,
         "CameraMinZoomDistance": 0.5,
-        "CameraMode": 0,
+        "CameraMode": "Classic",
         "EnableMouseLockOption": True,
         "HealthDisplayDistance": 100.0,
         "NameDisplayDistance": 100.0,
         "UserEmotesEnabled": True
     },
-    "HttpService": {
-        "HttpEnabled": False
-    },
-    "VoiceChatService": {
-        "EnableDefaultVoice": True
-    },
-    "MaterialService": {
-        "Use2022Materials": True
-    },
+    "HttpService": {"HttpEnabled": False},
+    "VoiceChatService": {"EnableDefaultVoice": True},
+    "MaterialService": {"Use2022Materials": True},
     "ReplicatedFirst": {},
     "ReplicatedStorage": {},
     "ServerScriptService": {},
@@ -121,52 +115,22 @@ PROPS_FLOAT = {
     "Transparency", "Reflectance", "Volume"
 }
 
-PROPS_COR = {
-    "Ambient", "OutdoorAmbient", "FogColor", "Color",
-    "ColorShift_Bottom", "ColorShift_Top", "Color3"
-}
-
-def converter_para_cor_xml(nome_prop, valor):
+def converter_cor(valor):
+    """Lê exatamente o formato {R=..., G=..., B=...} gerado pelo limparParaJSON"""
     r, g, b = 0.0, 0.0, 0.0
-
     if isinstance(valor, dict):
-        r = valor.get("R", valor.get("r", 0.0))
-        g = valor.get("G", valor.get("g", 0.0))
-        b = valor.get("B", valor.get("b", 0.0))
+        r = float(valor.get("R", 0.0))
+        g = float(valor.get("G", 0.0))
+        b = float(valor.get("B", 0.0))
     elif isinstance(valor, (list, tuple)) and len(valor) >= 3:
-        r, g, b = valor[0], valor[1], valor[2]
+        r, g, b = float(valor[0]), float(valor[1]), float(valor[2])
 
-    rf = float(r) / 255.0 if float(r) > 1.0 else float(r)
-    gf = float(g) / 255.0 if float(g) > 1.0 else float(g)
-    bf = float(b) / 255.0 if float(b) > 1.0 else float(b)
+    # Normalização automática para escala 0.0 - 1.0 exigida pelo XML
+    rf = r / 255.0 if r > 1.0 else r
+    gf = g / 255.0 if g > 1.0 else g
+    bf = b / 255.0 if b > 1.0 else b
 
-    return f'<Color3 name="{nome_prop}"><R>{rf}</R><G>{gf}</G><B>{bf}</B></Color3>'
-
-def gerar_cframe_xml(nome_prop, valor):
-    x, y, z = 0.0, 0.0, 0.0
-    r00, r01, r02 = 1.0, 0.0, 0.0
-    r10, r11, r12 = 0.0, 1.0, 0.0
-    r20, r21, r22 = 0.0, 0.0, 1.0
-
-    if isinstance(valor, (list, tuple)):
-        if len(valor) >= 12:
-            x, y, z = float(valor[0]), float(valor[1]), float(valor[2])
-            r00, r01, r02 = float(valor[3]), float(valor[4]), float(valor[5])
-            r10, r11, r12 = float(valor[6]), float(valor[7]), float(valor[8])
-            r20, r21, r22 = float(valor[9]), float(valor[10]), float(valor[11])
-        elif len(valor) >= 3:
-            x, y, z = float(valor[0]), float(valor[1]), float(valor[2])
-    elif isinstance(valor, dict):
-        x = float(valor.get("X", 0.0))
-        y = float(valor.get("Y", 0.0))
-        z = float(valor.get("Z", 0.0))
-
-    return f'''<CoordinateFrame name="{nome_prop}">
-        <X>{x}</X><Y>{y}</Y><Z>{z}</Z>
-        <R00>{r00}</R00><R01>{r01}</R01><R02>{r02}</R02>
-        <R10>{r10}</R10><R11>{r11}</R11><R12>{r12}</R12>
-        <R20>{r20}</R20><R21>{r21}</R21><R22>{r22}</R22>
-    </CoordinateFrame>'''
+    return rf, gf, bf
 
 def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
     if valor is None or nome_prop_raw in ["ClassName", "Name", "Parent", "FormFactor"]:
@@ -174,83 +138,61 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
 
     nome_prop = MAPA_PROPRIEDADES_CANONICAS.get(str(nome_prop_raw).lower(), nome_prop_raw)
 
-    # 1. TRATAMENTO DE COR ({R, G, B} ou Lista)
-    if nome_prop in PROPS_COR or nome_prop.endswith("Color"):
-        return converter_para_cor_xml(nome_prop, valor)
-
-    # 2. TRATAMENTO DE COLORSEQUENCE (Keypoints enviados do Luau)
+    # 1. TRATAMENTO DE COLORSEQUENCE (Vindo do limparParaJSON)
     if isinstance(valor, list) and len(valor) > 0 and isinstance(valor[0], dict) and "Value" in valor[0]:
         seq_xml = f'<ColorSequence name="{nome_prop}">'
         for kp in valor:
-            val_cor = kp.get("Value", {})
-            r, g, b = 0.0, 0.0, 0.0
-            if isinstance(val_cor, dict):
-                r = val_cor.get("R", val_cor.get("r", 0.0))
-                g = val_cor.get("G", val_cor.get("g", 0.0))
-                b = val_cor.get("B", val_cor.get("b", 0.0))
-            elif isinstance(val_cor, (list, tuple)) and len(val_cor) >= 3:
-                r, g, b = val_cor[0], val_cor[1], val_cor[2]
-            
-            rf = float(r) / 255.0 if float(r) > 1.0 else float(r)
-            gf = float(g) / 255.0 if float(g) > 1.0 else float(g)
-            bf = float(b) / 255.0 if float(b) > 1.0 else float(b)
-            
-            t_val = kp.get("Time", 0.0)
+            rf, gf, bf = converter_cor(kp.get("Value", {}))
+            t_val = float(kp.get("Time", 0.0))
             seq_xml += f'<ColorSequenceKeypoint time="{t_val}"><R>{rf}</R><G>{gf}</G><B>{bf}</B></ColorSequenceKeypoint>'
         seq_xml += '</ColorSequence>'
         return seq_xml
 
-    if nome_prop == "CFrame":
-        return gerar_cframe_xml("CFrame", valor)
+    # 2. TRATAMENTO DE COLOR3 ({R=..., G=..., B=...})
+    if isinstance(valor, dict) and "R" in valor and "G" in valor and "B" in valor:
+        rf, gf, bf = converter_cor(valor)
+        return f'<Color3 name="{nome_prop}"><R>{rf}</R><G>{gf}</G><B>{bf}</B></Color3>'
 
+    # 3. TRATAMENTO DE VECTOR3 ({X=..., Y=..., Z=...})
+    if isinstance(valor, dict) and "X" in valor and "Y" in valor and "Z" in valor and "R00" not in valor:
+        return f'<Vector3 name="{nome_prop}"><X>{valor["X"]}</X><Y>{valor["Y"]}</Y><Z>{valor["Z"]}</Z></Vector3>'
+
+    # 4. TRATAMENTO DE UDIM2 ({X={Scale=..., Offset=...}, Y={...}})
+    if isinstance(valor, dict) and "X" in valor and "Y" in valor and isinstance(valor.get("X"), dict):
+        x_dict = valor.get("X", {})
+        y_dict = valor.get("Y", {})
+        return f'''<UDim2 name="{nome_prop}">
+            <XS>{x_dict.get("Scale", 0)}</XS><XO>{x_dict.get("Offset", 0)}</XO>
+            <YS>{y_dict.get("Scale", 0)}</YS><YO>{y_dict.get("Offset", 0)}</YO>
+        </UDim2>'''
+
+    # 5. TRATAMENTO DE CFRAME (Lista enviada pelo GetComponents())
+    if nome_prop == "CFrame" or (isinstance(valor, (list, tuple)) and len(valor) >= 12):
+        if isinstance(valor, (list, tuple)) and len(valor) >= 12:
+            return f'''<CoordinateFrame name="{nome_prop}">
+                <X>{valor[0]}</X><Y>{valor[1]}</Y><Z>{valor[2]}</Z>
+                <R00>{valor[3]}</R00><R01>{valor[4]}</R01><R02>{valor[5]}</R02>
+                <R10>{valor[6]}</R10><R11>{valor[7]}</R11><R12>{valor[8]}</R12>
+                <R20>{valor[9]}</R20><R21>{valor[10]}</R21><R22>{valor[11]}</R22>
+            </CoordinateFrame>'''
+
+    # Evita duplicação de Position se CFrame estiver presente
     if nome_prop in ["Position", "Orientation", "Rotation"] and props_dict and "CFrame" in props_dict:
         return ""
-
-    if nome_prop == "Position" and props_dict and "CFrame" not in props_dict:
-        xml_pos = ""
-        if isinstance(valor, (list, tuple)) and len(valor) == 3:
-            xml_pos = f'<Vector3 name="Position"><X>{valor[0]}</X><Y>{valor[1]}</Y><Z>{valor[2]}</Z></Vector3>\n            '
-        elif isinstance(valor, dict) and "X" in valor and "Y" in valor and "Z" in valor:
-            xml_pos = f'<Vector3 name="Position"><X>{valor["X"]}</X><Y>{valor["Y"]}</Y><Z>{valor["Z"]}</Z></Vector3>\n            '
-        return xml_pos + gerar_cframe_xml("CFrame", valor)
 
     if isinstance(valor, bool):
         return f'<bool name="{nome_prop}">{"true" if valor else "false"}</bool>'
 
     if nome_prop in PROPS_FLOAT:
         try:
-            val_float = float(valor)
-            return f'<float name="{nome_prop}">{val_float}</float>'
+            return f'<float name="{nome_prop}">{float(valor)}</float>'
         except (ValueError, TypeError):
             pass
 
     if nome_prop == "TimeOfDay":
         return f'<string name="TimeOfDay">{saxutils.escape(str(valor))}</string>'
 
-    if isinstance(valor, dict):
-        if "R" in valor and "G" in valor and "B" in valor:
-            return converter_para_cor_xml(nome_prop, valor)
-
-        if "X" in valor and "Y" in valor and "Z" in valor and "R00" not in valor:
-            return f'<Vector3 name="{nome_prop}"><X>{valor["X"]}</X><Y>{valor["Y"]}</Y><Z>{valor["Z"]}</Z></Vector3>'
-
-        if "X" in valor and "Y" in valor and isinstance(valor.get("X"), dict):
-            x_dict, y_dict = valor.get("X", {})
-            y_val = valor.get("Y", {})
-            return f'''<UDim2 name="{nome_prop}">
-                <XS>{x_dict.get("Scale", 0)}</XS><XO>{x_dict.get("Offset", 0)}</XO>
-                <YS>{y_val.get("Scale", 0)}</YS><YO>{y_val.get("Offset", 0)}</YO>
-            </UDim2>'''
-
-    if isinstance(valor, (list, tuple)):
-        if len(valor) == 3:
-            return f'<Vector3 name="{nome_prop}"><X>{valor[0]}</X><Y>{valor[1]}</Y><Z>{valor[2]}</Z></Vector3>'
-        elif len(valor) == 4 and nome_prop in ["Position", "Size", "AnchorPoint"]:
-            return f'''<UDim2 name="{nome_prop}">
-                <XS>{valor[0]}</XS><XO>{valor[1]}</XO>
-                <YS>{valor[2]}</YS><YO>{valor[3]}</YO>
-            </UDim2>'''
-
+    # Trata Enums em string ("Enum.Material.Plastic" ou "Plastic")
     e_enum = (
         nome_prop in ["Shape", "Font", "PartType", "Face", "NormalId", "Technology", "CameraType", "Material", "AmbientReverb"] or
         nome_prop.endswith("Surface") or nome_prop.endswith("Type") or 
