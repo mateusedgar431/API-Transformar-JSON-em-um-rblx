@@ -145,9 +145,9 @@ def converter_para_cor_xml(nome_prop, valor):
     if isinstance(valor, (list, tuple)) and len(valor) >= 3:
         r, g, b = valor[0], valor[1], valor[2]
     elif isinstance(valor, dict):
-        r = valor.get("R", valor.get("r", 0))
-        g = valor.get("G", valor.get("g", 0))
-        b = valor.get("B", valor.get("b", 0))
+        r = valor.get("R", valor.get("r", 0.0))
+        g = valor.get("G", valor.get("g", 0.0))
+        b = valor.get("B", valor.get("b", 0.0))
     elif isinstance(valor, str):
         v_clean = valor.strip().lower()
         if v_clean in CORES_NOMEADAS:
@@ -229,7 +229,7 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
         return f'<string name="TimeOfDay">{saxutils.escape(str(valor))}</string>'
 
     if isinstance(valor, dict):
-        if "X" in valor and "Y" in valor and "Z" in valor:
+        if "X" in valor and "Y" in valor and "Z" in valor and "R00" not in valor:
             return f'<Vector3 name="{nome_prop}"><X>{valor["X"]}</X><Y>{valor["Y"]}</Y><Z>{valor["Z"]}</Z></Vector3>'
 
         if "X" in valor and "Y" in valor and isinstance(valor.get("X"), dict):
