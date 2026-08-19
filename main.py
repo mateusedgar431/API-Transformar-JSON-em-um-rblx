@@ -198,8 +198,31 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
 
     nome_prop = MAPA_PROPRIEDADES_CANONICAS.get(str(nome_prop_raw).lower(), nome_prop_raw)
 
+    # Trata cores enviadas como dicionario ou lista
     if nome_prop in PROPS_COR or nome_prop.endswith("Color"):
         return converter_para_cor_xml(nome_prop, valor)
+
+    # Trata ColorSequence vindo do Luau
+    if isinstance(valor, list) and len(valor) > 0 and isinstance(valor[0], dict) and "Value" in valor[0]:
+        seq_xml = f'<ColorSequence name="{nome_prop}">'
+        for kp in valor:
+            val_cor = kp.get("Value", {})
+            r, g, b = 0.0, 0.0, 0.0
+            if isinstance(val_cor, dict):
+                r = val_cor.get("R", val_cor.get("r", 0.0))
+                g = val_cor.get("G", val_cor.get("g", 0.0))
+                b = val_cor.get("B", val_cor.get("b", 0.0))
+            elif isinstance(val_cor, (list, tuple)) and len(val_cor) >= 3:
+                r, g, b = val_cor[0], val_cor[1], val_cor[2]
+            
+            rf = float(r) / 255.0 if float(r) > 1.0 else float(r)
+            gf = float(g) / 255.0 if float(g) > 1.0 else float(g)
+            bf = float(b) / 255.0 if float(b) > 1.0 else float(b)
+            
+            t_val = kp.get("Time", 0.0)
+            seq_xml += f'<ColorSequenceKeypoint time="{t_val}"><R>{rf}</R><G>{gf}</G><B>{bf}</B></ColorSequenceKeypoint>'
+        seq_xml += '</ColorSequence>'
+        return seq_xml
 
     if nome_prop == "CFrame":
         return gerar_cframe_xml("CFrame", valor)
@@ -229,6 +252,9 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
         return f'<string name="TimeOfDay">{saxutils.escape(str(valor))}</string>'
 
     if isinstance(valor, dict):
+        if "R" in valor and "G" in valor and "B" in valor:
+            return converter_para_cor_xml(nome_prop, valor)
+
         if "X" in valor and "Y" in valor and "Z" in valor and "R00" not in valor:
             return f'<Vector3 name="{nome_prop}"><X>{valor["X"]}</X><Y>{valor["Y"]}</Y><Z>{valor["Z"]}</Z></Vector3>'
 
