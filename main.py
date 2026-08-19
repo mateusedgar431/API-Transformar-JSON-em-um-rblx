@@ -126,39 +126,15 @@ PROPS_COR = {
     "ColorShift_Bottom", "ColorShift_Top", "Color3"
 }
 
-CORES_NOMEADAS = {
-    "preto": (0.0, 0.0, 0.0),
-    "black": (0.0, 0.0, 0.0),
-    "branco": (255.0, 255.0, 255.0),
-    "white": (255.0, 255.0, 255.0),
-    "vermelho": (255.0, 0.0, 0.0),
-    "red": (255.0, 0.0, 0.0),
-    "verde": (0.0, 255.0, 0.0),
-    "green": (0.0, 255.0, 0.0),
-    "azul": (0.0, 0.0, 255.0),
-    "blue": (0.0, 0.0, 255.0)
-}
-
 def converter_para_cor_xml(nome_prop, valor):
     r, g, b = 0.0, 0.0, 0.0
 
-    if isinstance(valor, (list, tuple)) and len(valor) >= 3:
-        r, g, b = valor[0], valor[1], valor[2]
-    elif isinstance(valor, dict):
+    if isinstance(valor, dict):
         r = valor.get("R", valor.get("r", 0.0))
         g = valor.get("G", valor.get("g", 0.0))
         b = valor.get("B", valor.get("b", 0.0))
-    elif isinstance(valor, str):
-        v_clean = valor.strip().lower()
-        if v_clean in CORES_NOMEADAS:
-            r, g, b = CORES_NOMEADAS[v_clean]
-        elif v_clean.startswith("#") and len(v_clean) == 7:
-            try:
-                r = int(v_clean[1:3], 16)
-                g = int(v_clean[3:5], 16)
-                b = int(v_clean[5:7], 16)
-            except ValueError:
-                pass
+    elif isinstance(valor, (list, tuple)) and len(valor) >= 3:
+        r, g, b = valor[0], valor[1], valor[2]
 
     rf = float(r) / 255.0 if float(r) > 1.0 else float(r)
     gf = float(g) / 255.0 if float(g) > 1.0 else float(g)
@@ -198,11 +174,11 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
 
     nome_prop = MAPA_PROPRIEDADES_CANONICAS.get(str(nome_prop_raw).lower(), nome_prop_raw)
 
-    # Trata cores enviadas como dicionario ou lista
+    # 1. TRATAMENTO DE COR ({R, G, B} ou Lista)
     if nome_prop in PROPS_COR or nome_prop.endswith("Color"):
         return converter_para_cor_xml(nome_prop, valor)
 
-    # Trata ColorSequence vindo do Luau
+    # 2. TRATAMENTO DE COLORSEQUENCE (Keypoints enviados do Luau)
     if isinstance(valor, list) and len(valor) > 0 and isinstance(valor[0], dict) and "Value" in valor[0]:
         seq_xml = f'<ColorSequence name="{nome_prop}">'
         for kp in valor:
@@ -259,10 +235,11 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
             return f'<Vector3 name="{nome_prop}"><X>{valor["X"]}</X><Y>{valor["Y"]}</Y><Z>{valor["Z"]}</Z></Vector3>'
 
         if "X" in valor and "Y" in valor and isinstance(valor.get("X"), dict):
-            x_dict, y_dict = valor.get("X", {}), valor.get("Y", {})
+            x_dict, y_dict = valor.get("X", {})
+            y_val = valor.get("Y", {})
             return f'''<UDim2 name="{nome_prop}">
                 <XS>{x_dict.get("Scale", 0)}</XS><XO>{x_dict.get("Offset", 0)}</XO>
-                <YS>{y_dict.get("Scale", 0)}</YS><YO>{y_dict.get("Offset", 0)}</YO>
+                <YS>{y_val.get("Scale", 0)}</YS><YO>{y_val.get("Offset", 0)}</YO>
             </UDim2>'''
 
     if isinstance(valor, (list, tuple)):
