@@ -16,7 +16,6 @@ SERVICOS_MESTRES = {
     "starterpack": "StarterPack",
     "teams": "Teams",
     "soundservice": "SoundService",
-    "materialservice": "MaterialService",
     "httpservice": "HttpService",
     "testservice": "TestService",
     "voicechatservice": "VoiceChatService",
