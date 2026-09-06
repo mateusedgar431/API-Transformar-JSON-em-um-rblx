@@ -5,6 +5,7 @@ import xml.sax.saxutils as saxutils
 app = Flask(__name__)
 
 SERVICOS_MESTRES = {
+    "materialservice": "MaterialService",
     "workspace": "Workspace",
     "lighting": "Lighting",
     "replicatedfirst": "ReplicatedFirst",
