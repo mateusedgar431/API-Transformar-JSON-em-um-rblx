@@ -4,7 +4,7 @@ import xml.sax.saxutils as saxutils
 
 app = Flask(__name__)
 
-# Mapeamento de serviços ativos (MaterialService e TextChatService removidos)
+# Mantendo MaterialService e TextChatService desativados conforme solicitado
 SERVICOS_MESTRES = {
     "workspace": "Workspace",
     "lighting": "Lighting",
@@ -75,25 +75,46 @@ PROPRIEDADES_PADRAO = {
     "Chat": {}
 }
 
-# Tabela completa de Enums do Roblox para XML (<token>)
+# MAPA ABSOLUTO DE ENUMS DO ROBLOX (Mapeia o nome do Enum ou o valor textual para o ID numérico do XML)
 MAPA_ENUM_NUMERICO = {
+    # ScreenOrientation (Enum.ScreenOrientation)
+    "LandscapeLeft": 0,
+    "LandscapeRight": 1,
+    "Portrait": 2,
+    "Sensor": 3,
+    "LandscapeSensor": 4,
+    
+    # ZIndexBehavior (Enum.ZIndexBehavior)
+    "Global": 0,
+    "Sibling": 1,
+
     # NormalId / Face
     "Right": 0, "Top": 1, "Back": 2, "Left": 3, "Bottom": 4, "Front": 5,
+
     # SurfaceType
     "Smooth": 0, "Glue": 1, "Weld": 2, "Studs": 3, "Inlet": 4, "Universal": 5, "Hinge": 6, "Motor": 7, "SteppingMotor": 8,
+
     # Technology
     "Compatibility": 0, "Voxel": 1, "ShadowMap": 2, "Future": 3,
+
     # Material
-    "SmoothPlastic": 272, "Plastic": 256, "Neon": 288, "Wood": 512, "Metal": 1088, "Grass": 1280, "Glass": 1568, "Granite": 1296, "Ice": 1536,
+    "SmoothPlastic": 272, "Plastic": 256, "Neon": 288, "Wood": 512, "Metal": 1088, "Grass": 1280, "Glass": 1568, "Granite": 1296, "Ice": 1536, "Foil": 1552, "Brick": 1312, "Sand": 1296, "Fabric": 1584,
+
     # PartType / Shape
     "Ball": 0, "Block": 1, "Cylinder": 2, "Wedge": 3, "CornerWedge": 4,
+
     # EasingStyle / EasingDirection
     "In": 0, "Out": 1, "InOut": 2,
     "Linear": 0, "Sine": 1, "Back": 2, "Quad": 3, "Quart": 4, "Quint": 5, "Bounce": 6, "Elastic": 7,
-    # ZIndexBehavior
-    "Global": 0, "Sibling": 1,
-    # ScreenOrientation (Mapeamento exato)
-    "LandscapeLeft": 0, "LandscapeRight": 1, "Portrait": 2, "Sensor": 3, "LandscapeSensor": 4
+
+    # CameraType
+    "Fixed": 0, "Attach": 1, "Watch": 2, "Track": 3, "Follow": 4, "Custom": 5, "Scriptable": 6, "Orbital": 7,
+
+    # Font
+    "Legacy": 0, "Arial": 1, "ArialBold": 2, "SourceSans": 3, "SourceSansBold": 4, "SourceSansLight": 5, "SourceSansItalic": 6, "Bodoni": 7, "Garamond": 8, "Courier": 9, "GOTHIC": 10, "GOTHICBOLD": 11, "FredokaOne": 12, "Arcade": 13, "Fantasy": 14, "SciFi": 15, "Cartoon": 16, "Monospace": 17, "SpecialElite": 18, "Michroma": 19, "Ubuntu": 20, "Roboto": 21, "RobotoCondensed": 22, "RobotoMono": 23, "Sarpanch": 24, "NewsCycle": 25, "Oswald": 26, "PatrickHand": 27, "PermanentMarker": 28, "Creepster": 29, "AmaticSC": 30, "Bangers": 31, "Fancy": 32, "JosefinSans": 33, "Merriweather": 34, "Kalam": 35, "LuckiestGuy": 36, "Fondamento": 37, "Fredoka": 38,
+
+    # AmbientReverb
+    "NoReverb": 0, "PaddedCell": 1, "Room": 2, "Bathroom": 3, "LivingRoom": 4, "StoneRoom": 5, "Auditorium": 6, "ConcertHall": 7, "Cave": 8, "Arena": 9, "Hangar": 10, "CarpettedHallway": 11, "Hallway": 12, "StoneCorridor": 13, "Alley": 14, "Forest": 15, "City": 16, "Mountains": 17, "Quarry": 18, "Plain": 19, "ParkingLot": 20, "SewerPipe": 21, "UnderWater": 22
 }
 
 MAPA_PROPRIEDADES_CANONICAS = {
@@ -157,11 +178,29 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
 
     nome_prop = MAPA_PROPRIEDADES_CANONICAS.get(str(nome_prop_raw).lower(), nome_prop_raw)
 
-    # 1. BOOLEANOS (Garante IgnoreGuiInset e ResetOnSpawn)
-    if isinstance(valor, bool):
-        return f'<bool name="{nome_prop}">{"true" if valor else "false"}</bool>'
+    # 1. BOOLEANOS (Verificação forçada para IgnoreGuiInset, ResetOnSpawn, etc)
+    if isinstance(valor, bool) or str(valor).lower() in ["true", "false"]:
+        val_bool = True if str(valor).lower() == "true" or valor is True else False
+        return f'<bool name="{nome_prop}">{"true" if val_bool else "false"}</bool>'
 
-    # 2. ESTRUTURAS DE LISTAS
+    # 2. ENUMS (Mapeamento direto e fallback numérico para ScreenOrientation, ZIndex, etc)
+    eh_prop_enum = (
+        nome_prop in ["Face", "Shape", "Font", "PartType", "NormalId", "Technology", "CameraType", "Material", "AmbientReverb", "ZIndexBehavior", "ScreenOrientation"] or
+        nome_prop.endswith("Surface") or nome_prop.endswith("Type") or nome_prop.endswith("Style") or nome_prop.endswith("Mode")
+    )
+
+    if eh_prop_enum or (isinstance(valor, str) and valor.startswith("Enum.")) or str(valor) in MAPA_ENUM_NUMERICO:
+        val_clean = str(valor).split(".")[-1]
+        
+        # Tenta obter o número do Enum no mapa. Se já for um inteiro recebido, usa ele diretamente.
+        if isinstance(valor, int):
+            token_num = valor
+        else:
+            token_num = MAPA_ENUM_NUMERICO.get(val_clean, 0)
+
+        return f'<token name="{nome_prop}">{token_num}</token>'
+
+    # 3. LISTAS (ColorSequence, NumberSequence, CFrame)
     if isinstance(valor, list) and len(valor) > 0:
         if isinstance(valor[0], dict) and "Value" in valor[0] and isinstance(valor[0]["Value"], dict) and ("R" in valor[0]["Value"] or "r" in valor[0]["Value"]):
             seq_xml = f'<ColorSequence name="{nome_prop}">'
@@ -192,7 +231,7 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
                 <R20>{valor[9]}</R20><R21>{valor[10]}</R21><R22>{valor[11]}</R22>
             </CoordinateFrame>'''
 
-    # 3. DICIONÁRIOS (UDim2, Vector3, Color3, etc.)
+    # 4. DICIONÁRIOS (UDim2, UDim, Vector3, Vector2, Color3)
     if isinstance(valor, dict):
         if "X" in valor and "Y" in valor and isinstance(valor.get("X"), dict) and isinstance(valor.get("Y"), dict):
             xs = float(valor["X"].get("Scale", valor["X"].get("scale", 0)))
@@ -229,17 +268,6 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
 
     if nome_prop in ["Position", "Orientation", "Rotation"] and props_dict and "CFrame" in props_dict:
         return ""
-
-    # 4. CONVERSÃO DE ENUMS (Inclui ScreenOrientation e ZIndexBehavior)
-    eh_prop_enum = (
-        nome_prop in ["Face", "Shape", "Font", "PartType", "NormalId", "Technology", "CameraType", "Material", "AmbientReverb", "ZIndexBehavior", "ScreenOrientation"] or
-        nome_prop.endswith("Surface") or nome_prop.endswith("Type") or nome_prop.endswith("Style") or nome_prop.endswith("Mode")
-    )
-
-    if eh_prop_enum or (isinstance(valor, str) and (valor.startswith("Enum.") or valor in MAPA_ENUM_NUMERICO)):
-        val_clean = str(valor).split(".")[-1]
-        token_num = MAPA_ENUM_NUMERICO.get(val_clean, 0)
-        return f'<token name="{nome_prop}">{token_num}</token>'
 
     if nome_prop in PROPS_FLOAT and not isinstance(valor, (dict, list, tuple)):
         try:
