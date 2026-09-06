@@ -90,7 +90,11 @@ MAPA_ENUM_NUMERICO = {
     "Ball": 0, "Block": 1, "Cylinder": 2, "Wedge": 3, "CornerWedge": 4,
     # Enum.EasingStyle / EasingDirection
     "In": 0, "Out": 1, "InOut": 2,
-    "Linear": 0, "Sine": 1, "Back": 2, "Quad": 3, "Quart": 4, "Quint": 5, "Bounce": 6, "Elastic": 7
+    "Linear": 0, "Sine": 1, "Back": 2, "Quad": 3, "Quart": 4, "Quint": 5, "Bounce": 6, "Elastic": 7,
+    # Enum.ZIndexBehavior
+    "Global": 0, "Sibling": 1,
+    # Enum.ScreenOrientation
+    "LandscapeLeft": 0, "LandscapeRight": 1, "Portrait": 2, "Sensor": 3, "LandscapeSensor": 4
 }
 
 MAPA_PROPRIEDADES_CANONICAS = {
@@ -111,7 +115,12 @@ MAPA_PROPRIEDADES_CANONICAS = {
     "environmentspecularscale": "EnvironmentSpecularScale",
     "colorshift_top": "ColorShift_Top",
     "colorshift_bottom": "ColorShift_Bottom",
-    "face": "Face"
+    "face": "Face",
+    "ignoreguiinset": "IgnoreGuiInset",
+    "resetonspawn": "ResetOnSpawn",
+    "zindexbehavior": "ZIndexBehavior",
+    "displayorder": "DisplayOrder",
+    "enabled": "Enabled"
 }
 
 PROPS_FLOAT = {
@@ -120,7 +129,7 @@ PROPS_FLOAT = {
     "ExposureCompensation", "GeographicLatitude", "ShadowSoftness",
     "DistanceFactor", "DopplerScale", "CameraMaxZoomDistance",
     "CameraMinZoomDistance", "HealthDisplayDistance", "NameDisplayDistance",
-    "Transparency", "Reflectance", "Volume", "SizingCost"
+    "Transparency", "Reflectance", "Volume", "SizingCost", "SizeConstraint"
 }
 
 PROPS_BRICKCOLOR = {
@@ -148,7 +157,11 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
 
     nome_prop = MAPA_PROPRIEDADES_CANONICAS.get(str(nome_prop_raw).lower(), nome_prop_raw)
 
-    # 1. TRATAMENTO DE LISTAS (ColorSequence, NumberSequence, CFrame)
+    # 1. BOOLEANOS (Garante que IgnoreGuiInset, ResetOnSpawn, etc., sejam serializados como <bool>)
+    if isinstance(valor, bool):
+        return f'<bool name="{nome_prop}">{"true" if valor else "false"}</bool>'
+
+    # 2. TRATAMENTO DE LISTAS (ColorSequence, NumberSequence, CFrame)
     if isinstance(valor, list) and len(valor) > 0:
         if isinstance(valor[0], dict) and "Value" in valor[0] and isinstance(valor[0]["Value"], dict) and ("R" in valor[0]["Value"] or "r" in valor[0]["Value"]):
             seq_xml = f'<ColorSequence name="{nome_prop}">'
@@ -179,7 +192,7 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
                 <R20>{valor[9]}</R20><R21>{valor[10]}</R21><R22>{valor[11]}</R22>
             </CoordinateFrame>'''
 
-    # 2. TRATAMENTO DE DICIONÁRIOS (UDim2, UDim, Vector3, Vector2, Color3, NumberRange, Rect, Ray)
+    # 3. TRATAMENTO DE DICIONÁRIOS (UDim2, UDim, Vector3, Vector2, Color3, NumberRange, Rect, Ray)
     if isinstance(valor, dict):
         if "X" in valor and "Y" in valor and isinstance(valor.get("X"), dict) and isinstance(valor.get("Y"), dict):
             xs = float(valor["X"].get("Scale", valor["X"].get("scale", 0)))
@@ -244,12 +257,9 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
     if nome_prop in ["Position", "Orientation", "Rotation"] and props_dict and "CFrame" in props_dict:
         return ""
 
-    if isinstance(valor, bool):
-        return f'<bool name="{nome_prop}">{"true" if valor else "false"}</bool>'
-
-    # 3. CONVERSÃO CORRETA DE ENUM E FACE
+    # 4. CONVERSÃO DE ENUMS
     eh_prop_enum = (
-        nome_prop in ["Face", "Shape", "Font", "PartType", "NormalId", "Technology", "CameraType", "Material", "AmbientReverb"] or
+        nome_prop in ["Face", "Shape", "Font", "PartType", "NormalId", "Technology", "CameraType", "Material", "AmbientReverb", "ZIndexBehavior"] or
         nome_prop.endswith("Surface") or nome_prop.endswith("Type") or nome_prop.endswith("Style") or nome_prop.endswith("Mode")
     )
 
@@ -284,7 +294,7 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
     return ""
 
 def processar_dicionario_propriedades(props_dict):
-    xml_props = ""
+    xml_props = []
     chaves_processadas = set()
 
     for k, v in props_dict.items():
@@ -295,12 +305,12 @@ def processar_dicionario_propriedades(props_dict):
         
         no_xml = tratar_propriedade_individual(k, v, props_dict)
         if no_xml:
-            xml_props += f"\n            {no_xml}"
+            xml_props.append(f"            {no_xml}")
 
-    return xml_props
+    return "\n".join(xml_props)
 
 def processar_objetos_xml(TableData):
-    xml_output = ""
+    xml_output = []
     if isinstance(TableData, list):
         for idx, a in enumerate(TableData):
             if isinstance(a, dict):
@@ -316,35 +326,34 @@ def processar_objetos_xml(TableData):
 
                 ref_id = f"RBX_OBJ_{idx}_{abs(hash(obj_name))}"
 
-                xml_output += f'\n<Item class="{class_name}" referent="{ref_id}">'
-                xml_output += '\n  <Properties>'
-                xml_output += f'\n    <string name="Name">{saxutils.escape(str(obj_name))}</string>'
-                xml_output += processar_dicionario_propriedades(props)
+                item_str = f'<Item class="{class_name}" referent="{ref_id}">\n  <Properties>\n    <string name="Name">{saxutils.escape(str(obj_name))}</string>'
+                props_xml = processar_dicionario_propriedades(props)
+                if props_xml:
+                    item_str += f"\n{props_xml}"
 
                 if script_code or class_name in ["Script", "LocalScript", "ModuleScript"]:
                     codigo_str = str(script_code) if script_code is not None else ""
-                    xml_output += f'\n    <ProtectedString name="Source">{saxutils.escape(codigo_str)}</ProtectedString>'
+                    item_str += f'\n    <ProtectedString name="Source">{saxutils.escape(codigo_str)}</ProtectedString>'
 
-                xml_output += '\n  </Properties>'
+                item_str += '\n  </Properties>'
 
                 if children and isinstance(children, list):
-                    xml_output += processar_objetos_xml(children)
+                    item_str += processar_objetos_xml(children)
 
-                xml_output += '\n</Item>'
+                item_str += '\n</Item>'
+                xml_output.append(item_str)
 
-    return xml_output
+    return "\n".join(xml_output)
 
 def construir_rbxlx_completo(part_data_dict):
     workspace_content = ""
     workspace_props = ""
-    servicos_dados_finais = {}
-
-    for s_nome in SERVICOS_MESTRES.values():
-        if s_nome != "Workspace":
-            servicos_dados_finais[s_nome] = {
-                "props": PROPRIEDADES_PADRAO.get(s_nome, {}).copy(),
-                "objects": []
-            }
+    servicos_dados_finais = {
+        s_nome: {
+            "props": PROPRIEDADES_PADRAO.get(s_nome, {}).copy(),
+            "objects": []
+        } for s_nome in SERVICOS_MESTRES.values() if s_nome != "Workspace"
+    }
 
     if isinstance(part_data_dict, dict):
         for chave_entrada, servico_dados in part_data_dict.items():
@@ -368,7 +377,7 @@ def construir_rbxlx_completo(part_data_dict):
                 objetos = servico_dados
 
             if servico_oficial == "Workspace":
-                workspace_content += processar_objetos_xml(objetos)
+                workspace_content = processar_objetos_xml(objetos)
                 workspace_props = processar_dicionario_propriedades(propriedades_recebidas)
             else:
                 props_normalizadas = {
@@ -381,18 +390,22 @@ def construir_rbxlx_completo(part_data_dict):
     elif isinstance(part_data_dict, list):
         workspace_content = processar_objetos_xml(part_data_dict)
 
-    outros_servicos_str = ""
+    outros_servicos_list = []
     for s_nome, dados in servicos_dados_finais.items():
         ref_servico = f"RBX_SERVICE_{s_nome.upper()}"
         props_xml = processar_dicionario_propriedades(dados["props"])
         objs_xml = processar_objetos_xml(dados["objects"])
 
-        outros_servicos_str += f'''
+        outros_servicos_list.append(f'''
     <Item class="{s_nome}" referent="{ref_servico}">
         <Properties>
-            <string name="Name">{s_nome}</string>{props_xml}
-        </Properties>{objs_xml}
-    </Item>'''
+            <string name="Name">{s_nome}</string>
+{props_xml}
+        </Properties>
+{objs_xml}
+    </Item>''')
+
+    outros_servicos_str = "".join(outros_servicos_list)
 
     rbxlx_str = f'''<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
     <External>null</External>
@@ -400,7 +413,8 @@ def construir_rbxlx_completo(part_data_dict):
     <Item class="Workspace" referent="RBX_WORKSPACE_ROOT">
         <Properties>
             <string name="Name">Workspace</string>
-            <bool name="FilteringEnabled">true</bool>{workspace_props}
+            <bool name="FilteringEnabled">true</bool>
+{workspace_props}
         </Properties>
         {workspace_content}
     </Item>{outros_servicos_str}
