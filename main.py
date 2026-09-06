@@ -4,8 +4,8 @@ import xml.sax.saxutils as saxutils
 
 app = Flask(__name__)
 
+# Mapeamento de serviços ativos (MaterialService e TextChatService removidos)
 SERVICOS_MESTRES = {
-    "materialservice": "MaterialService",
     "workspace": "Workspace",
     "lighting": "Lighting",
     "replicatedfirst": "ReplicatedFirst",
@@ -51,7 +51,7 @@ PROPRIEDADES_PADRAO = {
     },
     "StarterGui": {
         "ResetPlayerGuiOnSpawn": True,
-        "ScreenOrientation": "LandscapeSensor"
+        "ScreenOrientation": "Sensor"
     },
     "StarterPlayer": {
         "CameraMaxZoomDistance": 128.0,
@@ -64,7 +64,6 @@ PROPRIEDADES_PADRAO = {
     },
     "HttpService": {"HttpEnabled": False},
     "VoiceChatService": {"EnableDefaultVoice": True},
-    "MaterialService": {"Use2022Materials": True},
     "ReplicatedFirst": {},
     "ReplicatedStorage": {},
     "ServerScriptService": {},
@@ -76,24 +75,24 @@ PROPRIEDADES_PADRAO = {
     "Chat": {}
 }
 
-# MAPA DE VALORES NUMÉRICOS EXIGIDOS PELO XML DO ROBLOX (<token>)
+# Tabela completa de Enums do Roblox para XML (<token>)
 MAPA_ENUM_NUMERICO = {
-    # Enum.NormalId / Enum.Face
+    # NormalId / Face
     "Right": 0, "Top": 1, "Back": 2, "Left": 3, "Bottom": 4, "Front": 5,
-    # Enum.SurfaceType
+    # SurfaceType
     "Smooth": 0, "Glue": 1, "Weld": 2, "Studs": 3, "Inlet": 4, "Universal": 5, "Hinge": 6, "Motor": 7, "SteppingMotor": 8,
-    # Enum.Technology
+    # Technology
     "Compatibility": 0, "Voxel": 1, "ShadowMap": 2, "Future": 3,
-    # Enum.Material
+    # Material
     "SmoothPlastic": 272, "Plastic": 256, "Neon": 288, "Wood": 512, "Metal": 1088, "Grass": 1280, "Glass": 1568, "Granite": 1296, "Ice": 1536,
-    # Enum.PartType / Shape
+    # PartType / Shape
     "Ball": 0, "Block": 1, "Cylinder": 2, "Wedge": 3, "CornerWedge": 4,
-    # Enum.EasingStyle / EasingDirection
+    # EasingStyle / EasingDirection
     "In": 0, "Out": 1, "InOut": 2,
     "Linear": 0, "Sine": 1, "Back": 2, "Quad": 3, "Quart": 4, "Quint": 5, "Bounce": 6, "Elastic": 7,
-    # Enum.ZIndexBehavior
+    # ZIndexBehavior
     "Global": 0, "Sibling": 1,
-    # Enum.ScreenOrientation
+    # ScreenOrientation (Mapeamento exato)
     "LandscapeLeft": 0, "LandscapeRight": 1, "Portrait": 2, "Sensor": 3, "LandscapeSensor": 4
 }
 
@@ -120,7 +119,8 @@ MAPA_PROPRIEDADES_CANONICAS = {
     "resetonspawn": "ResetOnSpawn",
     "zindexbehavior": "ZIndexBehavior",
     "displayorder": "DisplayOrder",
-    "enabled": "Enabled"
+    "enabled": "Enabled",
+    "screenorientation": "ScreenOrientation"
 }
 
 PROPS_FLOAT = {
@@ -157,11 +157,11 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
 
     nome_prop = MAPA_PROPRIEDADES_CANONICAS.get(str(nome_prop_raw).lower(), nome_prop_raw)
 
-    # 1. BOOLEANOS (Garante que IgnoreGuiInset, ResetOnSpawn, etc., sejam serializados como <bool>)
+    # 1. BOOLEANOS (Garante IgnoreGuiInset e ResetOnSpawn)
     if isinstance(valor, bool):
         return f'<bool name="{nome_prop}">{"true" if valor else "false"}</bool>'
 
-    # 2. TRATAMENTO DE LISTAS (ColorSequence, NumberSequence, CFrame)
+    # 2. ESTRUTURAS DE LISTAS
     if isinstance(valor, list) and len(valor) > 0:
         if isinstance(valor[0], dict) and "Value" in valor[0] and isinstance(valor[0]["Value"], dict) and ("R" in valor[0]["Value"] or "r" in valor[0]["Value"]):
             seq_xml = f'<ColorSequence name="{nome_prop}">'
@@ -192,7 +192,7 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
                 <R20>{valor[9]}</R20><R21>{valor[10]}</R21><R22>{valor[11]}</R22>
             </CoordinateFrame>'''
 
-    # 3. TRATAMENTO DE DICIONÁRIOS (UDim2, UDim, Vector3, Vector2, Color3, NumberRange, Rect, Ray)
+    # 3. DICIONÁRIOS (UDim2, Vector3, Color3, etc.)
     if isinstance(valor, dict):
         if "X" in valor and "Y" in valor and isinstance(valor.get("X"), dict) and isinstance(valor.get("Y"), dict):
             xs = float(valor["X"].get("Scale", valor["X"].get("scale", 0)))
@@ -227,39 +227,12 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
             rf, gf, bf = converter_cor(valor)
             return f'<Color3 name="{nome_prop}"><R>{rf}</R><G>{gf}</G><B>{bf}</B></Color3>'
 
-        if "Min" in valor and "Max" in valor:
-            min_v = valor["Min"]
-            max_v = valor["Max"]
-            if isinstance(min_v, dict) and isinstance(max_v, dict):
-                min_x = float(min_v.get("X", 0))
-                min_y = float(min_v.get("Y", 0))
-                max_x = float(max_v.get("X", 0))
-                max_y = float(max_v.get("Y", 0))
-                return f'<Rect2D name="{nome_prop}"><min><X>{min_x}</X><Y>{min_y}</Y></min><max><X>{max_x}</X><Y>{max_y}</Y></max></Rect2D>'
-
-            try:
-                min_n = float(min_v)
-                max_n = float(max_v)
-                return f'<NumberRange name="{nome_prop}">{min_n} {max_n}</NumberRange>'
-            except (TypeError, ValueError):
-                pass
-
-        if "Origin" in valor and "Direction" in valor:
-            orig = valor.get("Origin", {})
-            dir_v = valor.get("Direction", {})
-            ox, oy, oz = float(orig.get("X", 0)), float(orig.get("Y", 0)), float(orig.get("Z", 0))
-            dx, dy, dz = float(dir_v.get("X", 0)), float(dir_v.get("Y", 0)), float(dir_v.get("Z", 0))
-            return f'''<Ray name="{nome_prop}">
-                <origin><X>{ox}</X><Y>{oy}</Y><Z>{oz}</Z></origin>
-                <direction><X>{dx}</X><Y>{dy}</Y><Z>{dz}</Z></direction>
-            </Ray>'''
-
     if nome_prop in ["Position", "Orientation", "Rotation"] and props_dict and "CFrame" in props_dict:
         return ""
 
-    # 4. CONVERSÃO DE ENUMS
+    # 4. CONVERSÃO DE ENUMS (Inclui ScreenOrientation e ZIndexBehavior)
     eh_prop_enum = (
-        nome_prop in ["Face", "Shape", "Font", "PartType", "NormalId", "Technology", "CameraType", "Material", "AmbientReverb", "ZIndexBehavior"] or
+        nome_prop in ["Face", "Shape", "Font", "PartType", "NormalId", "Technology", "CameraType", "Material", "AmbientReverb", "ZIndexBehavior", "ScreenOrientation"] or
         nome_prop.endswith("Surface") or nome_prop.endswith("Type") or nome_prop.endswith("Style") or nome_prop.endswith("Mode")
     )
 
