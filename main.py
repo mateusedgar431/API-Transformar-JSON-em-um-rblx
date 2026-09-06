@@ -23,25 +23,51 @@ SERVICOS_MESTRES = {
     "chat": "Chat"
 }
 
-# Mapeamento oficial de tokens Enum do Roblox
+# Mapeamento completo de Tokens Enum oficiais do Roblox
 MAPA_ENUM_NUMERICO = {
-    # ScreenOrientation
+    # ScreenOrientation (Enum.ScreenOrientation)
     "LandscapeLeft": 0,
     "LandscapeRight": 1,
     "Portrait": 2,
     "Sensor": 3,
     "LandscapeSensor": 4,
-    
+
+    # Materials (Enum.Material)
+    "Plastic": 256,
+    "SmoothPlastic": 272,
+    "Neon": 288,
+    "Wood": 512,
+    "WoodPlanks": 528,
+    "Marble": 784,
+    "Basalt": 788,
+    "Slate": 800,
+    "CrackedLava": 804,
+    "Concrete": 816,
+    "Granite": 832,
+    "Brick": 848,
+    "Pebble": 864,
+    "Cobblestone": 880,
+    "Rock": 896,
+    "Sand": 1280,
+    "Fabric": 1296,
+    "Ice": 1536,
+    "Glass": 1568,
+    "ForceField": 1584,
+    "Foil": 1792,
+    "Metal": 1056,
+    "DiamondPlate": 1072,
+    "CorrodedMetal": 1088,
+
     # Technology (Lighting)
     "Compatibility": 0,
     "Voxel": 1,
     "ShadowMap": 2,
     "Future": 3,
-    
+
     # SurfaceType / FormFactor / PartType
     "Smooth": 0, "Glue": 1, "Weld": 2, "Studs": 3, "Inlet": 4, "Universal": 5, "Hinge": 6, "Motor": 7, "SteppingMotor": 8,
     "Ball": 0, "Block": 1, "Cylinder": 2, "Wedge": 3, "CornerWedge": 4,
-    
+
     # ZIndexBehavior
     "Global": 0,
     "Sibling": 1
@@ -66,7 +92,7 @@ def tratar_propriedade_individual(nome_prop, valor):
     if valor is None or nome_prop in ["ClassName", "Name", "Parent", "FormFactor"]:
         return ""
 
-    # 1. BOOLEANOS (Ex: IgnoreGuiInset, ResetOnSpawn, Anchored, Archivable)
+    # 1. BOOLEANOS (PRIORIDADE ALTA - Impede que True/False vire int 1/0 ou Caia em String)
     if isinstance(valor, bool):
         val_str = "true" if valor else "false"
         return f'<bool name="{nome_prop}">{val_str}</bool>'
@@ -76,7 +102,7 @@ def tratar_propriedade_individual(nome_prop, valor):
         # Limpa prefixos de Enum se houver (ex: "Enum.ScreenOrientation.Sensor" -> "Sensor")
         val_clean = valor.split(".")[-1] if "." in valor else valor
 
-        # Se for um Enum conhecido
+        # Se for um Enum conhecido (ScreenOrientation, Material, Technology, etc)
         if val_clean in MAPA_ENUM_NUMERICO:
             token_num = MAPA_ENUM_NUMERICO[val_clean]
             return f'<token name="{nome_prop}">{token_num}</token>'
@@ -121,7 +147,7 @@ def tratar_propriedade_individual(nome_prop, valor):
                 <R20>{valor[9]}</R20><R21>{valor[10]}</R21><R22>{valor[11]}</R22>
             </CoordinateFrame>'''
 
-    # 5. NÚMEROS
+    # 5. NÚMEROS (Int / Float)
     if isinstance(valor, float):
         return f'<float name="{nome_prop}">{valor}</float>'
 
