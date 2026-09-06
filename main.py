@@ -23,14 +23,23 @@ SERVICOS_MESTRES = {
     "chat": "Chat"
 }
 
-# Tabela de Tokens Enum oficiais do Roblox
+# Lista de propriedades que o Roblox exige estritamente como <bool>
+PROPRIEDADES_BOOLEANAS = {
+    "IgnoreGuiInset", "Enabled", "Visible", "ResetOnSpawn", "Archivable",
+    "Anchored", "CanCollide", "CanTouch", "CanQuery", "CastShadow",
+    "Massless", "Locked", "ClipToDeviceSafeArea", "ClipsDescendants",
+    "Active", "AutoButtonColor", "Selected", "RichText", "TextScaled",
+    "TextWrapped", "ClearTextOnFocus", "MultiLine", "DisplayOrder"
+}
+
+# Tabela expandida de Tokens Enum oficiais do Roblox
 MAPA_ENUM_NUMERICO = {
     # ScreenOrientation (StarterGui / ScreenGui)
     "LandscapeLeft": 0,
     "LandscapeRight": 1,
     "Portrait": 2,
-    "LandscapeSensor": 3,
-    "Sensor": 4,
+    "Sensor": 3,
+    "LandscapeSensor": 4,
 
     # Face / NormalId (Decal, Texture, SurfaceGui)
     "Right": 0,
@@ -40,40 +49,32 @@ MAPA_ENUM_NUMERICO = {
     "Bottom": 4,
     "Front": 5,
 
+    # Fonts
+    "Legacy": 0, "Arial": 1, "ArialBold": 2, "SourceSans": 3, "SourceSansBold": 4,
+    "SourceSansItalic": 5, "SourceSansLight": 6, "SourceSansSemibold": 7,
+    "Bodoni": 8, "Garamond": 9, "Courier": 10, "Animate": 11, "Gotham": 12,
+    "GothamSemibold": 13, "GothamBold": 14, "GothamBlack": 15, "FredokaOne": 16,
+    "Arcade": 17, "FiraMono": 18, "Roboto": 19, "RobotoCondensed": 20, "RobotoMono": 21,
+
+    # ScaleType / SizeConstraint / AutomaticSize / SortOrder
+    "Stretch": 0, "Tile": 1, "Slice": 2, "Fit": 3, "Crop": 4,
+    "RelativeXY": 0, "RelativeXX": 1, "RelativeYY": 2, "None": 0,
+    "X": 1, "Y": 2, "XY": 3,
+    "LayoutOrder": 0, "Name": 1,
+
     # Material
-    "Plastic": 256,
-    "SmoothPlastic": 272,
-    "Neon": 288,
-    "Wood": 512,
-    "WoodPlanks": 528,
-    "Marble": 784,
-    "Basalt": 788,
-    "Slate": 800,
-    "CrackedLava": 804,
-    "Concrete": 816,
-    "Granite": 832,
-    "Brick": 848,
-    "Pebble": 864,
-    "Cobblestone": 880,
-    "Rock": 896,
-    "Sand": 1280,
-    "Fabric": 1296,
-    "Ice": 1536,
-    "Glass": 1568,
-    "ForceField": 1584,
-    "Foil": 1792,
-    "Metal": 1056,
-    "DiamondPlate": 1072,
-    "CorrodedMetal": 1088,
+    "Plastic": 256, "SmoothPlastic": 272, "Neon": 288, "Wood": 512,
+    "WoodPlanks": 528, "Marble": 784, "Basalt": 788, "Slate": 800,
+    "CrackedLava": 804, "Concrete": 816, "Granite": 832, "Brick": 848,
+    "Pebble": 864, "Cobblestone": 880, "Rock": 896, "Sand": 1280,
+    "Fabric": 1296, "Ice": 1536, "Glass": 1568, "ForceField": 1584,
+    "Foil": 1792, "Metal": 1056, "DiamondPlate": 1072, "CorrodedMetal": 1088,
 
     # Technology / Lighting
-    "Compatibility": 0,
-    "Voxel": 1,
-    "ShadowMap": 2,
-    "Future": 3,
+    "Compatibility": 0, "Voxel": 1, "ShadowMap": 2, "Future": 3,
 
     # SurfaceType / FormFactor / PartType
-    "Smooth": 0, "Glue": 1, "Weld": 2, "Studs": 3, "Inlet": 4, "Universal": 5, "Hinge": 6, "Motor": 7, "SteppingMotor": 8,
+    "Smooth": 0, "Glue": 1, "Weld": 2, "Studs": 3, "Inlet": 4, "Universal": 5, "Hinge": 6, "Motor": 7,
     "Ball": 0, "Block": 1, "Cylinder": 2, "Wedge": 3, "CornerWedge": 4,
 
     # ZIndexBehavior
@@ -100,30 +101,37 @@ def tratar_propriedade_individual(nome_prop, valor):
     if valor is None or nome_prop in ["ClassName", "Name", "Parent", "FormFactor"]:
         return ""
 
-    # 1. BOOLEANOS (Verificação estrita - mantém true/false exato)
-    if isinstance(valor, bool):
-        val_bool_str = "true" if valor is True else "false"
+    # 1. TRATAMENTO ESTRITO DE BOOLEANOS (IgnoreGuiInset, Enabled, etc)
+    if isinstance(valor, bool) or nome_prop in PROPRIEDADES_BOOLEANAS:
+        if isinstance(valor, str):
+            val_bool_str = "true" if valor.lower() in ["true", "1", "yes"] else "false"
+        else:
+            val_bool_str = "true" if bool(valor) is True else "false"
         return f'<bool name="{nome_prop}">{val_bool_str}</bool>'
 
-    # 2. STRINGS E ENUMS (Força extração se for string ou "Enum.Group.Item")
+    # 2. STRINGS E ENUMS (ScreenOrientation, Face, Material, etc)
     if isinstance(valor, str):
         val_limpo = valor.strip()
         
+        # Remove prefixo 'Enum.Grupo.Nome' se existir
         if "Enum." in val_limpo:
             val_limpo = val_limpo.split(".")[-1]
 
+        # Mapeamento para token numérico
         if val_limpo in MAPA_ENUM_NUMERICO:
             token_val = MAPA_ENUM_NUMERICO[val_limpo]
             return f'<token name="{nome_prop}">{token_val}</token>'
 
+        # Conteúdo de Asset/Textura
         if nome_prop in ["Texture", "Image", "TextureId", "ImageId", "MeshId", "SoundId"] or val_limpo.startswith("rbxassetid://"):
             return f'<Content name="{nome_prop}"><url>{saxutils.escape(val_limpo)}</url></Content>'
 
+        # String padrão
         return f'<string name="{nome_prop}">{saxutils.escape(val_limpo)}</string>'
 
-    # 3. DICIONÁRIOS / TABELAS (Validações de Enums via tabela e tipos de dados)
+    # 3. DICIONÁRIOS / TABELAS (UDim, UDim2, Vector3, Color3, Enums em Tabela)
     if isinstance(valor, dict):
-        # Se for uma tabela representando Enum de Luau
+        # Enum vindo em formato de tabela Luau {EnumType = ..., Name = "Sensor"}
         if "Name" in valor:
             nome_enum = str(valor["Name"]).strip()
             if nome_enum in MAPA_ENUM_NUMERICO:
@@ -136,6 +144,12 @@ def tratar_propriedade_individual(nome_prop, valor):
             ys = float(valor["Y"].get("Scale", valor["Y"].get("scale", 0)))
             yo = int(valor["Y"].get("Offset", valor["Y"].get("offset", 0)))
             return f'<UDim2 name="{nome_prop}"><XS>{xs}</XS><XO>{xo}</XO><YS>{ys}</YS><YO>{yo}</YO></UDim2>'
+
+        # UDim (Simples)
+        if ("Scale" in valor or "scale" in valor) and ("Offset" in valor or "offset" in valor) and "X" not in valor:
+            s = float(valor.get("Scale", valor.get("scale", 0)))
+            o = int(valor.get("Offset", valor.get("offset", 0)))
+            return f'<UDim name="{nome_prop}"><S>{s}</S><O>{o}</O></UDim>'
 
         # Vector3
         if "X" in valor and "Y" in valor and "Z" in valor:
@@ -160,11 +174,14 @@ def tratar_propriedade_individual(nome_prop, valor):
                 <R20>{valor[9]}</R20><R21>{valor[10]}</R21><R22>{valor[11]}</R22>
             </CoordinateFrame>'''
 
-    # 5. NÚMEROS
+    # 5. NÚMEROS / TOKENS
     if isinstance(valor, float):
         return f'<float name="{nome_prop}">{valor}</float>'
 
     if isinstance(valor, int):
+        # Se for propriedade conhecida de Enum e vier como número direto, envia como token
+        if nome_prop in ["ScreenOrientation", "Face", "Material", "Font", "ScaleType", "SortOrder"]:
+            return f'<token name="{nome_prop}">{valor}</token>'
         return f'<int name="{nome_prop}">{valor}</int>'
 
     return ""
