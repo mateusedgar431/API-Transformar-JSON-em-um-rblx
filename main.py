@@ -23,16 +23,24 @@ SERVICOS_MESTRES = {
     "chat": "Chat"
 }
 
-# Tabela completa de Enums numéricos do Roblox
+# Tabela de Tokens Enum oficiais do Roblox
 MAPA_ENUM_NUMERICO = {
-    # ScreenOrientation
+    # ScreenOrientation (StarterGui / ScreenGui)
     "LandscapeLeft": 0,
     "LandscapeRight": 1,
     "Portrait": 2,
-    "Sensor": 3,
-    "LandscapeSensor": 4,
+    "LandscapeSensor": 3,
+    "Sensor": 4,
 
-    # Materials (Enum.Material)
+    # Face / NormalId (Decal, Texture, SurfaceGui)
+    "Right": 0,
+    "Top": 1,
+    "Back": 2,
+    "Left": 3,
+    "Bottom": 4,
+    "Front": 5,
+
+    # Material
     "Plastic": 256,
     "SmoothPlastic": 272,
     "Neon": 288,
@@ -64,7 +72,7 @@ MAPA_ENUM_NUMERICO = {
     "ShadowMap": 2,
     "Future": 3,
 
-    # FormFactor / PartType / SurfaceType
+    # SurfaceType / FormFactor / PartType
     "Smooth": 0, "Glue": 1, "Weld": 2, "Studs": 3, "Inlet": 4, "Universal": 5, "Hinge": 6, "Motor": 7, "SteppingMotor": 8,
     "Ball": 0, "Block": 1, "Cylinder": 2, "Wedge": 3, "CornerWedge": 4,
 
@@ -92,36 +100,31 @@ def tratar_propriedade_individual(nome_prop, valor):
     if valor is None or nome_prop in ["ClassName", "Name", "Parent", "FormFactor"]:
         return ""
 
-    # 1. TRATAMENTO ESTRITO DE BOOLEANOS (Garante que true fique true e false fique false)
+    # 1. BOOLEANOS (Verificação estrita - mantém true/false exato)
     if isinstance(valor, bool):
         val_bool_str = "true" if valor is True else "false"
         return f'<bool name="{nome_prop}">{val_bool_str}</bool>'
 
-    # 2. TRATAMENTO DE ENUMS E STRINGS
+    # 2. STRINGS E ENUMS (Força extração se for string ou "Enum.Group.Item")
     if isinstance(valor, str):
         val_limpo = valor.strip()
         
-        # Trata strings no formato "Enum.Grupo.Item" ou "Item"
-        if val_limpo.startswith("Enum."):
-            partes = val_limpo.split(".")
-            val_limpo = partes[-1]
+        if "Enum." in val_limpo:
+            val_limpo = val_limpo.split(".")[-1]
 
-        # Se for um Enum presente na tabela oficial
         if val_limpo in MAPA_ENUM_NUMERICO:
             token_val = MAPA_ENUM_NUMERICO[val_limpo]
             return f'<token name="{nome_prop}">{token_val}</token>'
 
-        # Se for link/content de asset
         if nome_prop in ["Texture", "Image", "TextureId", "ImageId", "MeshId", "SoundId"] or val_limpo.startswith("rbxassetid://"):
             return f'<Content name="{nome_prop}"><url>{saxutils.escape(val_limpo)}</url></Content>'
 
-        # String normal
         return f'<string name="{nome_prop}">{saxutils.escape(val_limpo)}</string>'
 
-    # 3. DICIONÁRIOS / TABELAS (Color3, Vector3, UDim2)
+    # 3. DICIONÁRIOS / TABELAS (Validações de Enums via tabela e tipos de dados)
     if isinstance(valor, dict):
-        # Se o Enum vier formatado como dicionário/tabela de Luau (ex: {"EnumType": ..., "Name": "Sensor"})
-        if "Name" in valor and "EnumType" in valor:
+        # Se for uma tabela representando Enum de Luau
+        if "Name" in valor:
             nome_enum = str(valor["Name"]).strip()
             if nome_enum in MAPA_ENUM_NUMERICO:
                 return f'<token name="{nome_prop}">{MAPA_ENUM_NUMERICO[nome_enum]}</token>'
@@ -157,7 +160,7 @@ def tratar_propriedade_individual(nome_prop, valor):
                 <R20>{valor[9]}</R20><R21>{valor[10]}</R21><R22>{valor[11]}</R22>
             </CoordinateFrame>'''
 
-    # 5. NÚMEROS DIRETO
+    # 5. NÚMEROS
     if isinstance(valor, float):
         return f'<float name="{nome_prop}">{valor}</float>'
 
