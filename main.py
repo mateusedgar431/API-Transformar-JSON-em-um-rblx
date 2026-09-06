@@ -76,6 +76,23 @@ PROPRIEDADES_PADRAO = {
     "Chat": {}
 }
 
+# MAPA DE VALORES NUMÉRICOS EXIGIDOS PELO XML DO ROBLOX (<token>)
+MAPA_ENUM_NUMERICO = {
+    # Enum.NormalId / Enum.Face
+    "Right": 0, "Top": 1, "Back": 2, "Left": 3, "Bottom": 4, "Front": 5,
+    # Enum.SurfaceType
+    "Smooth": 0, "Glue": 1, "Weld": 2, "Studs": 3, "Inlet": 4, "Universal": 5, "Hinge": 6, "Motor": 7, "SteppingMotor": 8,
+    # Enum.Technology
+    "Compatibility": 0, "Voxel": 1, "ShadowMap": 2, "Future": 3,
+    # Enum.Material
+    "SmoothPlastic": 272, "Plastic": 256, "Neon": 288, "Wood": 512, "Metal": 1088, "Grass": 1280, "Glass": 1568, "Granite": 1296, "Ice": 1536,
+    # Enum.PartType / Shape
+    "Ball": 0, "Block": 1, "Cylinder": 2, "Wedge": 3, "CornerWedge": 4,
+    # Enum.EasingStyle / EasingDirection
+    "In": 0, "Out": 1, "InOut": 2,
+    "Linear": 0, "Sine": 1, "Back": 2, "Quad": 3, "Quart": 4, "Quint": 5, "Bounce": 6, "Elastic": 7
+}
+
 MAPA_PROPRIEDADES_CANONICAS = {
     "ambient": "Ambient",
     "outdoorambient": "OutdoorAmbient",
@@ -93,7 +110,8 @@ MAPA_PROPRIEDADES_CANONICAS = {
     "environmentdiffusescale": "EnvironmentDiffuseScale",
     "environmentspecularscale": "EnvironmentSpecularScale",
     "colorshift_top": "ColorShift_Top",
-    "colorshift_bottom": "ColorShift_Bottom"
+    "colorshift_bottom": "ColorShift_Bottom",
+    "face": "Face"
 }
 
 PROPS_FLOAT = {
@@ -102,7 +120,7 @@ PROPS_FLOAT = {
     "ExposureCompensation", "GeographicLatitude", "ShadowSoftness",
     "DistanceFactor", "DopplerScale", "CameraMaxZoomDistance",
     "CameraMinZoomDistance", "HealthDisplayDistance", "NameDisplayDistance",
-    "Transparency", "Reflectance", "Volume"
+    "Transparency", "Reflectance", "Volume", "SizingCost"
 }
 
 PROPS_BRICKCOLOR = {
@@ -132,7 +150,6 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
 
     # 1. TRATAMENTO DE LISTAS (ColorSequence, NumberSequence, CFrame)
     if isinstance(valor, list) and len(valor) > 0:
-        # ColorSequence
         if isinstance(valor[0], dict) and "Value" in valor[0] and isinstance(valor[0]["Value"], dict) and ("R" in valor[0]["Value"] or "r" in valor[0]["Value"]):
             seq_xml = f'<ColorSequence name="{nome_prop}">'
             for kp in valor:
@@ -143,7 +160,6 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
             seq_xml += '</ColorSequence>'
             return seq_xml
 
-        # NumberSequence
         if isinstance(valor[0], dict) and "Value" in valor[0] and isinstance(valor[0]["Value"], (int, float)):
             seq_xml = f'<NumberSequence name="{nome_prop}">'
             for kp in valor:
@@ -155,7 +171,6 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
             seq_xml += '</NumberSequence>'
             return seq_xml
 
-        # CFrame (12 ou 16 elementos)
         if len(valor) in [12, 16]:
             return f'''<CoordinateFrame name="{nome_prop}">
                 <X>{valor[0]}</X><Y>{valor[1]}</Y><Z>{valor[2]}</Z>
@@ -166,7 +181,6 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
 
     # 2. TRATAMENTO DE DICIONÁRIOS (UDim2, UDim, Vector3, Vector2, Color3, NumberRange, Rect, Ray)
     if isinstance(valor, dict):
-        # UDim2 {X={Scale, Offset}, Y={Scale, Offset}}
         if "X" in valor and "Y" in valor and isinstance(valor.get("X"), dict) and isinstance(valor.get("Y"), dict):
             xs = float(valor["X"].get("Scale", valor["X"].get("scale", 0)))
             xo = int(valor["X"].get("Offset", valor["X"].get("offset", 0)))
@@ -177,13 +191,11 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
                 <YS>{ys}</YS><YO>{yo}</YO>
             </UDim2>'''
 
-        # UDim {Scale, Offset}
         if ("Scale" in valor or "scale" in valor) and ("Offset" in valor or "offset" in valor) and "X" not in valor:
             sc = float(valor.get("Scale", valor.get("scale", 0)))
             off = int(valor.get("Offset", valor.get("offset", 0)))
             return f'<UDim name="{nome_prop}"><S>{sc}</S><O>{off}</O></UDim>'
 
-        # Vector3 {X, Y, Z}
         if "X" in valor and "Y" in valor and "Z" in valor and "R00" not in valor:
             try:
                 vx, vy, vz = float(valor["X"]), float(valor["Y"]), float(valor["Z"])
@@ -191,7 +203,6 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
             except (TypeError, ValueError):
                 pass
 
-        # Vector2 {X, Y}
         if "X" in valor and "Y" in valor and "Z" not in valor:
             try:
                 vx, vy = float(valor["X"]), float(valor["Y"])
@@ -199,16 +210,13 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
             except (TypeError, ValueError):
                 pass
 
-        # Color3 {R, G, B}
         if ("R" in valor or "r" in valor) and ("G" in valor or "g" in valor) and ("B" in valor or "b" in valor):
             rf, gf, bf = converter_cor(valor)
             return f'<Color3 name="{nome_prop}"><R>{rf}</R><G>{gf}</G><B>{bf}</B></Color3>'
 
-        # Rect e NumberRange {Min, Max}
         if "Min" in valor and "Max" in valor:
             min_v = valor["Min"]
             max_v = valor["Max"]
-
             if isinstance(min_v, dict) and isinstance(max_v, dict):
                 min_x = float(min_v.get("X", 0))
                 min_y = float(min_v.get("Y", 0))
@@ -223,7 +231,6 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
             except (TypeError, ValueError):
                 pass
 
-        # Ray {Origin, Direction}
         if "Origin" in valor and "Direction" in valor:
             orig = valor.get("Origin", {})
             dir_v = valor.get("Direction", {})
@@ -234,12 +241,22 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
                 <direction><X>{dx}</X><Y>{dy}</Y><Z>{dz}</Z></direction>
             </Ray>'''
 
-    # Ignora Position extra se CFrame já existe
     if nome_prop in ["Position", "Orientation", "Rotation"] and props_dict and "CFrame" in props_dict:
         return ""
 
     if isinstance(valor, bool):
         return f'<bool name="{nome_prop}">{"true" if valor else "false"}</bool>'
+
+    # 3. CONVERSÃO CORRETA DE ENUM E FACE
+    eh_prop_enum = (
+        nome_prop in ["Face", "Shape", "Font", "PartType", "NormalId", "Technology", "CameraType", "Material", "AmbientReverb"] or
+        nome_prop.endswith("Surface") or nome_prop.endswith("Type") or nome_prop.endswith("Style") or nome_prop.endswith("Mode")
+    )
+
+    if eh_prop_enum or (isinstance(valor, str) and (valor.startswith("Enum.") or valor in MAPA_ENUM_NUMERICO)):
+        val_clean = str(valor).split(".")[-1]
+        token_num = MAPA_ENUM_NUMERICO.get(val_clean, 0)
+        return f'<token name="{nome_prop}">{token_num}</token>'
 
     if nome_prop in PROPS_FLOAT and not isinstance(valor, (dict, list, tuple)):
         try:
@@ -249,13 +266,6 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
 
     if nome_prop == "TimeOfDay":
         return f'<string name="TimeOfDay">{saxutils.escape(str(valor))}</string>'
-
-    # 3. TRATAMENTO DINÂMICO DE ENUMS (Garante equivalência com Enum:GetEnums())
-    # Se o valor começar com "Enum." ou for uma string enviada como Enum do Lua
-    if isinstance(valor, str) and valor.startswith("Enum."):
-        # Extrai o token final (ex: "Enum.Material.Plastic" -> "Plastic")
-        token_val = valor.split(".")[-1]
-        return f'<token name="{nome_prop}">{token_val}</token>'
 
     if nome_prop in PROPS_BRICKCOLOR and isinstance(valor, (str, int)):
         return f'<int name="{nome_prop}">{valor}</int>'
