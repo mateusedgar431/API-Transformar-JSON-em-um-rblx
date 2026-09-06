@@ -23,13 +23,28 @@ SERVICOS_MESTRES = {
     "chat": "Chat"
 }
 
+# Mapeamento oficial de tokens Enum do Roblox
 MAPA_ENUM_NUMERICO = {
-    "LandscapeLeft": 0, "LandscapeRight": 1, "Portrait": 2, "Sensor": 3, "LandscapeSensor": 4,
-    "Global": 0, "Sibling": 1,
-    "Right": 0, "Top": 1, "Back": 2, "Left": 3, "Bottom": 4, "Front": 5,
+    # ScreenOrientation
+    "LandscapeLeft": 0,
+    "LandscapeRight": 1,
+    "Portrait": 2,
+    "Sensor": 3,
+    "LandscapeSensor": 4,
+    
+    # Technology (Lighting)
+    "Compatibility": 0,
+    "Voxel": 1,
+    "ShadowMap": 2,
+    "Future": 3,
+    
+    # SurfaceType / FormFactor / PartType
     "Smooth": 0, "Glue": 1, "Weld": 2, "Studs": 3, "Inlet": 4, "Universal": 5, "Hinge": 6, "Motor": 7, "SteppingMotor": 8,
-    "Compatibility": 0, "Voxel": 1, "ShadowMap": 2, "Future": 3,
-    "Ball": 0, "Block": 1, "Cylinder": 2, "Wedge": 3, "CornerWedge": 4
+    "Ball": 0, "Block": 1, "Cylinder": 2, "Wedge": 3, "CornerWedge": 4,
+    
+    # ZIndexBehavior
+    "Global": 0,
+    "Sibling": 1
 }
 
 def converter_cor(valor):
@@ -47,30 +62,33 @@ def converter_cor(valor):
 
     return rf, gf, bf
 
-def tratar_propriedade_individual(nome_prop, valor, props_dict=None):
+def tratar_propriedade_individual(nome_prop, valor):
     if valor is None or nome_prop in ["ClassName", "Name", "Parent", "FormFactor"]:
         return ""
 
-    # SE FOR BOOLEANO (Garante IgnoreGuiInset / ResetOnSpawn exatamente como enviado)
+    # 1. BOOLEANOS (Ex: IgnoreGuiInset, ResetOnSpawn, Anchored, Archivable)
     if isinstance(valor, bool):
-        return f'<bool name="{nome_prop}">{"true" if valor else "false"}</bool>'
+        val_str = "true" if valor else "false"
+        return f'<bool name="{nome_prop}">{val_str}</bool>'
 
-    # SE FOR STRING
+    # 2. STRINGS E ENUMS
     if isinstance(valor, str):
-        # Enum em formato string (ex: "Enum.ScreenOrientation.Sensor" ou "Sensor")
-        if valor.startswith("Enum.") or valor in MAPA_ENUM_NUMERICO:
-            val_clean = valor.split(".")[-1]
-            token_num = MAPA_ENUM_NUMERICO.get(val_clean, 0)
+        # Limpa prefixos de Enum se houver (ex: "Enum.ScreenOrientation.Sensor" -> "Sensor")
+        val_clean = valor.split(".")[-1] if "." in valor else valor
+
+        # Se for um Enum conhecido
+        if val_clean in MAPA_ENUM_NUMERICO:
+            token_num = MAPA_ENUM_NUMERICO[val_clean]
             return f'<token name="{nome_prop}">{token_num}</token>'
-        
-        # URLs / Content
+
+        # Se for ID / Asset / Textura
         if nome_prop in ["Texture", "Image", "TextureId", "ImageId", "MeshId", "SoundId"] or valor.startswith("rbxassetid://"):
             return f'<Content name="{nome_prop}"><url>{saxutils.escape(valor)}</url></Content>'
 
-        # String normal
+        # String padrão
         return f'<string name="{nome_prop}">{saxutils.escape(valor)}</string>'
 
-    # SE FOR TABLE (DICIONÁRIO)
+    # 3. TABLES / DICIONÁRIOS (UDim2, Vector3, Color3)
     if isinstance(valor, dict):
         # UDim2
         if "X" in valor and "Y" in valor and isinstance(valor.get("X"), dict) and isinstance(valor.get("Y"), dict):
@@ -93,7 +111,7 @@ def tratar_propriedade_individual(nome_prop, valor, props_dict=None):
             rf, gf, bf = converter_cor(valor)
             return f'<Color3 name="{nome_prop}"><R>{rf}</R><G>{gf}</G><B>{bf}</B></Color3>'
 
-    # SE FOR TABLE (ARRAY / LISTA)
+    # 4. ARRAYS / LISTAS (CFrame / Matrix)
     if isinstance(valor, list):
         if len(valor) in [12, 16]:
             return f'''<CoordinateFrame name="{nome_prop}">
@@ -103,7 +121,7 @@ def tratar_propriedade_individual(nome_prop, valor, props_dict=None):
                 <R20>{valor[9]}</R20><R21>{valor[10]}</R21><R22>{valor[11]}</R22>
             </CoordinateFrame>'''
 
-    # NÚMEROS DIRETOS
+    # 5. NÚMEROS
     if isinstance(valor, float):
         return f'<float name="{nome_prop}">{valor}</float>'
 
@@ -115,7 +133,7 @@ def tratar_propriedade_individual(nome_prop, valor, props_dict=None):
 def processar_dicionario_propriedades(props_dict):
     xml_props = []
     for k, v in props_dict.items():
-        no_xml = tratar_propriedade_individual(k, v, props_dict)
+        no_xml = tratar_propriedade_individual(k, v)
         if no_xml:
             xml_props.append(f"            {no_xml}")
     return "\n".join(xml_props)
