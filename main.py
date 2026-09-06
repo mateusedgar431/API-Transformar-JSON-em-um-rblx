@@ -23,9 +23,9 @@ SERVICOS_MESTRES = {
     "chat": "Chat"
 }
 
-# Mapeamento completo de Tokens Enum oficiais do Roblox
+# Tabela completa de Enums numéricos do Roblox
 MAPA_ENUM_NUMERICO = {
-    # ScreenOrientation (Enum.ScreenOrientation)
+    # ScreenOrientation
     "LandscapeLeft": 0,
     "LandscapeRight": 1,
     "Portrait": 2,
@@ -58,13 +58,13 @@ MAPA_ENUM_NUMERICO = {
     "DiamondPlate": 1072,
     "CorrodedMetal": 1088,
 
-    # Technology (Lighting)
+    # Technology / Lighting
     "Compatibility": 0,
     "Voxel": 1,
     "ShadowMap": 2,
     "Future": 3,
 
-    # SurfaceType / FormFactor / PartType
+    # FormFactor / PartType / SurfaceType
     "Smooth": 0, "Glue": 1, "Weld": 2, "Studs": 3, "Inlet": 4, "Universal": 5, "Hinge": 6, "Motor": 7, "SteppingMotor": 8,
     "Ball": 0, "Block": 1, "Cylinder": 2, "Wedge": 3, "CornerWedge": 4,
 
@@ -92,30 +92,40 @@ def tratar_propriedade_individual(nome_prop, valor):
     if valor is None or nome_prop in ["ClassName", "Name", "Parent", "FormFactor"]:
         return ""
 
-    # 1. BOOLEANOS (PRIORIDADE ALTA - Impede que True/False vire int 1/0 ou Caia em String)
+    # 1. TRATAMENTO ESTRITO DE BOOLEANOS (Garante que true fique true e false fique false)
     if isinstance(valor, bool):
-        val_str = "true" if valor else "false"
-        return f'<bool name="{nome_prop}">{val_str}</bool>'
+        val_bool_str = "true" if valor is True else "false"
+        return f'<bool name="{nome_prop}">{val_bool_str}</bool>'
 
-    # 2. STRINGS E ENUMS
+    # 2. TRATAMENTO DE ENUMS E STRINGS
     if isinstance(valor, str):
-        # Limpa prefixos de Enum se houver (ex: "Enum.ScreenOrientation.Sensor" -> "Sensor")
-        val_clean = valor.split(".")[-1] if "." in valor else valor
+        val_limpo = valor.strip()
+        
+        # Trata strings no formato "Enum.Grupo.Item" ou "Item"
+        if val_limpo.startswith("Enum."):
+            partes = val_limpo.split(".")
+            val_limpo = partes[-1]
 
-        # Se for um Enum conhecido (ScreenOrientation, Material, Technology, etc)
-        if val_clean in MAPA_ENUM_NUMERICO:
-            token_num = MAPA_ENUM_NUMERICO[val_clean]
-            return f'<token name="{nome_prop}">{token_num}</token>'
+        # Se for um Enum presente na tabela oficial
+        if val_limpo in MAPA_ENUM_NUMERICO:
+            token_val = MAPA_ENUM_NUMERICO[val_limpo]
+            return f'<token name="{nome_prop}">{token_val}</token>'
 
-        # Se for ID / Asset / Textura
-        if nome_prop in ["Texture", "Image", "TextureId", "ImageId", "MeshId", "SoundId"] or valor.startswith("rbxassetid://"):
-            return f'<Content name="{nome_prop}"><url>{saxutils.escape(valor)}</url></Content>'
+        # Se for link/content de asset
+        if nome_prop in ["Texture", "Image", "TextureId", "ImageId", "MeshId", "SoundId"] or val_limpo.startswith("rbxassetid://"):
+            return f'<Content name="{nome_prop}"><url>{saxutils.escape(val_limpo)}</url></Content>'
 
-        # String padrão
-        return f'<string name="{nome_prop}">{saxutils.escape(valor)}</string>'
+        # String normal
+        return f'<string name="{nome_prop}">{saxutils.escape(val_limpo)}</string>'
 
-    # 3. TABLES / DICIONÁRIOS (UDim2, Vector3, Color3)
+    # 3. DICIONÁRIOS / TABELAS (Color3, Vector3, UDim2)
     if isinstance(valor, dict):
+        # Se o Enum vier formatado como dicionário/tabela de Luau (ex: {"EnumType": ..., "Name": "Sensor"})
+        if "Name" in valor and "EnumType" in valor:
+            nome_enum = str(valor["Name"]).strip()
+            if nome_enum in MAPA_ENUM_NUMERICO:
+                return f'<token name="{nome_prop}">{MAPA_ENUM_NUMERICO[nome_enum]}</token>'
+
         # UDim2
         if "X" in valor and "Y" in valor and isinstance(valor.get("X"), dict) and isinstance(valor.get("Y"), dict):
             xs = float(valor["X"].get("Scale", valor["X"].get("scale", 0)))
@@ -137,7 +147,7 @@ def tratar_propriedade_individual(nome_prop, valor):
             rf, gf, bf = converter_cor(valor)
             return f'<Color3 name="{nome_prop}"><R>{rf}</R><G>{gf}</G><B>{bf}</B></Color3>'
 
-    # 4. ARRAYS / LISTAS (CFrame / Matrix)
+    # 4. ARRAYS (CFrame)
     if isinstance(valor, list):
         if len(valor) in [12, 16]:
             return f'''<CoordinateFrame name="{nome_prop}">
@@ -147,7 +157,7 @@ def tratar_propriedade_individual(nome_prop, valor):
                 <R20>{valor[9]}</R20><R21>{valor[10]}</R21><R22>{valor[11]}</R22>
             </CoordinateFrame>'''
 
-    # 5. NÚMEROS (Int / Float)
+    # 5. NÚMEROS DIRETO
     if isinstance(valor, float):
         return f'<float name="{nome_prop}">{valor}</float>'
 
