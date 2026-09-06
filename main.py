@@ -76,16 +76,6 @@ PROPRIEDADES_PADRAO = {
     "Chat": {}
 }
 
-MAPA_ENUM = {
-    "Compatibility": 0, "Voxel": 1, "ShadowMap": 2, "Future": 3,
-    "Smooth": 0, "Glue": 1, "Weld": 2, "Studs": 3, "Inlet": 4, 
-    "Universal": 5, "Hinge": 6, "Motor": 7, "SteppingMotor": 8,
-    "Right": 0, "Top": 1, "Back": 2, "Left": 3, "Bottom": 4, "Front": 5,
-    "Plastic": 256, "SmoothPlastic": 272, "Neon": 288, "Wood": 512, "Metal": 1088, "Grass": 1280,
-    "Custom": 0, "Scriptable": 1, "Track": 2, "Follow": 3,
-    "NoReverb": 0, "Generic": 1000, "PaddedCell": 2000, "Room": 3000, "Bathroom": 4000, "Cave": 8000
-}
-
 MAPA_PROPRIEDADES_CANONICAS = {
     "ambient": "Ambient",
     "outdoorambient": "OutdoorAmbient",
@@ -122,9 +112,9 @@ PROPS_BRICKCOLOR = {
 def converter_cor(valor):
     r, g, b = 0.0, 0.0, 0.0
     if isinstance(valor, dict):
-        r = float(valor.get("R", 0.0))
-        g = float(valor.get("G", 0.0))
-        b = float(valor.get("B", 0.0))
+        r = float(valor.get("R", valor.get("r", 0.0)))
+        g = float(valor.get("G", valor.get("g", 0.0)))
+        b = float(valor.get("B", valor.get("b", 0.0)))
     elif isinstance(valor, (list, tuple)) and len(valor) >= 3:
         r, g, b = float(valor[0]), float(valor[1]), float(valor[2])
 
@@ -143,12 +133,12 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
     # 1. TRATAMENTO DE LISTAS (ColorSequence, NumberSequence, CFrame)
     if isinstance(valor, list) and len(valor) > 0:
         # ColorSequence
-        if isinstance(valor[0], dict) and "Value" in valor[0] and isinstance(valor[0]["Value"], dict) and "R" in valor[0]["Value"]:
+        if isinstance(valor[0], dict) and "Value" in valor[0] and isinstance(valor[0]["Value"], dict) and ("R" in valor[0]["Value"] or "r" in valor[0]["Value"]):
             seq_xml = f'<ColorSequence name="{nome_prop}">'
             for kp in valor:
                 if isinstance(kp, dict):
                     rf, gf, bf = converter_cor(kp.get("Value", {}))
-                    t_val = float(kp.get("Time", 0.0))
+                    t_val = float(kp.get("Time", kp.get("time", 0.0)))
                     seq_xml += f'<ColorSequenceKeypoint time="{t_val}"><R>{rf}</R><G>{gf}</G><B>{bf}</B></ColorSequenceKeypoint>'
             seq_xml += '</ColorSequence>'
             return seq_xml
@@ -158,9 +148,9 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
             seq_xml = f'<NumberSequence name="{nome_prop}">'
             for kp in valor:
                 if isinstance(kp, dict):
-                    t_val = float(kp.get("Time", 0.0))
-                    v_val = float(kp.get("Value", 0.0))
-                    e_val = float(kp.get("Envelope", 0.0))
+                    t_val = float(kp.get("Time", kp.get("time", 0.0)))
+                    v_val = float(kp.get("Value", kp.get("value", 0.0)))
+                    e_val = float(kp.get("Envelope", kp.get("envelope", 0.0)))
                     seq_xml += f'<NumberSequenceKeypoint time="{t_val}"><Value>{v_val}</Value><Envelope>{e_val}</Envelope></NumberSequenceKeypoint>'
             seq_xml += '</NumberSequence>'
             return seq_xml
@@ -178,19 +168,19 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
     if isinstance(valor, dict):
         # UDim2 {X={Scale, Offset}, Y={Scale, Offset}}
         if "X" in valor and "Y" in valor and isinstance(valor.get("X"), dict) and isinstance(valor.get("Y"), dict):
-            xs = float(valor["X"].get("Scale", 0))
-            xo = int(valor["X"].get("Offset", 0))
-            ys = float(valor["Y"].get("Scale", 0))
-            yo = int(valor["Y"].get("Offset", 0))
+            xs = float(valor["X"].get("Scale", valor["X"].get("scale", 0)))
+            xo = int(valor["X"].get("Offset", valor["X"].get("offset", 0)))
+            ys = float(valor["Y"].get("Scale", valor["Y"].get("scale", 0)))
+            yo = int(valor["Y"].get("Offset", valor["Y"].get("offset", 0)))
             return f'''<UDim2 name="{nome_prop}">
                 <XS>{xs}</XS><XO>{xo}</XO>
                 <YS>{ys}</YS><YO>{yo}</YO>
             </UDim2>'''
 
         # UDim {Scale, Offset}
-        if "Scale" in valor and "Offset" in valor and "X" not in valor:
-            sc = float(valor.get("Scale", 0))
-            off = int(valor.get("Offset", 0))
+        if ("Scale" in valor or "scale" in valor) and ("Offset" in valor or "offset" in valor) and "X" not in valor:
+            sc = float(valor.get("Scale", valor.get("scale", 0)))
+            off = int(valor.get("Offset", valor.get("offset", 0)))
             return f'<UDim name="{nome_prop}"><S>{sc}</S><O>{off}</O></UDim>'
 
         # Vector3 {X, Y, Z}
@@ -210,7 +200,7 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
                 pass
 
         # Color3 {R, G, B}
-        if "R" in valor and "G" in valor and "B" in valor:
+        if ("R" in valor or "r" in valor) and ("G" in valor or "g" in valor) and ("B" in valor or "b" in valor):
             rf, gf, bf = converter_cor(valor)
             return f'<Color3 name="{nome_prop}"><R>{rf}</R><G>{gf}</G><B>{bf}</B></Color3>'
 
@@ -260,15 +250,11 @@ def tratar_propriedade_individual(nome_prop_raw, valor, props_dict=None):
     if nome_prop == "TimeOfDay":
         return f'<string name="TimeOfDay">{saxutils.escape(str(valor))}</string>'
 
-    # Enums ("Enum.Categoria.Item" ou chave limpa)
-    e_enum = (
-        nome_prop in ["Shape", "Font", "PartType", "Face", "NormalId", "Technology", "CameraType", "Material", "AmbientReverb"] or
-        nome_prop.endswith("Surface") or nome_prop.endswith("Type") or 
-        nome_prop.endswith("Style") or nome_prop.endswith("Mode")
-    )
-    if e_enum or (isinstance(valor, str) and (valor.startswith("Enum.") or valor in MAPA_ENUM)):
-        val_clean = str(valor).split(".")[-1]
-        token_val = MAPA_ENUM.get(val_clean, val_clean)
+    # 3. TRATAMENTO DINÂMICO DE ENUMS (Garante equivalência com Enum:GetEnums())
+    # Se o valor começar com "Enum." ou for uma string enviada como Enum do Lua
+    if isinstance(valor, str) and valor.startswith("Enum."):
+        # Extrai o token final (ex: "Enum.Material.Plastic" -> "Plastic")
+        token_val = valor.split(".")[-1]
         return f'<token name="{nome_prop}">{token_val}</token>'
 
     if nome_prop in PROPS_BRICKCOLOR and isinstance(valor, (str, int)):
