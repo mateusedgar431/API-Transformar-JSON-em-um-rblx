@@ -331,5 +331,31 @@ def publicar():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
+@app.route('/carregarasset', methods=['POST'])
+def carregarasset():
+    try:
+        data = request.get_json()
+        asset_id = data.get("asset_id")
+
+        if not asset_id:
+            return jsonify({"success": False, "error": "ID nao fornecido"}), 400
+
+        # API publica do Roblox para detalhes do asset
+        url = f"https://economy.roblox.com/v2/assets/{asset_id}/details"
+        res = requests.get(url, headers={"User-Agent": "Roblox/WinInet"})
+        
+        if res.status_code == 200:
+            info = res.json()
+            return jsonify({
+                "success": True,
+                "name": info.get("Name"),
+                "asset_id": asset_id
+            })
+        
+        return jsonify({"success": False, "error": "Asset nao encontrado"}), 404
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
