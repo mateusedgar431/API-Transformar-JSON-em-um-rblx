@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 import requests
 import xml.sax.saxutils as saxutils
+import rbxblx
 
 app = Flask(__name__)
 
@@ -335,24 +336,48 @@ def publicar():
 def carregarasset():
     try:
         data = request.get_json()
-        asset_id = data.get("asset_id")
+        if not data:
+            return jsonify({"success": False, "error": "JSON invalido"}), 400
 
+        asset_id = data.get("asset_id")
         if not asset_id:
             return jsonify({"success": False, "error": "ID nao fornecido"}), 400
 
-        # API publica do Roblox para detalhes do asset
-        url = f"https://economy.roblox.com/v2/assets/{asset_id}/details"
-        res = requests.get(url, headers={"User-Agent": "Roblox/WinInet"})
+        # 1. Baixa o arquivo binário/XML do Asset na CDN do Roblox
+        location_url = f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}"
+        headers = {"User-Agent": "Roblox/WinInet"}
         
-        if res.status_code == 200:
-            info = res.json()
+        asset_response = requests.get(location_url, headers=headers)
+        if asset_response.status_code != 200:
             return jsonify({
-                "success": True,
-                "name": info.get("Name"),
-                "asset_id": asset_id
-            })
-        
-        return jsonify({"success": False, "error": "Asset nao encontrado"}), 404
+                "success": False, 
+                "error": f"Nao foi possivel baixar o asset. Status: {asset_response.status_code}"
+            }), 400
+
+        # 2. Processa o arquivo do Roblox recebido
+        model_file = rbxblx.load_from_bytes(asset_response.content)
+        parts_list = []
+
+        # 3. Percorre a árvore de objetos e extrai as partes
+        for instance in model_file.get_descendants():
+            if instance.class_name in ["Part", "WedgePart", "CornerWedgePart", "MeshPart"]:
+                pos = instance.get_property("Position") or [0, 0, 0]
+                size = instance.get_property("Size") or [4, 1, 2]
+                color = instance.get_property("Color3uint8") or [255, 255, 255]
+
+                parts_list.append({
+                    "Name": instance.name,
+                    "ClassName": instance.class_name,
+                    "Position": [pos[0], pos[1], pos[2]],
+                    "Size": [size[0], size[1], size[2]],
+                    "Color": [color[0], color[1], color[2]]
+                })
+
+        return jsonify({
+            "success": True,
+            "asset_id": asset_id,
+            "parts": parts_list
+        })
 
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
