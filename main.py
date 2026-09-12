@@ -333,9 +333,10 @@ def publicar():
 
 @app.route("/carregarasset", methods=["POST", "GET"])
 def carregarasset():
+    diagnostico = {}
     try:
+        # 1. Tenta capturar o asset_id de todas as fontes
         asset_id = None
-
         if request.is_json:
             data = request.get_json(silent=True) or {}
             asset_id = data.get("assetId")
@@ -348,59 +349,126 @@ def carregarasset():
         if not asset_id:
             asset_id = request.args.get("assetId")
 
+        diagnostico["asset_id_recebido"] = asset_id
+
         if not asset_id:
             return (
                 jsonify(
-                    {"error": "Nenhum assetId valido foi enviado na requisicao."}
+                    {
+                        "sucesso": False,
+                        "etapa": "validacao_id",
+                        "erro": "Nenhum assetId valido foi enviado na requisicao.",
+                        "diagnostico": diagnostico,
+                    }
                 ),
-                400,
+                200,
             )
 
-        # Headers ajustados com os valores padrão aceitos pela API assetdelivery
+        # 2. Cabeçalhos exigidos pela API do Roblox
         headers = {
             "User-Agent": "Roblox/WinInet",
             "Accept-Encoding": "gzip, deflate",
             "Roblox-Place-Id": "1",
-            "Accept": "*/*",
+            "Accept": "application/json",
             "AssetFormat": "rbxm",
             "Roblox-AssetFormat": "rbxm",
         }
 
+        # 3. Requisição para o Roblox
         meta_url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
         meta_res = requests.get(meta_url, headers=headers, timeout=10)
 
-        # Se o Roblox retornar erro, envia a resposta exata dele no JSON para sabermos o motivo
+        diagnostico["roblox_status_code"] = meta_res.status_code
+
         if meta_res.status_code != 200:
             return (
                 jsonify(
                     {
-                        "error_roblox": meta_res.text,
+                        "sucesso": False,
+                        "etapa": "meta_res_roblox",
                         "status_code": meta_res.status_code,
+                        "roblox_resposta_raw": meta_res.text,
+                        "diagnostico": diagnostico,
                     }
                 ),
-                400,
+                200,
             )
 
-        data = meta_res.json()
+        # 4. Processa o JSON retornado pelo Roblox
+        try:
+            data_json = meta_res.json()
+            diagnostico["json_roblox"] = data_json
+        except Exception as json_err:
+            return (
+                jsonify(
+                    {
+                        "sucesso": False,
+                        "etapa": "parse_json",
+                        "erro": str(json_err),
+                        "resposta_raw": meta_res.text,
+                        "diagnostico": diagnostico,
+                    }
+                ),
+                200,
+            )
 
-        locations = data.get("locations", [])
+        locations = data_json.get("locations", [])
         if not locations or "location" not in locations[0]:
-            return jsonify({"error": "URL do arquivo nao encontrada na CDN."}), 404
+            return (
+                jsonify(
+                    {
+                        "sucesso": False,
+                        "etapa": "extracao_cdn",
+                        "erro": "URL da CDN nao foi encontrada na resposta do Roblox.",
+                        "json_recebido": data_json,
+                        "diagnostico": diagnostico,
+                    }
+                ),
+                200,
+            )
 
         cdn_url = locations[0]["location"]
+        diagnostico["cdn_url"] = cdn_url
 
+        # 5. Download do binário na CDN
         asset_file = requests.get(
             cdn_url, headers={"User-Agent": "Roblox/WinInet"}, timeout=15
         )
+        diagnostico["cdn_status_code"] = asset_file.status_code
 
+        if asset_file.status_code != 200:
+            return (
+                jsonify(
+                    {
+                        "sucesso": False,
+                        "etapa": "download_cdn",
+                        "status_code": asset_file.status_code,
+                        "diagnostico": diagnostico,
+                    }
+                ),
+                200,
+            )
+
+        # Se tudo der certo, retorna o arquivo binário direto
         return Response(
             asset_file.content,
-            status=asset_file.status_code,
+            status=200,
             content_type="application/octet-stream",
         )
 
     except Exception as e:
-        return jsonify({"erro_excecao_python": str(e)}), 400
+        # Pega qualquer erro de execução no Python e envia como JSON 200 para depurar no Studio
+        return (
+            jsonify(
+                {
+                    "sucesso": False,
+                    "etapa": "excecao_python",
+                    "erro_excecao": str(e),
+                    "diagnostico": diagnostico,
+                }
+            ),
+            200,
+        )
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
