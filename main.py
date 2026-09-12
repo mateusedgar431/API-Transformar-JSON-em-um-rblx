@@ -331,51 +331,43 @@ def publicar():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
-@app.route("/carregarasset", methods=["GET"], strict_slashes=False)
+@app.route("/carregarasset", methods=["GET"])
 def carregarasset():
-    import flask
-    import requests
+  import flask
+  import requests
 
-    try:
-        asset_id = flask.request.args.get("assetId")
+  try:
+    asset_id = flask.request.args.get("assetId")
+    if not asset_id:
+      return flask.jsonify({"erro": "Asset ID nao informado"}), 400
 
-        if not asset_id:
-            return flask.jsonify({"erro": "Asset ID nao informado"}), 400
+    roblox_url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
+    headers = {
+        "User-Agent": "Roblox/WinInet",
+        "Accept": "*/*",
+        "Accept-Encoding": "gzip, deflate",
+        "Roblox-Place-Id": "0",
+        "AssetType": "Model",
+        "AssetFormat": "Binary",
+        "Roblox-AssetFormat": "Binary",
+    }
 
-        # Endpoint v2 oficial com o parâmetro na URL
-        roblox_url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
-        
-        # Headers obrigatórios exigidos pelo schema da API v2
-        headers = {
-            "User-Agent": "Roblox/WinInet",
-            "Accept": "*/*",
-            "Accept-Encoding": "gzip, deflate",
-            "Roblox-Place-Id": "0",
-            "AssetType": "Model",
-            "AssetFormat": "Binary",
-            "Roblox-AssetFormat": "Binary",
-        }
+    res = requests.get(
+        roblox_url, headers=headers, timeout=15, allow_redirects=True
+    )
+    if res.status_code != 200:
+      return (
+          flask.jsonify(
+              {"erro": f"Status do Roblox: {res.status_code}", "detalhe": res.text}
+          ),
+          312,
+      )
 
-        res = requests.get(
-            roblox_url, headers=headers, timeout=15, allow_redirects=True
-        )
-
-        if res.status_code != 200:
-            return (
-                flask.jsonify(
-                    {"erro": f"Status do Roblox: {res.status_code}", "detalhe": res.text}
-                ),
-                312,
-            )
-
-        return flask.Response(
-            res.content,
-            status=200,
-            content_type="application/octet-stream",
-        )
-
-    except Exception as err:
-        return flask.jsonify({"erro": str(err)}), 500
+    return flask.Response(
+        res.content, status=200, content_type="application/octet-stream"
+    )
+  except Exception as err:
+    return flask.jsonify({"erro": str(err)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
