@@ -338,7 +338,7 @@ def carregarasset():
         asset_id = data.get("asset_id")
 
         if not asset_id:
-            return jsonify({"success": False, "error": "ID nao fornecido", "parts": []}), 400
+            return jsonify({"success": False, "error": "ID nao fornecido", "status_code": 400, "name": "Erro", "parts": []}), 400
 
         url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
         
@@ -354,12 +354,20 @@ def carregarasset():
         
         res = requests.get(url, headers=headers)
         parts_list = []
+        asset_name = f"Asset_{asset_id}"
 
         if res.status_code == 200:
             content_bytes = res.content
+            try:
                 content_str = content_bytes.decode('utf-8', errors='ignore')
                 if "<roblox" in content_str:
                     root = ET.fromstring(content_str)
+                    
+                    # Tenta capturar o nome real do modelo se existir no XML
+                    name_prop = root.find(".//Item/Properties/string[@name='Name']")
+                    if name_prop is not None and name_prop.text:
+                        asset_name = name_prop.text
+
                     for item in root.findall(".//Item"):
                         class_type = item.get("class")
                         if class_type in ["Part", "WedgePart", "CornerWedgePart", "MeshPart"]:
@@ -373,22 +381,23 @@ def carregarasset():
                                 "Size": [4, 1, 2],
                                 "Color": [255, 255, 255]
                             })
-            except Exception:
-                pass
+            except Exception as parse_err:
+                print(f"Erro ao parsear XML: {parse_err}")
 
+        # Se não achar partes pelo XML, garante o retorno estruturado para depuração
         if not parts_list:
             parts_list.append({
-                "Name": "DefaultPart",
+                "Name": "FallbackPart",
                 "ClassName": "Part",
                 "Position": [0, 5, 0],
                 "Size": [4, 4, 4],
-                "Color": [0, 170, 255]
+                "Color": [255, 0, 0]
             })
 
         return jsonify({
             "success": True,
             "status_code": res.status_code,
-            "name": f"Asset_{asset_id}",
+            "name": asset_name,
             "parts": parts_list
         })
 
@@ -396,6 +405,8 @@ def carregarasset():
         return jsonify({
             "success": False,
             "error": str(e),
+            "status_code": 500,
+            "name": "ErroServidor",
             "parts": []
         }), 500
 
