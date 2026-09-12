@@ -375,7 +375,7 @@ def carregarasset():
                     "erro": f"ID invalido ou nao encontrado. Recebido: {asset_id}",
                 }
             ),
-            400,
+            399,
         )
 
     # 4. Baixa o modelo da API v1 do Roblox
