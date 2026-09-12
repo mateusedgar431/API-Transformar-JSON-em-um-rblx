@@ -339,35 +339,24 @@ def carregarasset():
     import requests
 
     try:
-        asset_id = None
-
-        # 1. Pega o ID via URL (caso use GetAsync do Roblox)
+        # Pega o ID da URL (?assetId=...) ou extrai do corpo
         asset_id = flask.request.args.get("assetId")
 
-        # 2. Pega o ID via corpo da requisição (caso use PostAsync do Roblox)
         if not asset_id:
             raw_data = flask.request.get_data(as_text=True) or ""
+            numeros = re.findall(r"\d+", raw_data)
+            if numeros:
+                asset_id = numeros[0]
 
-            # Se vier JSON
-            if raw_data.strip().startswith("{"):
-                try:
-                    payload = json.loads(raw_data)
-                    if isinstance(payload, dict):
-                        asset_id = payload.get("assetId")
-                except Exception:
-                    pass
-
-            # Se vier texto simples ou números
-            if not asset_id:
-                numeros = re.findall(r"\d+", raw_data)
-                if numeros:
-                    asset_id = numeros[0]
-
-        # Se mesmo assim o ID não for encontrado
         if not asset_id:
-            return flask.jsonify({"erro": "Asset ID nao informado"}), 400
+            return (
+                flask.jsonify(
+                    {"sucesso": False, "erro": "Asset ID nao fornecido."}
+                ),
+                404,
+            )
 
-        # 3. Busca o modelo binário no Roblox
+        # Download direto da API v1 do Roblox
         roblox_url = f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}"
         headers = {
             "User-Agent": "Roblox/WinInet",
@@ -383,13 +372,14 @@ def carregarasset():
             return (
                 flask.jsonify(
                     {
-                        "erro_roblox": f"Roblox recusou a requisição com status {res.status_code}"
+                        "sucesso": False,
+                        "status_roblox": res.status_code,
+                        "detalhe": res.text,
                     }
                 ),
-                400,
+                312,
             )
 
-        # 4. Retorna os dados para o Roblox Studio
         return flask.Response(
             res.content,
             status=200,
@@ -397,7 +387,7 @@ def carregarasset():
         )
 
     except Exception as err:
-        return flask.jsonify({"erro_servidor": str(err)}), 400
+        return flask.jsonify({"sucesso": False, "erro": str(err)}), 312
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
