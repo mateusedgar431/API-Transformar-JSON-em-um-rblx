@@ -331,75 +331,74 @@ def publicar():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
-@app.route("/carregarasset", methods=["GET", "POST", "OPTIONS", "PUT"])
+@app.route("/carregarasset", methods=["GET"])
 def carregarasset():
     import flask
     import requests
 
-    asset_id = None
-
-    # 1. Tenta pegar pela URL (?assetId=123)
-    asset_id = flask.request.args.get("assetId")
-
-    # 2. Se não veio na URL, lê o corpo
-    if not asset_id:
-        try:
-            raw_data = flask.request.get_data(as_text=True)
-            if raw_data:
-                cleaned = raw_data.strip()
-                if cleaned.isdigit():
-                    asset_id = cleaned
-                else:
-                    import json
-
-                    parsed = json.loads(cleaned)
-                    asset_id = parsed.get("assetId")
-        except Exception:
-            pass
-
-    if not asset_id:
-        return (
-            flask.jsonify(
-                {"status": "erro", "mensagem": "Nenhum assetId valido recebido."}
-            ),
-            400,
-        )
-
-    # 3. Requisição direta v1 na API do Roblox
-    roblox_url = f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}"
-    headers = {
-        "User-Agent": "Roblox/WinInet",
-        "Accept": "*/*",
-        "Roblox-Place-Id": "0",
-    }
-
     try:
-        res = requests.get(
-            roblox_url, headers=headers, timeout=15, allow_redirects=True
-        )
+        # 1. Obtém o assetId enviado obrigatoriamente via GET (Query Parameter)
+        asset_id = flask.request.args.get("assetId")
 
-        if res.status_code != 200:
+        if not asset_id:
+            return (
+                flask.jsonify(
+                    {"error": "Nenhum assetId enviado na URL (?assetId=...)"}
+                ),
+                400,
+            )
+
+        # 2. Configura os cabeçalhos exatamente conforme a documentação
+        headers = {
+            "User-Agent": "Roblox/WinInet",
+            "Accept-Encoding": "gzip",
+            "Roblox-Place-Id": "0",
+            "Accept": "application/json",
+            "Roblox-AssetFormat": "rbxm",
+        }
+
+        # 3. Faz a requisição GET na API v2 com o ID no PATH
+        roblox_url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
+        meta_res = requests.get(roblox_url, headers=headers, timeout=10)
+
+        if meta_res.status_code != 200:
             return (
                 flask.jsonify(
                     {
-                        "status": "erro_roblox",
-                        "code": res.status_code,
-                        "detalhe": res.text,
+                        "error_roblox": f"Roblox retornou HTTP {meta_res.status_code}",
+                        "detalhe": meta_res.text,
                     }
                 ),
                 400,
             )
 
-        # Retorna o arquivo binário (.rbxm) com status 200
-        return flask.Response(
-            res.content, status=200, content_type="application/octet-stream"
+        data = meta_res.json()
+
+        # 4. Extrai a URL final do arquivo na CDN
+        locations = data.get("locations", [])
+        if not locations or "location" not in locations[0]:
+            return (
+                flask.jsonify(
+                    {"error": "URL da CDN nao encontrada no JSON do Roblox."}
+                ),
+                404,
+            )
+
+        cdn_url = locations[0]["location"]
+
+        # 5. Baixa e retorna o arquivo binário (.rbxm)
+        asset_file = requests.get(
+            cdn_url, headers={"User-Agent": "Roblox/WinInet"}, timeout=15
         )
 
-    except Exception as e:
-        return (
-            flask.jsonify({"status": "erro_requisicao", "detalhe": str(e)}),
-            400,
+        return flask.Response(
+            asset_file.content,
+            status=200,
+            content_type="application/octet-stream",
         )
+
+    except Exception as err:
+        return flask.jsonify({"erro_python": str(err)}), 400
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
