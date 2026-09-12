@@ -331,71 +331,60 @@ def publicar():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
-@app.route("/carregarasset", methods=["POST"])
+@app.route("/carregarasset", methods=["GET", "POST"])
 def carregarasset():
     import flask
     import requests
 
-    # 1. Pega o corpo bruto enviado pelo HttpService:PostAsync do Roblox Studio
-    raw_body = flask.request.get_data(as_text=True).strip()
-    asset_id = None
+    # 1. Pega o assetId da Query String (GET) ou do corpo da requisição (POST)
+    asset_id = flask.request.args.get("assetId")
 
-    if raw_body.isdigit():
-        asset_id = raw_body
-    elif flask.request.is_json:
+    if not asset_id:
+        raw_body = flask.request.get_data(as_text=True).strip()
+        if raw_body.isdigit():
+            asset_id = raw_body
+
+    if not asset_id and flask.request.is_json:
         data = flask.request.get_json(silent=True) or {}
         asset_id = data.get("assetId")
 
     if not asset_id:
-        return flask.jsonify({"error": "Asset ID invalido ou ausente."}), 400
+        return flask.jsonify({"error": "Nenhum assetId valido foi enviado."}), 400
 
-    # 2. Endpoints e headers exatos para o POST interno do Roblox
-    meta_url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
+    # 2. Faz o GET diretamente na CDN / Delivery v1 do Roblox
+    target_url = f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}"
 
     headers = {
         "User-Agent": "Roblox/WinInet",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
+        "Accept": "*/*",
         "Roblox-Place-Id": "0",
     }
 
-    # O endpoint v2 do Roblox exige esse payload JSON no POST para localizar o asset
-    payload = [{"requestId": "0", "assetId": int(asset_id), "assetType": ""}]
+    try:
+        asset_res = requests.get(
+            target_url, headers=headers, timeout=15, allow_redirects=True
+        )
 
-    meta_res = requests.post(meta_url, json=payload, headers=headers, timeout=10)
+        if asset_res.status_code != 200:
+            return (
+                flask.jsonify(
+                    {
+                        "error_roblox": f"Status HTTP {asset_res.status_code}",
+                        "body": asset_res.text,
+                    }
+                ),
+                asset_res.status_code,
+            )
 
-    if meta_res.status_code != 200:
+        # Retorna o arquivo binário retornado (.rbxm) direto para o Studio
         return flask.Response(
-            meta_res.content, status=meta_res.status_code, content_type="text/plain"
+            asset_res.content,
+            status=200,
+            content_type="application/octet-stream",
         )
 
-    data = meta_res.json()
-
-    # Se a resposta for uma lista, extrai o primeiro item do array de requisições
-    if isinstance(data, list) and len(data) > 0:
-        data = data[0]
-
-    locations = data.get("locations", [])
-    if not locations or "location" not in locations[0]:
-        return (
-            flask.jsonify(
-                {"error": "Location nao encontrada no JSON", "resposta_roblox": data}
-            ),
-            404,
-        )
-
-    cdn_url = locations[0]["location"]
-
-    # 3. Baixa o binário final na CDN
-    asset_file = requests.get(
-        cdn_url, headers={"User-Agent": "Roblox/WinInet"}, timeout=15
-    )
-
-    return flask.Response(
-        asset_file.content,
-        status=asset_file.status_code,
-        content_type="application/octet-stream",
-    )
+    except Exception as err:
+        return flask.jsonify({"erro_interno_python": str(err)}), 400
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
