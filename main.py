@@ -340,7 +340,6 @@ def carregarasset():
         if not asset_id:
             return jsonify({"success": False, "error": "ID nao fornecido", "parts": []}), 400
 
-        # Requisição direta focada no assetdelivery sem cookie ou OAuth
         url = f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}"
         headers = {"User-Agent": "Roblox/WinInet"}
         res = requests.get(url, headers=headers)
@@ -348,30 +347,35 @@ def carregarasset():
         parts_list = []
 
         if res.status_code == 200:
-            content_str = res.content.decode('utf-8', errors='ignore')
+            try:
+                content_str = res.content.decode('utf-8', errors='ignore')
+            except Exception:
+                content_str = ""
 
-            # Se o asset for em formato XML (.rbxmx)
             if "<roblox" in content_str:
-                import xml.etree.ElementTree as ET
                 root = ET.fromstring(content_str)
 
                 for item in root.findall(".//Item"):
                     class_type = item.get("class")
-                    if class_type in ["Part", "WedgePart", "MeshPart"]:
+                    if class_type in ["Part", "WedgePart", "CornerWedgePart", "MeshPart"]:
+                        name_elem = item.find("./Properties/string[@name='Name']")
+                        part_name = name_elem.text if (name_elem is not None and name_elem.text) else "Part"
+
                         parts_list.append({
-                            "Name": "Part",
+                            "Name": part_name,
                             "ClassName": class_type,
                             "Position": [0, 5, 0],
-                            "Size": [4, 1, 2]
+                            "Size": [4, 1, 2],
+                            "Color": [255, 255, 255]
                         })
 
-        # Fallback caso seja binario puro e venha vazio do assetdelivery
         if not parts_list:
             parts_list.append({
                 "Name": "FallbackPart",
                 "ClassName": "Part",
                 "Position": [0, 5, 0],
-                "Size": [4, 1, 2]
+                "Size": [4, 1, 2],
+                "Color": [0, 170, 255]
             })
 
         return jsonify({
