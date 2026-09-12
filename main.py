@@ -331,32 +331,30 @@ def publicar():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
+@app.route("/carregarasset/<asset_id>", methods=["GET", "POST"])
 @app.route("/carregarasset", methods=["GET", "POST"])
-def carregarasset():
+def carregarasset(asset_id=None):
     import flask
     import requests
 
     try:
-        # 1. Tenta capturar o assetId via URL (GET) ou via Corpo (POST)
-        asset_id = flask.request.args.get("assetId")
+        # 1. Tenta pegar o ID pelo PATH (/carregarasset/123), Query Param ou corpo
+        if not asset_id:
+            asset_id = flask.request.args.get("assetId")
 
         if not asset_id:
-            raw_body = flask.request.get_data(as_text=True).strip()
-            if raw_body.isdigit():
-                asset_id = raw_body
+            raw_data = flask.request.get_data(as_text=True).strip()
+            if raw_data.isdigit():
+                asset_id = raw_data
             elif flask.request.is_json:
                 data = flask.request.get_json(silent=True) or {}
                 asset_id = data.get("assetId")
 
         if not asset_id:
-            return (
-                flask.jsonify(
-                    {"error": "Nenhum assetId recebido na requisicao."}
-                ),
-                400,
-            )
+            return flask.jsonify({"error": "Asset ID nao fornecido"}), 400
 
-        # 2. Cabeçalhos conforme a documentação da API v2
+        # 2. Requisita na API do Roblox
+        roblox_url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
         headers = {
             "User-Agent": "Roblox/WinInet",
             "Accept-Encoding": "gzip",
@@ -365,15 +363,13 @@ def carregarasset():
             "Roblox-AssetFormat": "rbxm",
         }
 
-        # 3. Requisição GET interna para o Roblox
-        roblox_url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
         meta_res = requests.get(roblox_url, headers=headers, timeout=10)
 
         if meta_res.status_code != 200:
             return (
                 flask.jsonify(
                     {
-                        "error_roblox": f"Status HTTP {meta_res.status_code}",
+                        "error_roblox": f"HTTP {meta_res.status_code}",
                         "detalhe": meta_res.text,
                     }
                 ),
@@ -381,20 +377,18 @@ def carregarasset():
             )
 
         data = meta_res.json()
-
-        # 4. Extrai a URL final da CDN
         locations = data.get("locations", [])
         if not locations or "location" not in locations[0]:
             return (
                 flask.jsonify(
-                    {"error": "URL da CDN nao encontrada no JSON."}
+                    {"error": "CDN nao encontrada", "resposta": data}
                 ),
                 404,
             )
 
         cdn_url = locations[0]["location"]
 
-        # 5. Baixa o binário final (.rbxm)
+        # 3. Baixa o binário
         asset_file = requests.get(
             cdn_url, headers={"User-Agent": "Roblox/WinInet"}, timeout=15
         )
