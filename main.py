@@ -331,20 +331,20 @@ def publicar():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
-@app.route("/carregarasset", methods=["GET", "POST"])
+@app.route("/carregarasset", methods=['GET'])
 def carregarasset():
   try:
     asset_id = None
 
     # Captura o assetId via GET (Query String) ou POST (JSON / Form Data)
     if request.method == "GET":
-      asset_id = request.args.get("assetId") or request.args.get("id")
+      asset_id = request.args.get('assetId') or request.args.get('id')
     elif request.method == "POST":
       if request.is_json:
         data = request.get_json() or {}
-        asset_id = data.get("assetId") or data.get("id")
+        asset_id = data.get('assetId') or data.get('id')
       else:
-        asset_id = request.form.get("assetId") or request.form.get("id")
+        asset_id = request.form.get('assetId') or request.form.get('id')
 
     if not asset_id:
       return jsonify({"erro": "Asset ID nao informado"}), 400
