@@ -331,11 +331,11 @@ def publicar():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
-@app.route("/carregarasset_v2", methods=["GET"])
+@app.route("/carregarasset_v2", methods=['GET'])
 def carregarasset_v2():
   try:
     # Tenta pegar o ID da URL de várias formas possíveis para evitar 404
-    asset_id = flask.request.args.get("assetId") or flask.request.args.get("id")
+    asset_id = flask.request.args.get('assetId') or flask.request.args.get('id')
 
     if not asset_id:
       return flask.jsonify({"erro": "Asset ID nao informado"}), 400
