@@ -357,7 +357,6 @@ def carregarasset():
 
         if res.status_code == 200:
             content_bytes = res.content
-            try:
                 content_str = content_bytes.decode('utf-8', errors='ignore')
                 if "<roblox" in content_str:
                     root = ET.fromstring(content_str)
