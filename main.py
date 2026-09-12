@@ -331,15 +331,25 @@ def publicar():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
-@app.route("/carregarasset", methods=["GET"])
+@app.route("/carregarasset", methods=["GET", "POST"])
 def carregarasset():
   try:
-    # Captura o ID da query string (?assetId=... ou ?id=...)
-    asset_id = request.args.get("assetId") or request.args.get("id")
+    asset_id = None
+
+    # Captura o assetId via GET (Query String) ou POST (JSON / Form Data)
+    if request.method == "GET":
+      asset_id = request.args.get("assetId") or request.args.get("id")
+    elif request.method == "POST":
+      if request.is_json:
+        data = request.get_json() or {}
+        asset_id = data.get("assetId") or data.get("id")
+      else:
+        asset_id = request.form.get("assetId") or request.form.get("id")
 
     if not asset_id:
       return jsonify({"erro": "Asset ID nao informado"}), 400
 
+    # Requisição para a API v2 do Roblox com todas as headers obrigatórias
     roblox_url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
     headers = {
         "User-Agent": "Roblox/WinInet",
@@ -363,6 +373,7 @@ def carregarasset():
           400,
       )
 
+    # Retorna o binário (.rbxm) baixado diretamente para o Roblox Studio ou Navegador
     return flask.Response(
         res.content, status=200, content_type="application/octet-stream"
     )
