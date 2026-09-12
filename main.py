@@ -331,39 +331,48 @@ def publicar():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
-@app.route("/carregarasset", methods=["GET", "POST"])
+@app.route("/carregarasset", methods=["POST"])
 def carregarasset():
+    import json
     import flask
     import requests
 
+    asset_id = None
+
+    # 1. Tenta extrair o JSON enviado pelo PostAsync
+    data = flask.request.get_json(silent=True)
+    if data and isinstance(data, dict):
+        asset_id = data.get("assetId")
+
+    # 2. Se falhar, lê o corpo como string bruta
+    if not asset_id:
+        raw_text = flask.request.get_data(as_text=True).strip()
+        if raw_text.isdigit():
+            asset_id = raw_text
+        elif raw_text.startswith("{") and raw_text.endswith("}"):
+            try:
+                parsed = json.loads(raw_text)
+                asset_id = parsed.get("assetId")
+            except Exception:
+                pass
+
+    if not asset_id:
+        return (
+            flask.jsonify(
+                {"sucesso": False, "erro": "assetId nao encontrado no POST."}
+            ),
+            400,
+        )
+
+    # 3. Faz o download do binário direto da API v1 do Roblox
+    roblox_url = f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}"
+    headers = {
+        "User-Agent": "Roblox/WinInet",
+        "Accept": "*/*",
+        "Roblox-Place-Id": "0",
+    }
+
     try:
-        # Pega o assetId enviado por GET (?assetId=...) ou por POST no corpo
-        asset_id = flask.request.args.get("assetId")
-
-        if not asset_id:
-            raw_data = flask.request.get_data(as_text=True).strip()
-            if raw_data.isdigit():
-                asset_id = raw_data
-            elif flask.request.is_json:
-                data = flask.request.get_json(silent=True) or {}
-                asset_id = data.get("assetId")
-
-        if not asset_id:
-            return (
-                flask.jsonify(
-                    {"sucesso": False, "erro": "assetId nao informado."}
-                ),
-                400,
-            )
-
-        # Baixa o arquivo do Roblox usando o endpoint v1
-        roblox_url = f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}"
-        headers = {
-            "User-Agent": "Roblox/WinInet",
-            "Accept": "*/*",
-            "Roblox-Place-Id": "0",
-        }
-
         res = requests.get(
             roblox_url, headers=headers, timeout=15, allow_redirects=True
         )
