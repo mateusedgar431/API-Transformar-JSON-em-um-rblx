@@ -334,6 +334,7 @@ def publicar():
 @app.route("/carregarasset_v2", methods=['GET'])
 def carregarasset_v2():
   try:
+      return request
     # Tenta pegar o ID da URL de várias formas possíveis para evitar 404
     asset_id = flask.request.args.get('assetId') or flask.request.args.get('id')
 
