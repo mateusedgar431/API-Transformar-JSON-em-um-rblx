@@ -334,7 +334,6 @@ def publicar():
 @app.route("/carregarasset", methods=["POST", "GET"])
 def carregarasset():
     try:
-        # 1. Obtém o assetId enviado pelo Roblox Studio
         asset_id = None
 
         if request.is_json:
@@ -357,41 +356,39 @@ def carregarasset():
                 400,
             )
 
-        # 2. Os 6 headers estritamente obrigatorios da documentacao
+        # Headers ajustados com os valores padrão aceitos pela API assetdelivery
         headers = {
             "User-Agent": "Roblox/WinInet",
-            "Accept-Encoding": "gzip",
-            "Roblox-Place-Id": "0",
-            "AssetType": "Model",
-            "Accept": "application/json",
+            "Accept-Encoding": "gzip, deflate",
+            "Roblox-Place-Id": "1",
+            "Accept": "*/*",
             "AssetFormat": "rbxm",
             "Roblox-AssetFormat": "rbxm",
         }
 
-        # 3. Requisição para a API do Roblox com o assetId no caminho (path)
         meta_url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
         meta_res = requests.get(meta_url, headers=headers, timeout=10)
 
+        # Se o Roblox retornar erro, envia a resposta exata dele no JSON para sabermos o motivo
         if meta_res.status_code != 200:
             return (
                 jsonify(
                     {
-                        "error": f"Erro {meta_res.status_code} da API Roblox: {meta_res.text}"
+                        "error_roblox": meta_res.text,
+                        "status_code": meta_res.status_code,
                     }
                 ),
-                meta_res.status_code,
+                400,
             )
 
         data = meta_res.json()
 
-        # 4. Extrai a URL final do arquivo na CDN
         locations = data.get("locations", [])
         if not locations or "location" not in locations[0]:
             return jsonify({"error": "URL do arquivo nao encontrada na CDN."}), 404
 
         cdn_url = locations[0]["location"]
 
-        # 5. Baixa o binário do modelo na CDN
         asset_file = requests.get(
             cdn_url, headers={"User-Agent": "Roblox/WinInet"}, timeout=15
         )
@@ -403,7 +400,7 @@ def carregarasset():
         )
 
     except Exception as e:
-        return jsonify({"error_detalhado": str(e)}), 400
+        return jsonify({"erro_excecao_python": str(e)}), 400
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
