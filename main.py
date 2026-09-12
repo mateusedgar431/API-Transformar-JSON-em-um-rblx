@@ -331,5 +331,26 @@ def publicar():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
+@app.route("/carregarasset", methods=["GET"])
+def carregarasset():
+    # Obtém o ID enviado via parâmetro ?assetId=... ou usa o padrão informado
+    asset_id = request.args.get("assetId", default="857927023", type=str)
+    roblox_url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
+
+    headers = {
+        "User-Agent": "Roblox/WinInet",
+        "Accept": "application/json",
+    }
+
+    try:
+        response = requests.get(roblox_url, headers=headers, timeout=10)
+        return (
+            response.content,
+            response.status_code,
+            {"Content-Type": response.headers.get("Content-Type", "application/json")},
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
