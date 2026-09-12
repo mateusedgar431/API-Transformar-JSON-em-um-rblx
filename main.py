@@ -331,7 +331,7 @@ def publicar():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
-@app.route("/carregarasset", methods=["GET"])
+@app.route("/carregarasset", methods=["GET"], strict_slashes=False)
 def carregarasset():
     import flask
     import requests
@@ -342,11 +342,18 @@ def carregarasset():
         if not asset_id:
             return flask.jsonify({"erro": "Asset ID nao informado"}), 400
 
-        roblox_url = f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}"
+        # Endpoint v2 oficial com o parâmetro na URL
+        roblox_url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
+        
+        # Headers obrigatórios exigidos pelo schema da API v2
         headers = {
             "User-Agent": "Roblox/WinInet",
             "Accept": "*/*",
+            "Accept-Encoding": "gzip, deflate",
             "Roblox-Place-Id": "0",
+            "AssetType": "Model",
+            "AssetFormat": "Binary",
+            "Roblox-AssetFormat": "Binary",
         }
 
         res = requests.get(
@@ -356,7 +363,7 @@ def carregarasset():
         if res.status_code != 200:
             return (
                 flask.jsonify(
-                    {"erro": f"Status do Roblox: {res.status_code}"}
+                    {"erro": f"Status do Roblox: {res.status_code}", "detalhe": res.text}
                 ),
                 312,
             )
