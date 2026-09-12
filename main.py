@@ -340,14 +340,12 @@ def carregarasset():
         if not asset_id:
             return jsonify({
                 "success": False,
-                "asset_id": 0,
                 "status_code": 400,
                 "name": "Erro",
-                "parts": {}
+                "parts": []
             }), 400
 
         url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
-        
         headers = {
             "User-Agent": "Roblox/WinInet",
             "Accept-Encoding": "gzip, deflate",
@@ -359,7 +357,7 @@ def carregarasset():
         }
         
         res = requests.get(url, headers=headers)
-        parts_dict = {}
+        parts_list = []
         asset_name = f"Asset_{asset_id}"
 
         if res.status_code == 200:
@@ -368,59 +366,47 @@ def carregarasset():
                 content_str = content_bytes.decode('utf-8', errors='ignore')
                 if "<roblox" in content_str:
                     root = ET.fromstring(content_str)
-                    
                     name_prop = root.find(".//Item/Properties/string[@name='Name']")
                     if name_prop is not None and name_prop.text:
                         asset_name = name_prop.text
 
-                    for idx, item in enumerate(root.findall(".//Item")):
+                    for item in root.findall(".//Item"):
                         class_type = item.get("class")
                         if class_type in ["Part", "WedgePart", "CornerWedgePart", "MeshPart"]:
                             name_elem = item.find("./Properties/string[@name='Name']")
-                            part_name = name_elem.text if (name_elem is not None and name_elem.text) else f"Part_{idx}"
-
-                            parts_dict[part_name] = {
+                            part_name = name_elem.text if (name_elem is not None and name_elem.text) else "Part"
+                            parts_list.append({
                                 "Name": part_name,
                                 "ClassName": class_type,
                                 "Position": [0, 5, 0],
                                 "Size": [4, 1, 2],
                                 "Color": [255, 255, 255]
-                            }
+                            })
             except Exception:
                 pass
 
-        if not parts_dict:
-            parts_dict["FallbackPart"] = {
+        if not parts_list:
+            parts_list.append({
                 "Name": "FallbackPart",
                 "ClassName": "Part",
                 "Position": [0, 5, 0],
                 "Size": [4, 4, 4],
                 "Color": [0, 170, 255]
-            }
+            })
 
         return jsonify({
             "success": True,
-            "asset_id": asset_id,
             "status_code": res.status_code,
             "name": asset_name,
-            "parts": parts_dict
+            "parts": parts_list
         })
 
     except Exception as e:
         return jsonify({
             "success": False,
-            "asset_id": 0,
             "status_code": 500,
-            "name": "ErroServidor",
-            "parts": {
-                "ErrorPart": {
-                    "Name": "ErrorPart",
-                    "ClassName": "Part",
-                    "Position": [0, 5, 0],
-                    "Size": [2, 2, 2],
-                    "Color": [255, 0, 0]
-                }
-            }
+            "name": "Erro",
+            "parts": []
         }), 500
 
 if __name__ == '__main__':
