@@ -331,6 +331,12 @@ def publicar():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
+import requests
+import xml.etree.ElementTree as ET
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
 @app.route('/carregarasset', methods=['POST'])
 def carregarasset():
     try:
@@ -342,7 +348,8 @@ def carregarasset():
                 "success": False,
                 "status_code": 400,
                 "name": "Erro",
-                "parts": []
+                "parts": [],
+                "versao": "v2_nova"
             }), 400
 
         url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
@@ -398,7 +405,8 @@ def carregarasset():
             "success": True,
             "status_code": res.status_code,
             "name": asset_name,
-            "parts": parts_list
+            "parts": parts_list,
+            "versao": "v2_nova"
         })
 
     except Exception as e:
@@ -406,7 +414,8 @@ def carregarasset():
             "success": False,
             "status_code": 500,
             "name": "Erro",
-            "parts": []
+            "parts": [],
+            "versao": "v2_nova"
         }), 500
 
 if __name__ == '__main__':
