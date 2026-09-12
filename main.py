@@ -338,7 +338,12 @@ def carregarasset():
         asset_id = data.get("asset_id")
 
         if not asset_id:
-            return jsonify({"success": False, "error": "ID nao fornecido", "status_code": 400, "name": "Erro", "parts": []}), 400
+            return jsonify({
+                "success": False,
+                "status_code": 400,
+                "name": "Erro_Requisicao",
+                "parts": []
+            }), 400
 
         url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
         
@@ -363,7 +368,6 @@ def carregarasset():
                 if "<roblox" in content_str:
                     root = ET.fromstring(content_str)
                     
-                    # Tenta capturar o nome real do modelo se existir no XML
                     name_prop = root.find(".//Item/Properties/string[@name='Name']")
                     if name_prop is not None and name_prop.text:
                         asset_name = name_prop.text
@@ -381,10 +385,9 @@ def carregarasset():
                                 "Size": [4, 1, 2],
                                 "Color": [255, 255, 255]
                             })
-            except Exception as parse_err:
-                print(f"Erro ao parsear XML: {parse_err}")
+            except Exception:
+                pass
 
-        # Se não achar partes pelo XML, garante o retorno estruturado para depuração
         if not parts_list:
             parts_list.append({
                 "Name": "FallbackPart",
@@ -404,10 +407,15 @@ def carregarasset():
     except Exception as e:
         return jsonify({
             "success": False,
-            "error": str(e),
             "status_code": 500,
             "name": "ErroServidor",
-            "parts": []
+            "parts": [{
+                "Name": "ErrorPart",
+                "ClassName": "Part",
+                "Position": [0, 5, 0],
+                "Size": [2, 2, 2],
+                "Color": [255, 0, 0]
+            }]
         }), 500
 
 if __name__ == '__main__':
