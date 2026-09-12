@@ -333,52 +333,22 @@ def publicar():
 
 @app.route("/carregarasset", methods=["POST"])
 def carregarasset():
-    import json
     import flask
     import requests
 
-    asset_id = None
+    # Lê diretamente o texto bruto enviado no corpo
+    asset_id = flask.request.get_data(as_text=True).strip()
 
-    # 1. Tenta obter o assetId de Query String ou Form
-    asset_id = flask.request.form.get("assetId") or flask.request.args.get(
-        "assetId"
-    )
-
-    # 2. Tenta obter o JSON via Flask
-    if not asset_id:
-        data = flask.request.get_json(silent=True, force=True)
-        if isinstance(data, dict):
-            asset_id = data.get("assetId")
-
-    # 3. Tenta extrair manualmente da string do corpo
-    if not asset_id:
-        raw_text = flask.request.get_data(as_text=True).strip()
-        if raw_text.isdigit():
-            asset_id = raw_text
-        else:
-            try:
-                parsed = json.loads(raw_text)
-                if isinstance(parsed, dict):
-                    asset_id = parsed.get("assetId")
-            except Exception:
-                pass
-
-    if asset_id:
-        asset_id = str(asset_id).strip()
-
-    # Retorna HTTP 404 se o ID for inválido ou não for encontrado
+    # Se não houver números válidos no corpo
     if not asset_id or not asset_id.isdigit():
         return (
             flask.jsonify(
-                {
-                    "sucesso": False,
-                    "erro": f"ID invalido ou nao encontrado. Recebido: {asset_id}",
-                }
+                {"sucesso": False, "erro": "ID nao encontrado no corpo."}
             ),
             404,
         )
 
-    # 4. Faz a requisição na API v1 do Roblox
+    # Requisição para o Roblox
     roblox_url = f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}"
     headers = {
         "User-Agent": "Roblox/WinInet",
@@ -391,15 +361,10 @@ def carregarasset():
             roblox_url, headers=headers, timeout=15, allow_redirects=True
         )
 
-        # Retorna HTTP 312 caso a API do Roblox não retorne HTTP 200
         if res.status_code != 200:
             return (
                 flask.jsonify(
-                    {
-                        "sucesso": False,
-                        "status_roblox": res.status_code,
-                        "detalhe": res.text,
-                    }
+                    {"sucesso": False, "status_roblox": res.status_code}
                 ),
                 312,
             )
