@@ -333,33 +333,42 @@ def publicar():
 
 @app.route("/carregarasset", methods=["POST", "GET"])
 def carregarasset():
-    asset_id = None
-
-    if request.is_json:
-        data = request.get_json(silent=True) or {}
-        asset_id = data.get("assetId")
-    elif request.data:
-        raw_data = request.data.decode("utf-8").strip()
-        if raw_data.isdigit():
-            asset_id = raw_data
-
-    if not asset_id:
-        asset_id = request.args.get("assetId")
-
-    if not asset_id:
-        return (
-            jsonify({"error": "Nenhum assetId valido foi enviado na requisicao."}),
-            400,
-        )
-
-    headers = {
-        "User-Agent": "Roblox/WinInet",
-        "Accept": "application/json",
-        "Accept-Encoding": "gzip",
-        "Roblox-Place-Id": "0",
-    }
-
     try:
+        # 1. Obtém o assetId enviado pelo Roblox Studio
+        asset_id = None
+
+        if request.is_json:
+            data = request.get_json(silent=True) or {}
+            asset_id = data.get("assetId")
+
+        if not asset_id and request.data:
+            raw_data = request.data.decode("utf-8").strip()
+            if raw_data.isdigit():
+                asset_id = raw_data
+
+        if not asset_id:
+            asset_id = request.args.get("assetId")
+
+        if not asset_id:
+            return (
+                jsonify(
+                    {"error": "Nenhum assetId valido foi enviado na requisicao."}
+                ),
+                400,
+            )
+
+        # 2. Os 6 headers estritamente obrigatorios da documentacao
+        headers = {
+            "User-Agent": "Roblox/WinInet",
+            "Accept-Encoding": "gzip",
+            "Roblox-Place-Id": "0",
+            "AssetType": "Model",
+            "Accept": "application/json",
+            "AssetFormat": "rbxm",
+            "Roblox-AssetFormat": "rbxm",
+        }
+
+        # 3. Requisição para a API do Roblox com o assetId no caminho (path)
         meta_url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
         meta_res = requests.get(meta_url, headers=headers, timeout=10)
 
@@ -367,25 +376,22 @@ def carregarasset():
             return (
                 jsonify(
                     {
-                        "error": f"Erro {meta_res.status_code} ao buscar asset no Roblox."
+                        "error": f"Erro {meta_res.status_code} da API Roblox: {meta_res.text}"
                     }
                 ),
                 meta_res.status_code,
             )
 
-        # Descompacta o gzip caso o servidor do Roblox envie comprimido
-        if meta_res.headers.get("Content-Encoding") == "gzip":
-            decompressed_data = gzip.decompress(meta_res.content)
-            data = requests.compat.json.loads(decompressed_data)
-        else:
-            data = meta_res.json()
+        data = meta_res.json()
 
+        # 4. Extrai a URL final do arquivo na CDN
         locations = data.get("locations", [])
         if not locations or "location" not in locations[0]:
             return jsonify({"error": "URL do arquivo nao encontrada na CDN."}), 404
 
         cdn_url = locations[0]["location"]
 
+        # 5. Baixa o binário do modelo na CDN
         asset_file = requests.get(
             cdn_url, headers={"User-Agent": "Roblox/WinInet"}, timeout=15
         )
@@ -397,7 +403,7 @@ def carregarasset():
         )
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error_detalhado": str(e)}), 400
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
