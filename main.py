@@ -332,15 +332,13 @@ def publicar():
         return jsonify({"erro": str(e)}), 500
 
 @app.route("/carregarasset", methods=["GET", "POST"])
-@app.route("/carregarasset/<asset_id>", methods=["GET", "POST"])
-def carregarasset(asset_id=None):
+def carregarasset():
     import flask
     import requests
 
     try:
-        # 1. Captura o asset_id de qualquer fonte (URL /carregarasset/ID, query ?assetId=ID ou body)
-        if not asset_id:
-            asset_id = flask.request.args.get("assetId")
+        # Pega o assetId enviado por GET (?assetId=...) ou por POST no corpo
+        asset_id = flask.request.args.get("assetId")
 
         if not asset_id:
             raw_data = flask.request.get_data(as_text=True).strip()
@@ -353,15 +351,12 @@ def carregarasset(asset_id=None):
         if not asset_id:
             return (
                 flask.jsonify(
-                    {
-                        "sucesso": False,
-                        "erro": "Asset ID nao fornecido na requisicao.",
-                    }
+                    {"sucesso": False, "erro": "assetId nao informado."}
                 ),
                 400,
             )
 
-        # 2. Requisição para o endpoint v1 universal do Roblox (evita conflitos de headers)
+        # Baixa o arquivo do Roblox usando o endpoint v1
         roblox_url = f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}"
         headers = {
             "User-Agent": "Roblox/WinInet",
@@ -378,15 +373,13 @@ def carregarasset(asset_id=None):
                 flask.jsonify(
                     {
                         "sucesso": False,
-                        "etapa": "roblox_api",
                         "status_roblox": res.status_code,
-                        "detalhe": "Asset nao encontrado ou indisponivel no Roblox.",
+                        "detalhe": res.text,
                     }
                 ),
-                200,
+                400,
             )
 
-        # 3. Retorna o arquivo binário direto para o Roblox Studio
         return flask.Response(
             res.content,
             status=200,
@@ -394,16 +387,7 @@ def carregarasset(asset_id=None):
         )
 
     except Exception as err:
-        return (
-            flask.jsonify(
-                {
-                    "sucesso": False,
-                    "etapa": "excecao_python",
-                    "erro": str(err),
-                }
-            ),
-            200,
-        )
+        return flask.jsonify({"sucesso": False, "erro": str(err)}), 400
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
