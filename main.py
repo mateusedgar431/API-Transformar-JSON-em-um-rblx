@@ -333,48 +333,58 @@ def publicar():
 
 @app.route("/carregarasset", methods=["POST", "GET"])
 def carregarasset():
-    # Pega o ID enviado dentro do corpo do POST em JSON
-    data_json = request.get_json(silent=True) or {}
-    asset_id = data_json.get("assetId") or request.args.get("assetId")
+    asset_id = None
+
+    if request.is_json:
+        data = request.get_json(silent=True) or {}
+        asset_id = data.get("assetId")
+    elif request.data:
+        raw_data = request.data.decode("utf-8").strip()
+        if raw_data.isdigit():
+            asset_id = raw_data
 
     if not asset_id:
-        return jsonify({"error": "Nenhum assetId foi enviado no corpo ou na URL."}), 400
+        asset_id = request.args.get("assetId")
+
+    if not asset_id:
+        return (
+            jsonify({"error": "Nenhum assetId valido foi enviado na requisicao."}),
+            400,
+        )
 
     headers = {
         "User-Agent": "Roblox/WinInet",
         "Accept": "application/json",
+        "Accept-Encoding": "gzip",
         "Roblox-Place-Id": "0",
     }
 
     try:
-        # 1. Busca metadados do asset no Roblox
         meta_url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
         meta_res = requests.get(meta_url, headers=headers, timeout=10)
 
         if meta_res.status_code != 200:
             return (
-                jsonify({"error": "Asset nao encontrado no Roblox."}),
+                jsonify(
+                    {
+                        "error": f"Erro {meta_res.status_code} ao buscar asset no Roblox."
+                    }
+                ),
                 meta_res.status_code,
             )
 
         data = meta_res.json()
 
-        # 2. Extrai a URL direta da CDN
         locations = data.get("locations", [])
         if not locations or "location" not in locations[0]:
-            return (
-                jsonify(
-                    {"error": "URL do arquivo nao encontrada no JSON do Roblox."}
-                ),
-                404,
-            )
+            return jsonify({"error": "URL do arquivo nao encontrada na CDN."}), 404
 
         cdn_url = locations[0]["location"]
 
-        # 3. Baixa o arquivo do asset
-        asset_file = requests.get(cdn_url, headers=headers, timeout=15)
+        asset_file = requests.get(
+            cdn_url, headers={"User-Agent": "Roblox/WinInet"}, timeout=15
+        )
 
-        # 4. Retorna os dados binários para o Roblox
         return Response(
             asset_file.content,
             status=asset_file.status_code,
