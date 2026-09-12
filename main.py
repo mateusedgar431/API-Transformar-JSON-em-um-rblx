@@ -343,7 +343,7 @@ def carregarasset():
         if not asset_id:
             return jsonify({"success": False, "error": "ID nao fornecido"}), 400
 
-        # Baixa o asset da CDN da API de AssetDelivery
+        # Baixa o asset da CDN da API de AssetDelivery do Roblox
         url = f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}"
         headers = {"User-Agent": "Roblox/WinInet"}
         res = requests.get(url, headers=headers)
@@ -352,34 +352,32 @@ def carregarasset():
             return jsonify({"success": False, "error": "Falha ao baixar asset do Roblox"}), 400
 
         parts_list = []
-        
-        # Tenta decodificar o conteúdo baixado (caso venha em XML/RBXMX)
+
+        # Decodifica e verifica se o conteúdo é XML (.rbxmx)
         content_str = res.content.decode('utf-8', errors='ignore')
 
         if "<roblox" in content_str:
             import xml.etree.ElementTree as ET
             root = ET.fromstring(content_str)
-            
-            # Varre as tags Item de classe Part
+
             for item in root.findall(".//Item"):
                 class_type = item.get("class")
                 if class_type in ["Part", "WedgePart", "CornerWedgePart", "MeshPart"]:
-                    name = item.find("./Properties/string[@name='Name']")
-                    part_name = name.text if name is not None else "Part"
-                    
+                    name_elem = item.find("./Properties/string[@name='Name']")
+                    part_name = name_elem.text if name_elem is not None else "Part"
+
                     parts_list.append({
                         "Name": part_name,
                         "ClassName": class_type,
-                        "Position": [0, 5, 0], # Posição padrão caso o vetor venha codificado
+                        "Position": [0, 5, 0],
                         "Size": [4, 1, 2],
                         "Color": [255, 255, 255]
                     })
 
-        # Se o asset for binario e nao XML, retorna as infos basicas tratadas
         return jsonify({
             "success": True,
             "asset_id": asset_id,
-            "parts": parts_list if len(parts_list) > 0 else [{"Name": "PartBase", "Position": [0, 5, 0], "Size": [4, 1, 4], "Color": [255, 0, 0]}]
+            "parts": parts_list
         })
 
     except Exception as e:
