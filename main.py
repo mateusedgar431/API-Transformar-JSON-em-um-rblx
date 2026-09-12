@@ -339,18 +339,18 @@ def carregarasset():
 
     asset_id = None
 
-    # 1. Tenta pegar de requisições do tipo Form / Query
+    # 1. Tenta obter o assetId de Query String ou Form
     asset_id = flask.request.form.get("assetId") or flask.request.args.get(
         "assetId"
     )
 
-    # 2. Tenta extrair o JSON enviado pelo PostAsync
+    # 2. Tenta obter o JSON via Flask
     if not asset_id:
         data = flask.request.get_json(silent=True, force=True)
         if isinstance(data, dict):
             asset_id = data.get("assetId")
 
-    # 3. Se ainda não achou, lê o corpo bruto da requisição
+    # 3. Tenta extrair manualmente da string do corpo
     if not asset_id:
         raw_text = flask.request.get_data(as_text=True).strip()
         if raw_text.isdigit():
@@ -363,10 +363,10 @@ def carregarasset():
             except Exception:
                 pass
 
-    # Garante que temos apenas os números do ID
     if asset_id:
         asset_id = str(asset_id).strip()
 
+    # Retorna HTTP 404 se o ID for inválido ou não for encontrado
     if not asset_id or not asset_id.isdigit():
         return (
             flask.jsonify(
@@ -375,10 +375,10 @@ def carregarasset():
                     "erro": f"ID invalido ou nao encontrado. Recebido: {asset_id}",
                 }
             ),
-            399,
+            404,
         )
 
-    # 4. Baixa o modelo da API v1 do Roblox
+    # 4. Faz a requisição na API v1 do Roblox
     roblox_url = f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}"
     headers = {
         "User-Agent": "Roblox/WinInet",
@@ -391,6 +391,7 @@ def carregarasset():
             roblox_url, headers=headers, timeout=15, allow_redirects=True
         )
 
+        # Retorna HTTP 312 caso a API do Roblox não retorne HTTP 200
         if res.status_code != 200:
             return (
                 flask.jsonify(
@@ -400,7 +401,7 @@ def carregarasset():
                         "detalhe": res.text,
                     }
                 ),
-                400,
+                312,
             )
 
         return flask.Response(
@@ -410,7 +411,7 @@ def carregarasset():
         )
 
     except Exception as err:
-        return flask.jsonify({"sucesso": False, "erro": str(err)}), 400
+        return flask.jsonify({"sucesso": False, "erro": str(err)}), 312
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
