@@ -335,25 +335,28 @@ def publicar():
 @app.route('/carregarasset', methods=['POST'])
 def carregarasset():
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"success": False, "error": "JSON invalido"}), 400
-
+        data = request.get_json() or {}
         asset_id = data.get("asset_id")
+
         if not asset_id:
             return jsonify({"success": False, "error": "ID nao fornecido"}), 400
 
-        # Baixa o asset da CDN da API de AssetDelivery do Roblox
+        # Baixa o modelo da CDN do Roblox
         url = f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}"
         headers = {"User-Agent": "Roblox/WinInet"}
         res = requests.get(url, headers=headers)
 
         if res.status_code != 200:
-            return jsonify({"success": False, "error": "Falha ao baixar asset do Roblox"}), 400
+            return jsonify({
+                "success": False,
+                "asset_id": asset_id,
+                "name": "Erro Download",
+                "parts": []
+            }), 400
 
         parts_list = []
 
-        # Decodifica e verifica se o conteúdo é XML (.rbxmx)
+        # Tenta interpretar caso venha em formato XML (.rbxmx)
         content_str = res.content.decode('utf-8', errors='ignore')
 
         if "<roblox" in content_str:
@@ -364,7 +367,7 @@ def carregarasset():
                 class_type = item.get("class")
                 if class_type in ["Part", "WedgePart", "CornerWedgePart", "MeshPart"]:
                     name_elem = item.find("./Properties/string[@name='Name']")
-                    part_name = name_elem.text if name_elem is not None else "Part"
+                    part_name = name_elem.text if (name_elem is not None and name_elem.text) else "Part"
 
                     parts_list.append({
                         "Name": part_name,
@@ -374,14 +377,20 @@ def carregarasset():
                         "Color": [255, 255, 255]
                     })
 
+        # Garante o envio explícito da chave 'parts' no JSON
         return jsonify({
             "success": True,
             "asset_id": asset_id,
+            "name": "Classic House",
             "parts": parts_list
         })
 
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "parts": []
+        }), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
