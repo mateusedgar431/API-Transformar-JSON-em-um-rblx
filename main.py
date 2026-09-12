@@ -336,24 +336,37 @@ def carregarasset():
     import flask
     import requests
 
-    # 1. Pega o assetId da Query String (GET) ou do corpo da requisição (POST)
+    asset_id = None
+
+    # 1. Tenta extrair o ID da Query String primeiro (ex: ?assetId=123)
     asset_id = flask.request.args.get("assetId")
 
+    # 2. Se não veio na URL, lê os dados brutos sem deixar o Flask quebrar
     if not asset_id:
-        raw_body = flask.request.get_data(as_text=True).strip()
-        if raw_body.isdigit():
-            asset_id = raw_body
+        try:
+            raw_data = flask.request.get_data(as_text=True)
+            if raw_data:
+                cleaned = raw_data.strip()
+                if cleaned.isdigit():
+                    asset_id = cleaned
+                else:
+                    import json
 
-    if not asset_id and flask.request.is_json:
-        data = flask.request.get_json(silent=True) or {}
-        asset_id = data.get("assetId")
+                    parsed = json.loads(cleaned)
+                    asset_id = parsed.get("assetId")
+        except Exception:
+            pass
 
     if not asset_id:
-        return flask.jsonify({"error": "Nenhum assetId valido foi enviado."}), 400
+        return (
+            flask.jsonify(
+                {"status": "erro", "mensagem": "Nenhum assetId valido recebido."}
+            ),
+            400,
+        )
 
-    # 2. Faz o GET diretamente na CDN / Delivery v1 do Roblox
-    target_url = f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}"
-
+    # 3. Requisição direta para o endpoint v1 (redireciona automaticamente para o arquivo final)
+    roblox_url = f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}"
     headers = {
         "User-Agent": "Roblox/WinInet",
         "Accept": "*/*",
@@ -361,30 +374,32 @@ def carregarasset():
     }
 
     try:
-        asset_res = requests.get(
-            target_url, headers=headers, timeout=15, allow_redirects=True
+        res = requests.get(
+            roblox_url, headers=headers, timeout=15, allow_redirects=True
         )
 
-        if asset_res.status_code != 200:
+        if res.status_code != 200:
             return (
                 flask.jsonify(
                     {
-                        "error_roblox": f"Status HTTP {asset_res.status_code}",
-                        "body": asset_res.text,
+                        "status": "erro_roblox",
+                        "code": res.status_code,
+                        "detalhe": res.text,
                     }
                 ),
-                asset_res.status_code,
+                400,
             )
 
-        # Retorna o arquivo binário retornado (.rbxm) direto para o Studio
+        # Retorna o arquivo binário (.rbxm / asset) com status 200
         return flask.Response(
-            asset_res.content,
-            status=200,
-            content_type="application/octet-stream",
+            res.content, status=200, content_type="application/octet-stream"
         )
 
-    except Exception as err:
-        return flask.jsonify({"erro_interno_python": str(err)}), 400
+    except Exception as e:
+        return (
+            flask.jsonify({"status": "erro_requisicao", "detalhe": str(e)}),
+            400,
+        )
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
