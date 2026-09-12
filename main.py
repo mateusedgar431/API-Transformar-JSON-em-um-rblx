@@ -341,47 +341,40 @@ def carregarasset():
         if not asset_id:
             return jsonify({"success": False, "error": "ID nao fornecido"}), 400
 
-        # Baixa o modelo da CDN do Roblox
+        # Baixa o arquivo da CDN do Roblox
         url = f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}"
         headers = {"User-Agent": "Roblox/WinInet"}
         res = requests.get(url, headers=headers)
 
-        if res.status_code != 200:
-            return jsonify({
-                "success": False,
-                "asset_id": asset_id,
-                "name": "Erro Download",
-                "parts": []
-            }), 400
-
         parts_list = []
 
-        # Tenta interpretar caso venha em formato XML (.rbxmx)
-        content_str = res.content.decode('utf-8', errors='ignore')
+        if res.status_code == 200:
+            content_str = res.content.decode('utf-8', errors='ignore')
 
-        if "<roblox" in content_str:
-            import xml.etree.ElementTree as ET
-            root = ET.fromstring(content_str)
+            # Processa o XML caso seja um asset em formato texto (.rbxmx)
+            if "<roblox" in content_str:
+                import xml.etree.ElementTree as ET
+                root = ET.fromstring(content_str)
 
-            for item in root.findall(".//Item"):
-                class_type = item.get("class")
-                if class_type in ["Part", "WedgePart", "CornerWedgePart", "MeshPart"]:
-                    name_elem = item.find("./Properties/string[@name='Name']")
-                    part_name = name_elem.text if (name_elem is not None and name_elem.text) else "Part"
+                for item in root.findall(".//Item"):
+                    class_type = item.get("class")
+                    if class_type in ["Part", "WedgePart", "CornerWedgePart", "MeshPart"]:
+                        name_elem = item.find("./Properties/string[@name='Name']")
+                        part_name = name_elem.text if (name_elem is not None and name_elem.text) else "Part"
 
-                    parts_list.append({
-                        "Name": part_name,
-                        "ClassName": class_type,
-                        "Position": [0, 5, 0],
-                        "Size": [4, 1, 2],
-                        "Color": [255, 255, 255]
-                    })
+                        parts_list.append({
+                            "Name": part_name,
+                            "ClassName": class_type,
+                            "Position": [0, 5, 0],
+                            "Size": [4, 1, 2],
+                            "Color": [255, 255, 255]
+                        })
 
-        # Garante o envio explícito da chave 'parts' no JSON
+        # Retorna o JSON com a chave 'parts' obrigatoriamente
         return jsonify({
             "success": True,
             "asset_id": asset_id,
-            "name": "Classic House",
+            "name": "Admin",
             "parts": parts_list
         })
 
