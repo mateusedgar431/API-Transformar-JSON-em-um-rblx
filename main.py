@@ -333,30 +333,17 @@ def publicar():
 
 @app.route("/carregarasset", methods=["GET", "POST"])
 def carregarasset():
-    import json
-    import re
     import flask
     import requests
 
     try:
-        # Pega o ID da URL (?assetId=...) ou extrai do corpo
+        # Pega o ID diretamente da query string (?assetId=...)
         asset_id = flask.request.args.get("assetId")
 
         if not asset_id:
-            raw_data = flask.request.get_data(as_text=True) or ""
-            numeros = re.findall(r"\d+", raw_data)
-            if numeros:
-                asset_id = numeros[0]
+            return flask.jsonify({"erro": "Asset ID nao informado"}), 400
 
-        if not asset_id:
-            return (
-                flask.jsonify(
-                    {"sucesso": False, "erro": "Asset ID nao fornecido."}
-                ),
-                404,
-            )
-
-        # Download direto da API v1 do Roblox
+        # Faz o download do binário (.rbxm) na API v1 do Roblox
         roblox_url = f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}"
         headers = {
             "User-Agent": "Roblox/WinInet",
@@ -371,11 +358,7 @@ def carregarasset():
         if res.status_code != 200:
             return (
                 flask.jsonify(
-                    {
-                        "sucesso": False,
-                        "status_roblox": res.status_code,
-                        "detalhe": res.text,
-                    }
+                    {"erro": f"Status do Roblox: {res.status_code}"}
                 ),
                 312,
             )
@@ -387,7 +370,7 @@ def carregarasset():
         )
 
     except Exception as err:
-        return flask.jsonify({"sucesso": False, "erro": str(err)}), 312
+        return flask.jsonify({"erro": str(err)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
