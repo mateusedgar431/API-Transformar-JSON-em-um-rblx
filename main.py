@@ -334,12 +334,11 @@ def publicar():
 @app.route("/carregarasset", methods=['GET'])
 def carregarasset():
   try:
-      return request
     # Tenta pegar o ID da URL de várias formas possíveis para evitar 404
-    asset_id = flask.request.args.get('assetId') or flask.request.args.get('id')
+    asset_id = request.args.get('assetId') or request.args.get('id')
 
     if not asset_id:
-      return flask.jsonify({"erro": "Asset ID nao informado"}), 400
+      return jsonify({"erro": "Asset ID nao informado"}), 400
 
     roblox_url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
     headers = {
@@ -357,8 +356,7 @@ def carregarasset():
     )
 
     if res.status_code != 200:
-      return (
-          flask.jsonify(
+      return jsonify(
               {"erro": f"Status do Roblox: {res.status_code}", "detalhe": res.text}
           ),
           312,
@@ -369,7 +367,7 @@ def carregarasset():
     )
 
   except Exception as err:
-    return flask.jsonify({"erro": str(err)}), 500
+    return jsonify({"erro": str(err)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
