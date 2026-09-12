@@ -333,7 +333,10 @@ def publicar():
 
 @app.route("/carregarasset", methods=["POST", "GET"])
 def carregarasset():
+    import flask
+
     try:
+        # 1. Extração do assetId enviado
         asset_id = None
 
         if request.is_json:
@@ -349,9 +352,9 @@ def carregarasset():
             asset_id = request.args.get("assetId")
 
         if not asset_id:
-            return jsonify({"error": "Nenhum assetId valido foi enviado."}), 400
+            return flask.jsonify({"error": "Nenhum assetId enviado."}), 400
 
-        # Os 6 headers obrigatorios exigidos pela API v2 do Roblox
+        # 2. Cabeçalhos exigidos pela API v2 do Roblox
         headers = {
             "User-Agent": "Roblox/WinInet",
             "Accept-Encoding": "gzip",
@@ -362,96 +365,49 @@ def carregarasset():
             "Roblox-AssetFormat": "rbxm",
         }
 
-        # pcall interno em Python (try/except) especificamente na chamada externa do Roblox
-        meta_res = None
-        try:
-            meta_url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
-            meta_res = requests.get(meta_url, headers=headers, timeout=10)
-        except Exception as req_err:
-            # Captura falhas de conexao/network na API do Roblox
-            return (
-                jsonify(
-                    {
-                        "error": "Falha de conexao com a API do Roblox",
-                        "detalhe": str(req_err),
-                    }
-                ),
-                400,
-            )
+        # 3. Requisição de metadados no Roblox
+        meta_url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
+        meta_res = requests.get(meta_url, headers=headers, timeout=10)
 
         if meta_res.status_code != 200:
             return (
-                jsonify(
+                flask.jsonify(
                     {
-                        "error": f"Roblox retornou status {meta_res.status_code}",
-                        "resposta": meta_res.text,
+                        "error_roblox": f"Status {meta_res.status_code}",
+                        "body": meta_res.text,
                     }
                 ),
                 400,
             )
 
-        # pcall interno para decodificacao de JSON / descompactacao
-        try:
-            data = meta_res.json()
-        except Exception as json_err:
-            return (
-                jsonify(
-                    {
-                        "error": "Erro ao decodificar JSON do Roblox",
-                        "detalhe": str(json_err),
-                        "raw_body": meta_res.text,
-                    }
-                ),
-                400,
-            )
+        data = meta_res.json()
 
+        # 4. Busca link da CDN
         locations = data.get("locations", [])
         if not locations or "location" not in locations[0]:
             return (
-                jsonify(
-                    {
-                        "error": "URL da CDN nao foi encontrada",
-                        "json_roblox": data,
-                    }
+                flask.jsonify(
+                    {"error": "CDN nao encontrada.", "json": data}
                 ),
                 404,
             )
 
         cdn_url = locations[0]["location"]
 
-        # pcall no download final do binario na CDN
-        try:
-            asset_file = requests.get(
-                cdn_url, headers={"User-Agent": "Roblox/WinInet"}, timeout=15
-            )
-        except Exception as cdn_err:
-            return (
-                jsonify(
-                    {
-                        "error": "Falha ao baixar o arquivo da CDN",
-                        "detalhe": str(cdn_err),
-                    }
-                ),
-                400,
-            )
+        # 5. Download do binário na CDN
+        asset_file = requests.get(
+            cdn_url, headers={"User-Agent": "Roblox/WinInet"}, timeout=15
+        )
 
-        return Response(
+        # Retorno direto usando flask.Response para evitar estouro de NameError 500
+        return flask.Response(
             asset_file.content,
             status=asset_file.status_code,
             content_type="application/octet-stream",
         )
 
-    except Exception as global_err:
-        # Garante que NENHUM erro sem tratamento devolva HTTP 500 para o Roblox
-        return (
-            jsonify(
-                {
-                    "error": "Excecao geral capturada",
-                    "detalhe": str(global_err),
-                }
-            ),
-            400,
-        )
+    except Exception as err:
+        return flask.jsonify({"erro_interno_python": str(err)}), 400
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
