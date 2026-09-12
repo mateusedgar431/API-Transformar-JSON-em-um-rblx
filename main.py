@@ -331,24 +331,56 @@ def publicar():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
-@app.route("/carregarasset", methods=["GET"])
+@app.route("/carregarasset", methods=["POST", "GET"])
 def carregarasset():
-    # Obtém o ID enviado via parâmetro ?assetId=... ou usa o padrão informado
-    asset_id = request.args.get("assetId", default="857927023", type=str)
-    roblox_url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
+    # Pega o ID enviado dentro do corpo do POST em JSON
+    data_json = request.get_json(silent=True) or {}
+    asset_id = data_json.get("assetId") or request.args.get("assetId")
+
+    if not asset_id:
+        return jsonify({"error": "Nenhum assetId foi enviado no corpo ou na URL."}), 400
 
     headers = {
         "User-Agent": "Roblox/WinInet",
         "Accept": "application/json",
+        "Roblox-Place-Id": "0",
     }
 
     try:
-        response = requests.get(roblox_url, headers=headers, timeout=10)
-        return (
-            response.content,
-            response.status_code,
-            {"Content-Type": response.headers.get("Content-Type", "application/json")},
+        # 1. Busca metadados do asset no Roblox
+        meta_url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
+        meta_res = requests.get(meta_url, headers=headers, timeout=10)
+
+        if meta_res.status_code != 200:
+            return (
+                jsonify({"error": "Asset nao encontrado no Roblox."}),
+                meta_res.status_code,
+            )
+
+        data = meta_res.json()
+
+        # 2. Extrai a URL direta da CDN
+        locations = data.get("locations", [])
+        if not locations or "location" not in locations[0]:
+            return (
+                jsonify(
+                    {"error": "URL do arquivo nao encontrada no JSON do Roblox."}
+                ),
+                404,
+            )
+
+        cdn_url = locations[0]["location"]
+
+        # 3. Baixa o arquivo do asset
+        asset_file = requests.get(cdn_url, headers=headers, timeout=15)
+
+        # 4. Retorna os dados binários para o Roblox
+        return Response(
+            asset_file.content,
+            status=asset_file.status_code,
+            content_type="application/octet-stream",
         )
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
