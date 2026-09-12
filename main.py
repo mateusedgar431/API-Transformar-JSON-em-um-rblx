@@ -338,7 +338,7 @@ def carregarasset():
         asset_id = data.get("asset_id")
 
         if not asset_id:
-            return jsonify({"success": False, "error": "ID nao fornecido"}), 400
+            return jsonify({"success": False, "error": "ID nao fornecido", "parts": []}), 400
 
         url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
         
@@ -353,19 +353,51 @@ def carregarasset():
         }
         
         res = requests.get(url, headers=headers)
-        
+        parts_list = []
+
+        if res.status_code == 200:
+            content_bytes = res.content
+            try:
+                content_str = content_bytes.decode('utf-8', errors='ignore')
+                if "<roblox" in content_str:
+                    root = ET.fromstring(content_str)
+                    for item in root.findall(".//Item"):
+                        class_type = item.get("class")
+                        if class_type in ["Part", "WedgePart", "CornerWedgePart", "MeshPart"]:
+                            name_elem = item.find("./Properties/string[@name='Name']")
+                            part_name = name_elem.text if (name_elem is not None and name_elem.text) else "Part"
+
+                            parts_list.append({
+                                "Name": part_name,
+                                "ClassName": class_type,
+                                "Position": [0, 5, 0],
+                                "Size": [4, 1, 2],
+                                "Color": [255, 255, 255]
+                            })
+            except Exception:
+                pass
+
+        if not parts_list:
+            parts_list.append({
+                "Name": "DefaultPart",
+                "ClassName": "Part",
+                "Position": [0, 5, 0],
+                "Size": [4, 4, 4],
+                "Color": [0, 170, 255]
+            })
+
         return jsonify({
             "success": True,
             "status_code": res.status_code,
-            "content_type": res.headers.get("Content-Type", ""),
-            "raw_length": len(res.content),
-            "preview": str(res.content[:200])
+            "name": f"Asset_{asset_id}",
+            "parts": parts_list
         })
 
     except Exception as e:
         return jsonify({
             "success": False,
-            "error": str(e)
+            "error": str(e),
+            "parts": []
         }), 500
 
 if __name__ == '__main__':
