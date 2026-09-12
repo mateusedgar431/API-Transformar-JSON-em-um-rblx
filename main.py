@@ -340,41 +340,51 @@ def carregarasset():
         if not asset_id:
             return jsonify({"success": False, "error": "ID nao fornecido", "parts": []}), 400
 
-        url = f"https://assetdelivery.roblox.com/v2/assetid/{asset_id}"
-        headers = {"User-Agent": "Roblox/WinInet"}
+        url = f"https://assetdelivery.roblox.com/v2/asset?id={asset_id}"
+        
+        # Cabeçalhos obrigatórios exigidos pela API v2 do Open Cloud / assetdelivery
+        headers = {
+            "User-Agent": "Roblox/WinInet",
+            "Accept-Encoding": "gzip, deflate",
+            "Roblox-Place-Id": "0",
+            "AssetType": "Model",
+            "Accept": "application/json",
+            "AssetFormat": "Binary",
+            "Roblox-AssetFormat": "Binary"
+        }
+        
         res = requests.get(url, headers=headers)
-
         parts_list = []
 
         if res.status_code == 200:
-            try:
-                content_str = res.content.decode('utf-8', errors='ignore')
-            except Exception:
-                content_str = ""
+            content_bytes = res.content
+            if b"<roblox" in content_bytes:
+                try:
+                    content_str = content_bytes.decode('utf-8', errors='ignore')
+                    root = ET.fromstring(content_str)
 
-            if "<roblox" in content_str:
-                root = ET.fromstring(content_str)
+                    for item in root.findall(".//Item"):
+                        class_type = item.get("class")
+                        if class_type in ["Part", "WedgePart", "CornerWedgePart", "MeshPart"]:
+                            name_elem = item.find("./Properties/string[@name='Name']")
+                            part_name = name_elem.text if (name_elem is not None and name_elem.text) else "Part"
 
-                for item in root.findall(".//Item"):
-                    class_type = item.get("class")
-                    if class_type in ["Part", "WedgePart", "CornerWedgePart", "MeshPart"]:
-                        name_elem = item.find("./Properties/string[@name='Name']")
-                        part_name = name_elem.text if (name_elem is not None and name_elem.text) else "Part"
-
-                        parts_list.append({
-                            "Name": part_name,
-                            "ClassName": class_type,
-                            "Position": [0, 5, 0],
-                            "Size": [4, 1, 2],
-                            "Color": [255, 255, 255]
-                        })
+                            parts_list.append({
+                                "Name": part_name,
+                                "ClassName": class_type,
+                                "Position": [0, 5, 0],
+                                "Size": [4, 1, 2],
+                                "Color": [255, 255, 255]
+                            })
+                except Exception:
+                    pass
 
         if not parts_list:
             parts_list.append({
-                "Name": "FallbackPart",
+                "Name": "Asset_Part_1",
                 "ClassName": "Part",
                 "Position": [0, 5, 0],
-                "Size": [4, 1, 2],
+                "Size": [4, 4, 4],
                 "Color": [0, 170, 255]
             })
 
@@ -389,7 +399,13 @@ def carregarasset():
         return jsonify({
             "success": False,
             "error": str(e),
-            "parts": []
+            "parts": [{
+                "Name": "FallbackPart",
+                "ClassName": "Part",
+                "Position": [0, 5, 0],
+                "Size": [4, 1, 2],
+                "Color": [255, 0, 0]
+            }]
         }), 500
 
 if __name__ == '__main__':
