@@ -331,17 +331,17 @@ def publicar():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
-@app.route("/carregarasset", methods=["GET", "POST"])
+@app.route("/carregarasset", methods=["GET", "POST", "OPTIONS", "PUT"])
 def carregarasset():
     import flask
     import requests
 
     asset_id = None
 
-    # 1. Tenta extrair o ID da Query String primeiro (ex: ?assetId=123)
+    # 1. Tenta pegar pela URL (?assetId=123)
     asset_id = flask.request.args.get("assetId")
 
-    # 2. Se não veio na URL, lê os dados brutos sem deixar o Flask quebrar
+    # 2. Se não veio na URL, lê o corpo
     if not asset_id:
         try:
             raw_data = flask.request.get_data(as_text=True)
@@ -365,7 +365,7 @@ def carregarasset():
             400,
         )
 
-    # 3. Requisição direta para o endpoint v1 (redireciona automaticamente para o arquivo final)
+    # 3. Requisição direta v1 na API do Roblox
     roblox_url = f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}"
     headers = {
         "User-Agent": "Roblox/WinInet",
@@ -390,7 +390,7 @@ def carregarasset():
                 400,
             )
 
-        # Retorna o arquivo binário (.rbxm / asset) com status 200
+        # Retorna o arquivo binário (.rbxm) com status 200
         return flask.Response(
             res.content, status=200, content_type="application/octet-stream"
         )
