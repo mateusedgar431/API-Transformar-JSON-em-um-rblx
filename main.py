@@ -340,7 +340,7 @@ def carregarasset():
         if not asset_id:
             return jsonify({"success": False, "error": "ID nao fornecido", "parts": []}), 400
 
-        url = f"https://assetdelivery.roblox.com/v2/asset/?id={asset_id}"
+        url = f"https://assetdelivery.roblox.com/v2/assetid/{asset_id}"
         headers = {"User-Agent": "Roblox/WinInet"}
         res = requests.get(url, headers=headers)
 
