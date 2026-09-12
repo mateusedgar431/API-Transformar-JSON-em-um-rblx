@@ -332,6 +332,8 @@ def publicar():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
+import xml.etree.ElementTree as ET
+
 @app.route('/carregarasset', methods=['POST'])
 def carregarasset():
     try:
@@ -339,9 +341,8 @@ def carregarasset():
         asset_id = data.get("asset_id")
 
         if not asset_id:
-            return jsonify({"success": False, "error": "ID nao fornecido"}), 400
+            return jsonify({"success": False, "error": "ID nao fornecido", "parts": []}), 400
 
-        # Baixa o arquivo da CDN do Roblox
         url = f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}"
         headers = {"User-Agent": "Roblox/WinInet"}
         res = requests.get(url, headers=headers)
@@ -349,32 +350,57 @@ def carregarasset():
         parts_list = []
 
         if res.status_code == 200:
-            content_str = res.content.decode('utf-8', errors='ignore')
+            content_bytes = res.content
+            
+            # Tenta converter para texto para checar se e XML (.rbxmx)
+            try:
+                content_str = content_bytes.decode('utf-8', errors='ignore')
+            except Exception:
+                content_str = ""
 
-            # Processa o XML caso seja um asset em formato texto (.rbxmx)
             if "<roblox" in content_str:
-                import xml.etree.ElementTree as ET
                 root = ET.fromstring(content_str)
 
                 for item in root.findall(".//Item"):
                     class_type = item.get("class")
-                    if class_type in ["Part", "WedgePart", "CornerWedgePart", "MeshPart"]:
+                    if class_type in ["Part", "WedgePart", "CornerWedgePart", "MeshPart", "TrussPart"]:
+                        # Nome
                         name_elem = item.find("./Properties/string[@name='Name']")
                         part_name = name_elem.text if (name_elem is not None and name_elem.text) else "Part"
+
+                        # Tamanho (Vector3)
+                        size = [4, 1, 2]
+                        size_elem = item.find("./Properties/Vector3[@name='size']") or item.find("./Properties/Vector3[@name='Size']")
+                        if size_elem is not None:
+                            size = [
+                                float(size_elem.findtext("X", 4)),
+                                float(size_elem.findtext("Y", 1)),
+                                float(size_elem.findtext("Z", 2))
+                            ]
+
+                        # Posicao (CFrame / Vector3)
+                        pos = [0, 5, 0]
+                        pos_elem = item.find("./Properties/Vector3[@name='Position']")
+                        if pos_elem is not None:
+                            pos = [
+                                float(pos_elem.findtext("X", 0)),
+                                float(pos_elem.findtext("Y", 5)),
+                                float(pos_elem.findtext("Z", 0))
+                            ]
 
                         parts_list.append({
                             "Name": part_name,
                             "ClassName": class_type,
-                            "Position": [0, 5, 0],
-                            "Size": [4, 1, 2],
-                            "Color": [255, 255, 255]
+                            "Position": pos,
+                            "Size": size,
+                            "Color": [163, 162, 165]
                         })
 
-        # Retorna o JSON com a chave 'parts' obrigatoriamente
+        # Retorna SEMPRE a chave 'parts', mesmo que esteja vazia
         return jsonify({
             "success": True,
             "asset_id": asset_id,
-            "name": "Admin",
+            "name": "HD Admin" if asset_id == 857927023 else "Asset",
             "parts": parts_list
         })
 
