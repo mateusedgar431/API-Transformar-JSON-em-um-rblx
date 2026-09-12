@@ -339,32 +339,46 @@ def carregarasset():
 
     asset_id = None
 
-    # 1. Tenta extrair o JSON enviado pelo PostAsync
-    data = flask.request.get_json(silent=True)
-    if data and isinstance(data, dict):
-        asset_id = data.get("assetId")
+    # 1. Tenta pegar de requisições do tipo Form / Query
+    asset_id = flask.request.form.get("assetId") or flask.request.args.get(
+        "assetId"
+    )
 
-    # 2. Se falhar, lê o corpo como string bruta
+    # 2. Tenta extrair o JSON enviado pelo PostAsync
+    if not asset_id:
+        data = flask.request.get_json(silent=True, force=True)
+        if isinstance(data, dict):
+            asset_id = data.get("assetId")
+
+    # 3. Se ainda não achou, lê o corpo bruto da requisição
     if not asset_id:
         raw_text = flask.request.get_data(as_text=True).strip()
         if raw_text.isdigit():
             asset_id = raw_text
-        elif raw_text.startswith("{") and raw_text.endswith("}"):
+        else:
             try:
                 parsed = json.loads(raw_text)
-                asset_id = parsed.get("assetId")
+                if isinstance(parsed, dict):
+                    asset_id = parsed.get("assetId")
             except Exception:
                 pass
 
-    if not asset_id:
+    # Garante que temos apenas os números do ID
+    if asset_id:
+        asset_id = str(asset_id).strip()
+
+    if not asset_id or not asset_id.isdigit():
         return (
             flask.jsonify(
-                {"sucesso": False, "erro": "assetId nao encontrado no POST."}
+                {
+                    "sucesso": False,
+                    "erro": f"ID invalido ou nao encontrado. Recebido: {asset_id}",
+                }
             ),
             400,
         )
 
-    # 3. Faz o download do binário direto da API v1 do Roblox
+    # 4. Baixa o modelo da API v1 do Roblox
     roblox_url = f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}"
     headers = {
         "User-Agent": "Roblox/WinInet",
