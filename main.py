@@ -373,7 +373,12 @@ def carregarasset():
                 meta_res.status_code,
             )
 
-        data = meta_res.json()
+        # Descompacta o gzip caso o servidor do Roblox envie comprimido
+        if meta_res.headers.get("Content-Encoding") == "gzip":
+            decompressed_data = gzip.decompress(meta_res.content)
+            data = requests.compat.json.loads(decompressed_data)
+        else:
+            data = meta_res.json()
 
         locations = data.get("locations", [])
         if not locations or "location" not in locations[0]:
