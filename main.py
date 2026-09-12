@@ -340,8 +340,9 @@ def carregarasset():
         if not asset_id:
             return jsonify({
                 "success": False,
+                "asset_id": 0,
                 "status_code": 400,
-                "name": "Erro_Requisicao",
+                "name": "Erro",
                 "parts": []
             }), 400
 
@@ -394,11 +395,12 @@ def carregarasset():
                 "ClassName": "Part",
                 "Position": [0, 5, 0],
                 "Size": [4, 4, 4],
-                "Color": [255, 0, 0]
+                "Color": [0, 170, 255]
             })
 
         return jsonify({
             "success": True,
+            "asset_id": asset_id,
             "status_code": res.status_code,
             "name": asset_name,
             "parts": parts_list
@@ -407,6 +409,7 @@ def carregarasset():
     except Exception as e:
         return jsonify({
             "success": False,
+            "asset_id": 0,
             "status_code": 500,
             "name": "ErroServidor",
             "parts": [{
