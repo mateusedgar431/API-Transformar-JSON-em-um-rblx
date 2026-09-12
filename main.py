@@ -331,8 +331,8 @@ def publicar():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
-@app.route("/carregarasset_v2", methods=['GET'])
-def carregarasset_v2():
+@app.route("/carregarasset", methods=['GET'])
+def carregarasset():
   try:
       return request
     # Tenta pegar o ID da URL de várias formas possíveis para evitar 404
