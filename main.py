@@ -331,19 +331,17 @@ def publicar():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
-@app.route("/carregarasset", methods=["GET", "POST"])
+@app.route("/carregarasset", methods=["GET"])
 def carregarasset():
     import flask
     import requests
 
     try:
-        # Pega o ID diretamente da query string (?assetId=...)
         asset_id = flask.request.args.get("assetId")
 
         if not asset_id:
             return flask.jsonify({"erro": "Asset ID nao informado"}), 400
 
-        # Faz o download do binário (.rbxm) na API v1 do Roblox
         roblox_url = f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}"
         headers = {
             "User-Agent": "Roblox/WinInet",
