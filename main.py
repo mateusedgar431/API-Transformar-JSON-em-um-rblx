@@ -331,7 +331,7 @@ def publicar():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
-@app.route("/carregarasset", methods=["GET"])
+@app.route("/carregarasset_v2", methods=["GET"])
 def carregarasset():
   import flask
   import requests
