@@ -331,32 +331,50 @@ def publicar():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
-@app.route("/carregarasset", methods=["POST"])
+@app.route("/carregarasset", methods=["GET", "POST"])
 def carregarasset():
+    import json
+    import re
     import flask
     import requests
 
-    # Lê diretamente o texto bruto enviado no corpo
-    asset_id = flask.request.get_data(as_text=True).strip()
-
-    # Se não houver números válidos no corpo
-    if not asset_id or not asset_id.isdigit():
-        return (
-            flask.jsonify(
-                {"sucesso": False, "erro": "ID nao encontrado no corpo."}
-            ),
-            404,
-        )
-
-    # Requisição para o Roblox
-    roblox_url = f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}"
-    headers = {
-        "User-Agent": "Roblox/WinInet",
-        "Accept": "*/*",
-        "Roblox-Place-Id": "0",
-    }
-
     try:
+        asset_id = None
+
+        # 1. Pega o ID via URL (caso use GetAsync do Roblox)
+        asset_id = flask.request.args.get("assetId")
+
+        # 2. Pega o ID via corpo da requisição (caso use PostAsync do Roblox)
+        if not asset_id:
+            raw_data = flask.request.get_data(as_text=True) or ""
+
+            # Se vier JSON
+            if raw_data.strip().startswith("{"):
+                try:
+                    payload = json.loads(raw_data)
+                    if isinstance(payload, dict):
+                        asset_id = payload.get("assetId")
+                except Exception:
+                    pass
+
+            # Se vier texto simples ou números
+            if not asset_id:
+                numeros = re.findall(r"\d+", raw_data)
+                if numeros:
+                    asset_id = numeros[0]
+
+        # Se mesmo assim o ID não for encontrado
+        if not asset_id:
+            return flask.jsonify({"erro": "Asset ID nao informado"}), 400
+
+        # 3. Busca o modelo binário no Roblox
+        roblox_url = f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}"
+        headers = {
+            "User-Agent": "Roblox/WinInet",
+            "Accept": "*/*",
+            "Roblox-Place-Id": "0",
+        }
+
         res = requests.get(
             roblox_url, headers=headers, timeout=15, allow_redirects=True
         )
@@ -364,11 +382,14 @@ def carregarasset():
         if res.status_code != 200:
             return (
                 flask.jsonify(
-                    {"sucesso": False, "status_roblox": res.status_code}
+                    {
+                        "erro_roblox": f"Roblox recusou a requisição com status {res.status_code}"
+                    }
                 ),
-                312,
+                400,
             )
 
+        # 4. Retorna os dados para o Roblox Studio
         return flask.Response(
             res.content,
             status=200,
@@ -376,7 +397,7 @@ def carregarasset():
         )
 
     except Exception as err:
-        return flask.jsonify({"sucesso": False, "erro": str(err)}), 312
+        return flask.jsonify({"erro_servidor": str(err)}), 400
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
