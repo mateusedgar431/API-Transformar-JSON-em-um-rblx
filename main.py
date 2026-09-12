@@ -331,33 +331,38 @@ def publicar():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
-@app.route("/carregarasset", methods=["POST", "GET"])
+@app.route("/carregarasset", methods=["POST"])
 def carregarasset():
     import flask
     import requests
 
-    asset_id = flask.request.args.get("assetId")
+    # 1. Pega o corpo bruto enviado pelo HttpService:PostAsync do Roblox Studio
+    raw_body = flask.request.get_data(as_text=True).strip()
+    asset_id = None
 
-    if not asset_id:
-        raw_body = flask.request.get_data(as_text=True).strip()
-        if raw_body.isdigit():
-            asset_id = raw_body
-
-    if not asset_id and flask.request.is_json:
+    if raw_body.isdigit():
+        asset_id = raw_body
+    elif flask.request.is_json:
         data = flask.request.get_json(silent=True) or {}
         asset_id = data.get("assetId")
 
     if not asset_id:
-        return flask.jsonify({"error": "ID nao enviado"}), 400
+        return flask.jsonify({"error": "Asset ID invalido ou ausente."}), 400
+
+    # 2. Endpoints e headers exatos para o POST interno do Roblox
+    meta_url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
 
     headers = {
         "User-Agent": "Roblox/WinInet",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
         "Roblox-Place-Id": "0",
-        "Accept": "*/*",
     }
 
-    meta_url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
-    meta_res = requests.get(meta_url, headers=headers, timeout=10)
+    # O endpoint v2 do Roblox exige esse payload JSON no POST para localizar o asset
+    payload = [{"requestId": "0", "assetId": int(asset_id), "assetType": ""}]
+
+    meta_res = requests.post(meta_url, json=payload, headers=headers, timeout=10)
 
     if meta_res.status_code != 200:
         return flask.Response(
@@ -365,12 +370,23 @@ def carregarasset():
         )
 
     data = meta_res.json()
+
+    # Se a resposta for uma lista, extrai o primeiro item do array de requisições
+    if isinstance(data, list) and len(data) > 0:
+        data = data[0]
+
     locations = data.get("locations", [])
     if not locations or "location" not in locations[0]:
-        return flask.jsonify({"error": "CDN nao encontrada"}), 404
+        return (
+            flask.jsonify(
+                {"error": "Location nao encontrada no JSON", "resposta_roblox": data}
+            ),
+            404,
+        )
 
     cdn_url = locations[0]["location"]
 
+    # 3. Baixa o binário final na CDN
     asset_file = requests.get(
         cdn_url, headers={"User-Agent": "Roblox/WinInet"}, timeout=15
     )
