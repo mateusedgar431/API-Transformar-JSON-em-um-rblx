@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 import requests
 import xml.sax.saxutils as saxutils
 
@@ -368,9 +368,13 @@ def carregarasset():
           "status_roblox": res.status_code,
           "resposta_roblox": res.text,
       })
-    return jsonify(res)
-      
-except Exception as err:
+
+    # Usando Response com 'R' maiúsculo
+    return Response(
+        res.content, status=200, content_type="application/octet-stream"
+    )
+
+  except Exception as err:
     return jsonify({"erro_python": str(err)})
 
 if __name__ == '__main__':
