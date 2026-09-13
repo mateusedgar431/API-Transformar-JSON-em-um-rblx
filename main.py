@@ -358,7 +358,7 @@ def carregarasset():
         "AssetFormat": "Binary",
         "Roblox-AssetFormat": "Binary",
         # Adicione seu cookie aqui caso queira baixar assets privados da sua conta:
-        # "Cookie": ".ROBLOSECURITY=_|WARNING:-DO-NOT-SHARE-THIS...;"
+        "Cookie": ".ROBLOSECURITY=_|WARNING:-DO-NOT-SHARE-THIS...;"
     }
 
     res = requests.get(
