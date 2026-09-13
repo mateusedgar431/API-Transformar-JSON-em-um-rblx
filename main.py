@@ -368,7 +368,7 @@ def carregarasset():
           "status_roblox": res.status_code,
           "resposta_roblox": res.text,
       })
-    return res
+    return jsonify(res)
       
 except Exception as err:
     return jsonify({"erro_python": str(err)})
