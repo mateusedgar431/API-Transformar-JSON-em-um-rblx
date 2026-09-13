@@ -357,6 +357,8 @@ def carregarasset():
         "AssetType": "Model",
         "AssetFormat": "Binary",
         "Roblox-AssetFormat": "Binary",
+        # Adicione seu cookie aqui caso queira baixar assets privados da sua conta:
+        # "Cookie": ".ROBLOSECURITY=_|WARNING:-DO-NOT-SHARE-THIS...;"
     }
 
     res = requests.get(
@@ -369,7 +371,6 @@ def carregarasset():
           "resposta_roblox": res.text,
       })
 
-    # Usando Response com 'R' maiúsculo
     return Response(
         res.content, status=200, content_type="application/octet-stream"
     )
