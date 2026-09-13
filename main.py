@@ -347,7 +347,7 @@ def carregarasset():
         asset_id = request.form.get('assetId') or request.form.get('id')
 
     if not asset_id:
-      return jsonify({"erro": "Asset ID nao informado"}), 400
+      return jsonify({"status": 400, "erro": "Asset ID nao informado"})
 
     # Requisição para a API v2 do Roblox com todas as headers obrigatórias
     roblox_url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
@@ -370,7 +370,6 @@ def carregarasset():
           jsonify(
               {"status": f"Status do Roblox: {res.status_code}", "resposta": res.text}
           ),
-          400,
       )
 
     # Retorna o binário (.rbxm) baixado diretamente para o Roblox Studio ou Navegador
@@ -379,7 +378,7 @@ def carregarasset():
     )
 
   except Exception as err:
-    return jsonify({"status": 500, "resposta": str(err)}), 500
+    return jsonify({"status": 500, "resposta": str(err)})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
