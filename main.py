@@ -369,6 +369,7 @@ def carregarasset():
           "resposta_roblox": res.text,
       })
     return res
+      
 except Exception as err:
     return jsonify({"erro_python": str(err)})
 
