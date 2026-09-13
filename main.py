@@ -368,12 +368,8 @@ def carregarasset():
           "status_roblox": res.status_code,
           "resposta_roblox": res.text,
       })
-
-    return Response(
-        res.content, status=200, content_type="application/octet-stream"
-    )
-
-  except Exception as err:
+    return res
+except Exception as err:
     return jsonify({"erro_python": str(err)})
 
 if __name__ == '__main__':
