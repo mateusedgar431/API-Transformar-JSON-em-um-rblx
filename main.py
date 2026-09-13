@@ -331,25 +331,25 @@ def publicar():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
-@app.route("/carregarasset", methods=['GET'])
+@app.route("/carregarasset", methods=["GET", "POST"])
 def carregarasset():
   try:
     asset_id = None
 
     # Captura o assetId via GET (Query String) ou POST (JSON / Form Data)
     if request.method == "GET":
-      asset_id = request.args.get('assetId') or request.args.get('id')
+      asset_id = request.args.get("assetId") or request.args.get("id")
     elif request.method == "POST":
       if request.is_json:
-        data = request.get_json() or {}
-        asset_id = data.get('assetId') or data.get('id')
+        data = request.get_json(silent=True) or {}
+        asset_id = data.get("assetId") or data.get("id")
       else:
-        asset_id = request.form.get('assetId') or request.form.get('id')
+        asset_id = request.form.get("assetId") or request.form.get("id")
 
     if not asset_id:
-      return jsonify({"status": 400, "erro": "Asset ID nao informado"})
+      return jsonify({"status": 400, "erro": "Asset ID nao informado"}), 400
 
-    # Requisição para a API v2 do Roblox com todas as headers obrigatórias
+    # Requisição para a API v2 do Roblox
     roblox_url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
     headers = {
         "User-Agent": "Roblox/WinInet",
@@ -370,15 +370,17 @@ def carregarasset():
           jsonify(
               {"status": f"Status do Roblox: {res.status_code}", "resposta": res.text}
           ),
+          400,
       )
 
-    # Retorna o binário (.rbxm) baixado diretamente para o Roblox Studio ou Navegador
-    return flask.Response(
+    # Usa Response importado diretamente do Flask (com F maiúsculo se usou 'from flask import Response')
+    # Ou 'Response(res.content, ...)' para evitar depender da variável do módulo
+    return Response(
         res.content, status=200, content_type="application/octet-stream"
     )
 
   except Exception as err:
-    return jsonify({"status": 500, "resposta": str(err)})
+    return jsonify({"status": 500, "resposta": str(err)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
