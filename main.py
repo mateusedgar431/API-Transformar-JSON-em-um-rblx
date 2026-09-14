@@ -446,7 +446,7 @@ def carregarasset():
                 "sucesso": True,
                 "asset_id": asset_id,
                 "download_url": download_url,
-                "SERVICES_MESTRES": services_mestres
+                "services": str(services_mestres)
             })
             
         # Converte a resposta bruta em String para você conseguir ver no print do Roblox
