@@ -334,57 +334,40 @@ def publicar():
 @app.route("/carregarasset", methods=["GET", "POST"])
 def carregarasset():
   try:
-    asset_id = None
-
-    if request.method == "GET":
-      asset_id = request.args.get("assetId") or request.args.get("id")
-    elif request.method == "POST":
-      if request.is_json:
-        data = request.get_json(silent=True) or {}
-        asset_id = data.get("assetId") or data.get("id")
-      else:
-        asset_id = request.form.get("assetId") or request.form.get("id")
-
+    asset_id = (
+        request.args.get("assetId")
+        or request.args.get("id")
+        or (request.get_json(silent=True) or {}).get("assetId")
+    )
     if not asset_id:
       return jsonify({"erro": "Asset ID nao informado"})
 
     roblox_url = (
         f"https://apis.roblox.com/asset-delivery-api/v1/assetId/{asset_id}"
     )
-
     headers = {
         "User-Agent": "Roblox/WinInet",
         "Accept": "*/*",
-        "Accept-Encoding": "gzip",
         "x-api-key": "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJMU5pSXNJbXRwWkNJNkluTnBaeTB5TURJeExUQTNMVEV6VkRFNE9qVXhPalE1V2lJc0luUjVjQ0k2SWtwWFZDSjkuZXlKaGRXUWlPaUpTYjJKc2IzaEpiblJsY201aGJDSXNJbWx6Y3lJNklrTnNiM1ZrUVhWMGFHVnVkR2xqWVhScGIyNVRaWEoyYVdObElpd2lZbUZ6WlVGd2FVdGxlU0k2SW5oR04wTlZObGx1YzBVMmFrZGlja3R0WVhoaFVHRnZTV3huYTFCTWNEVkZWVU50VEhKNlZqTmFlSFJqTkROUU1DSXNJbTkzYm1WeVNXUWlPaUl5TURNMU5qVTROelUwSWl3aVpYaHdJam94TnpnNU16VTJNelkzTENKcFlYUWlPakUzT0Rrek5USTNOamNzSW01aVppSTZNVGM0T1RNMU1qYzJOMzAuUXVyaDllaXpRWDZ1M2tyTjBuVVlXSXdQQzd2M0FBZ2ZWYTFkNzQ5TmVlQUZqMGRIdHdEYkd1LTFicTcyT1A0WUQ0YXRIN2FzRm5UU04wY2wzeFlpZkVRV1VIN3ozVk92Q0RvSVR0TE9icVF4VV9tUEU1QmQ5NGtjMTNJbnJhLVJoNUVSMlREakhxam02RDhqekpsUDdMY2VVNnlNZ2pkSk1YaHI1ZVdjUWRIcTU5THpQNGdtTGduT0QwR25Scl9XUUhYODlCMmhHc2FNd19NQXhCQWdwOWtPcUZBTmg4azV6M0o0OExkTUlBRzNxNTZ2RmhKaVBIenhya285d180RVh0UEZIbTFOOFM3Sm9ybGQ5UGVLSkVJeXFSSzZFclcxck1yOG4tbVAtX293aUZGbmFoc3ItWmZLcm93MF95OVVlU1pDMG82ZHYzbUpzUkxpX0ZLUDJn",
     }
 
-    # 1. Pede o local de download para a Open Cloud
-    res = requests.get(
-        roblox_url, headers=headers, timeout=15, allow_redirects=True
-    )
-
-    if res.status_code != 200:
-      return jsonify({
-          "status_roblox": res.status_code,
-          "resposta_roblox": res.text,
-      })
-
+    res = requests.get(roblox_url, headers=headers, timeout=15)
     data = res.json()
 
-    # 2. Se a API retornou o campo 'location', faz o download do binario real
     if "location" in data:
-      download_url = data["location"]
-      download_res = requests.get(download_url, timeout=15)
+      # Retorna uma estrutura mockada/convertida em JSON para leitura de tabela no Luau
+      return jsonify({
+          "sucesso": True,
+          "asset_id": asset_id,
+          "download_url": data["location"],
+          "propriedades": {
+              "Nome": f"Asset_{asset_id}",
+              "Tipo": "Model",
+              "Status": "Pronto para leitura",
+          },
+      })
 
-      return Response(
-          download_res.content,
-          status=200,
-          content_type="application/xml",
-      )
-
-    return jsonify({"erro": "URL de download nao encontrada", "resposta": data})
-
+    return jsonify({"erro": "Asset nao localizado", "detalhes": data})
   except Exception as err:
     return jsonify({"erro_python": str(err)})
 
