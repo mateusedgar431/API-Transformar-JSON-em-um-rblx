@@ -333,53 +333,45 @@ def publicar():
 
 import io
 import os
-import struct
 import xml.etree.ElementTree as ET
 
 API_KEY = "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJMU5pSXNJbXRwWkNJNkluTnBaeTB5TURJeExUQTNMVEV6VkRFNE9qVXhPalE1V2lJc0luUjVjQ0k2SWtwWFZDSjkuZXlKaGRXUWlPaUpTYjJKc2IzaEpiblJsY201aGJDSXNJbWx6Y3lJNklrTnNiM1ZrUVhWMGFHVnVkR2xqWVhScGIyNVRaWEoyYVdObElpd2lZbUZ6WlVGd2FVdGxlU0k2SW5oR04wTlZObGx1YzBVMmFrZGlja3R0WVhoaFVHRnZTV3huYTFCTWNEVkZWVU50VEhKNlZqTmFlSFJqTkROUU1DSXNJbTkzYm1WeVNXUWlPaUl5TURNMU5qVTROelUwSWl3aVpYaHdJam94TnpnNU16VTJNelkzTENKcFlYUWlPakUzT0Rrek5USTNOamNzSW01aVppSTZNVGM0T1RNMU1qYzJOMzAuUXVyaDllaXpRWDZ1M2tyTjBuVVlXSXdQQzd2M0FBZ2ZWYTFkNzQ5TmVlQUZqMGRIdHdEYkd1LTFicTcyT1A0WUQ0YXRIN2FzRm5UU04wY2wzeFlpZkVRV1VIN3ozVk92Q0RvSVR0TE9icVF4VV9tUEU1QmQ5NGtjMTNJbnJhLVJoNUVSMlREakhxam02RDhqekpsUDdMY2VVNnlNZ2pkSk1YaHI1ZVdjUWRIcTU5THpQNGdtTGduT0QwR25Scl9XUUhYODlCMmhHc2FNd19NQXhCQWdwOWtPcUZBTmg4azV6M0o0OExkTUlBRzNxNTZ2RmhKaVBIenhya285d180RVh0UEZIbTFOOFM3Sm9ybGQ5UGVLSkVJeXFSSzZFclcxck1yOG4tbVAtX293aUZGbmFoc3ItWmZLcm93MF95OVVlU1pDMG82ZHYzbUpzUkxpX0ZLUDJn"
 
-def descompactar_rbxm_binario(conteudo_bytes):
-    """Extrai todas as instâncias e blocos de um arquivo binário do Roblox em Python puro"""
-    instancias = {}
+def extrair_nomes_reais_binario(conteudo_bytes):
+    """Varre os blocos do arquivo binario para buscar os nomes reais das partes sem usar numeração artificial."""
+    children = {}
     
-    # Se o arquivo for binário (.rbxm)
-    if conteudo_bytes.startswith(b"<roblox!"):
-        # Lê os blocos de instâncias (INST/PROP) gravados no arquivo
-        try:
-            # Varre o arquivo em busca dos nomes das instâncias reais
-            offset = 0
-            count = 1
-            while offset < len(conteudo_bytes):
-                idx = conteudo_bytes.find(b"INST", offset)
-                if idx == -1:
-                    break
+    # Procura blocos de texto no binário que representam os nomes reais colocados pelo dono
+    pos = 0
+    while True:
+        # Localiza marcadores de propriedades no arquivo binário
+        pos = conteudo_bytes.find(b"Name", pos)
+        if pos == -1:
+            break
+            
+        # Pega a fatia de texto do nome real (tentando extrair caracteres legíveis)
+        trecho = conteudo_bytes[pos+4:pos+50]
+        nome_encontrado = ""
+        for byte in trecho:
+            if 32 <= byte <= 126: # Caracteres de texto visíveis
+                nome_encontrado += chr(byte)
+            elif nome_encontrado:
+                break
                 
-                # Extrai o nome da classe ou tipo do bloco
-                nome_item = f"Part_{count}"
-                instancias[nome_item] = {
-                    "Instance": "Part",
-                    "Properties": {
-                        "Name": nome_item,
-                        "ClassName": "Part"
-                    },
-                    "Children": {},
-                    "Script": None
-                }
-                count += 1
-                offset = idx + 4
-        except Exception:
-            pass
-
-        if not instancias:
-            instancias["Model_Completo"] = {
-                "Instance": "Model",
-                "Properties": {"Name": "Model_Carregado", "ClassName": "Model"},
+        # Filtra nomes válidos e ignora termos do próprio sistema do Roblox
+        if nome_encontrado and len(nome_encontrado) > 1 and nome_encontrado not in ["Name", "ClassName", "Value", "roblox"]:
+            children[nome_encontrado] = {
+                "Instance": "Part",
+                "Properties": {
+                    "Name": nome_encontrado,
+                    "ClassName": "Part"
+                },
                 "Children": {},
                 "Script": None
             }
-            
-        return instancias
-    return None
+        pos += 4
+        
+    return children
 
 def processar_node_xml(elem, contagem_nomes=None):
     if contagem_nomes is None:
@@ -387,8 +379,6 @@ def processar_node_xml(elem, contagem_nomes=None):
 
     nome_base = elem.attrib.get("name", "Instance")
     classe = elem.attrib.get("class", "Folder")
-    
-    contagem_nomes[nome_base] = contagem_nomes.get(nome_base, 0) + 1
 
     properties = {
         "Name": nome_base,
@@ -410,14 +400,7 @@ def processar_node_xml(elem, contagem_nomes=None):
         elif child.tag == "Item":
             filho_processado = processar_node_xml(child)
             nome_filho = filho_processado["Properties"]["Name"]
-            
-            idx = 1
-            chave_final = nome_filho
-            while chave_final in children:
-                idx += 1
-                chave_final = f"{nome_filho}_{idx}"
-                
-            children[chave_final] = filho_processado
+            children[nome_filho] = filho_processado
 
     return {
         "Instance": classe,
@@ -466,16 +449,16 @@ def carregarasset():
             services_mestres = {}
             conteudo_bruto = file_res.content
             
-            # Se for binario (.rbxm), processa sem falhar o deploy
             if conteudo_bruto.startswith(b"<roblox!"):
+                # Extrai os nomes reais direto dos bytes do arquivo sem criar numerações (Part_1, Part_2...)
+                filhos_reais = extrair_nomes_reais_binario(conteudo_bruto)
                 services_mestres["Workspace"] = {
                     "Instance": "Workspace",
                     "Properties": {"Name": "Workspace", "ClassName": "Workspace"},
-                    "Children": descompactar_rbxm_binario(conteudo_bruto),
+                    "Children": filhos_reais,
                     "Script": None
                 }
             else:
-                # Processamento normal XML (.rbxmx)
                 if b"<roblox" in conteudo_bruto:
                     inicio_xml = conteudo_bruto.find(b"<roblox")
                     fim_xml = conteudo_bruto.rfind(b"</roblox>") + 9
