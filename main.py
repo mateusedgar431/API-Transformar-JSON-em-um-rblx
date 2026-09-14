@@ -379,7 +379,7 @@ def carregarasset():
       return Response(
           download_res.content,
           status=200,
-          content_type="application/octet-stream",
+          content_type="application/xml",
       )
 
     return jsonify({"erro": "URL de download nao encontrada", "resposta": data})
