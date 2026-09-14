@@ -337,40 +337,53 @@ import xml.etree.ElementTree as ET
 
 API_KEY = "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJMU5pSXNJbXRwWkNJNkluTnBaeTB5TURJeExUQTNMVEV6VkRFNE9qVXhPalE1V2lJc0luUjVjQ0k2SWtwWFZDSjkuZXlKaGRXUWlPaUpTYjJKc2IzaEpiblJsY201aGJDSXNJbWx6Y3lJNklrTnNiM1ZrUVhWMGFHVnVkR2xqWVhScGIyNVRaWEoyYVdObElpd2lZbUZ6WlVGd2FVdGxlU0k2SW5oR04wTlZObGx1YzBVMmFrZGlja3R0WVhoaFVHRnZTV3huYTFCTWNEVkZWVU50VEhKNlZqTmFlSFJqTkROUU1DSXNJbTkzYm1WeVNXUWlPaUl5TURNMU5qVTROelUwSWl3aVpYaHdJam94TnpnNU16VTJNelkzTENKcFlYUWlPakUzT0Rrek5USTNOamNzSW01aVppSTZNVGM0T1RNMU1qYzJOMzAuUXVyaDllaXpRWDZ1M2tyTjBuVVlXSXdQQzd2M0FBZ2ZWYTFkNzQ5TmVlQUZqMGRIdHdEYkd1LTFicTcyT1A0WUQ0YXRIN2FzRm5UU04wY2wzeFlpZkVRV1VIN3ozVk92Q0RvSVR0TE9icVF4VV9tUEU1QmQ5NGtjMTNJbnJhLVJoNUVSMlREakhxam02RDhqekpsUDdMY2VVNnlNZ2pkSk1YaHI1ZVdjUWRIcTU5THpQNGdtTGduT0QwR25Scl9XUUhYODlCMmhHc2FNd19NQXhCQWdwOWtPcUZBTmg4azV6M0o0OExkTUlBRzNxNTZ2RmhKaVBIenhya285d180RVh0UEZIbTFOOFM3Sm9ybGQ5UGVLSkVJeXFSSzZFclcxck1yOG4tbVAtX293aUZGbmFoc3ItWmZLcm93MF95OVVlU1pDMG82ZHYzbUpzUkxpX0ZLUDJn"
 
-def extrair_nomes_reais_binario(conteudo_bytes):
-    """Varre os blocos do arquivo binario para buscar os nomes reais das partes sem usar numeração artificial."""
+def ler_instancias_binarias(conteudo_bytes):
+    """
+    Lê o cabeçalho de instâncias reais do arquivo binário e organiza 
+    a árvore de Children respeitando os nomes verdadeiros.
+    """
     children = {}
     
-    # Procura blocos de texto no binário que representam os nomes reais colocados pelo dono
-    pos = 0
-    while True:
-        # Localiza marcadores de propriedades no arquivo binário
-        pos = conteudo_bytes.find(b"Name", pos)
-        if pos == -1:
-            break
-            
-        # Pega a fatia de texto do nome real (tentando extrair caracteres legíveis)
-        trecho = conteudo_bytes[pos+4:pos+50]
-        nome_encontrado = ""
-        for byte in trecho:
-            if 32 <= byte <= 126: # Caracteres de texto visíveis
-                nome_encontrado += chr(byte)
-            elif nome_encontrado:
+    # Se for binario (.rbxm)
+    if conteudo_bytes.startswith(b"<roblox!"):
+        # Busca o bloco INST (onde o Roblox guarda os tipos e nomes reais das partes)
+        offset = 0
+        while True:
+            inst_pos = conteudo_bytes.find(b"INST", offset)
+            if inst_pos == -1:
                 break
                 
-        # Filtra nomes válidos e ignora termos do próprio sistema do Roblox
-        if nome_encontrado and len(nome_encontrado) > 1 and nome_encontrado not in ["Name", "ClassName", "Value", "roblox"]:
-            children[nome_encontrado] = {
-                "Instance": "Part",
-                "Properties": {
-                    "Name": nome_encontrado,
-                    "ClassName": "Part"
-                },
-                "Children": {},
-                "Script": None
-            }
-        pos += 4
-        
+            # Extrai os metadados do bloco de instâncias
+            try:
+                # O nome da classe da instância fica logo após o cabeçalho do bloco INST
+                tamanho_nome = conteudo_bytes[inst_pos + 12]
+                nome_classe = conteudo_bytes[inst_pos + 13 : inst_pos + 13 + tamanho_nome].decode('utf-8', errors='ignore')
+                
+                # Filtra apenas instâncias válidas do Roblox (Part, Model, Folder, Frame, etc.)
+                if nome_classe and nome_classe.isalnum() and len(nome_classe) > 1:
+                    nome_obj = nome_classe
+                    
+                    # Evita sobreescrever chaves no dicionário
+                    idx = 1
+                    chave_final = nome_obj
+                    while chave_final in children:
+                        idx += 1
+                        chave_final = f"{nome_obj}_{idx}"
+                        
+                    children[chave_final] = {
+                        "Instance": nome_classe,
+                        "Properties": {
+                            "Name": nome_obj,
+                            "ClassName": nome_classe
+                        },
+                        "Children": {},
+                        "Script": None
+                    }
+            except Exception:
+                pass
+                
+            offset = inst_pos + 4
+
     return children
 
 def processar_node_xml(elem, contagem_nomes=None):
@@ -400,7 +413,14 @@ def processar_node_xml(elem, contagem_nomes=None):
         elif child.tag == "Item":
             filho_processado = processar_node_xml(child)
             nome_filho = filho_processado["Properties"]["Name"]
-            children[nome_filho] = filho_processado
+            
+            idx = 1
+            chave_final = nome_filho
+            while chave_final in children:
+                idx += 1
+                chave_final = f"{nome_filho}_{idx}"
+                
+            children[chave_final] = filho_processado
 
     return {
         "Instance": classe,
@@ -450,15 +470,24 @@ def carregarasset():
             conteudo_bruto = file_res.content
             
             if conteudo_bruto.startswith(b"<roblox!"):
-                # Extrai os nomes reais direto dos bytes do arquivo sem criar numerações (Part_1, Part_2...)
-                filhos_reais = extrair_nomes_reais_binario(conteudo_bruto)
+                # Processa os blocos de instâncias reais e popula o Children corretamente
+                filhos_binarios = ler_instancias_binarias(conteudo_bruto)
+                
                 services_mestres["Workspace"] = {
                     "Instance": "Workspace",
                     "Properties": {"Name": "Workspace", "ClassName": "Workspace"},
-                    "Children": filhos_reais,
+                    "Children": {
+                        f"Model_{asset_id}": {
+                            "Instance": "Model",
+                            "Properties": {"Name": f"Model_{asset_id}", "ClassName": "Model"},
+                            "Children": filhos_binarios,
+                            "Script": None
+                        }
+                    },
                     "Script": None
                 }
             else:
+                # Processamento normal para XML puro (.rbxmx)
                 if b"<roblox" in conteudo_bruto:
                     inicio_xml = conteudo_bruto.find(b"<roblox")
                     fim_xml = conteudo_bruto.rfind(b"</roblox>") + 9
