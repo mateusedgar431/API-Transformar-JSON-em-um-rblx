@@ -335,6 +335,7 @@ import io
 import os
 import xml.etree.ElementTree as ET
 
+# NOTA: Evite expor chaves privadas de API diretamente no código!
 API_KEY = "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJMU5pSXNJbXRwWkNJNkluTnBaeTB5TURJeExUQTNMVEV6VkRFNE9qVXhPalE1V2lJc0luUjVjQ0k2SWtwWFZDSjkuZXlKaGRXUWlPaUpTYjJKc2IzaEpiblJsY201aGJDSXNJbWx6Y3lJNklrTnNiM1ZrUVhWMGFHVnVkR2xqWVhScGIyNVRaWEoyYVdObElpd2lZbUZ6WlVGd2FVdGxlU0k2SW5oR04wTlZObGx1YzBVMmFrZGlja3R0WVhoaFVHRnZTV3huYTFCTWNEVkZWVU50VEhKNlZqTmFlSFJqTkROUU1DSXNJbTkzYm1WeVNXUWlPaUl5TURNMU5qVTROelUwSWl3aVpYaHdJam94TnpnNU16VTJNelkzTENKcFlYUWlPakUzT0Rrek5USTNOamNzSW01aVppSTZNVGM0T1RNMU1qYzJOMzAuUXVyaDllaXpRWDZ1M2tyTjBuVVlXSXdQQzd2M0FBZ2ZWYTFkNzQ5TmVlQUZqMGRIdHdEYkd1LTFicTcyT1A0WUQ0YXRIN2FzRm5UU04wY2wzeFlpZkVRV1VIN3ozVk92Q0RvSVR0TE9icVF4VV9tUEU1QmQ5NGtjMTNJbnJhLVJoNUVSMlREakhxam02RDhqekpsUDdMY2VVNnlNZ2pkSk1YaHI1ZVdjUWRIcTU5THpQNGdtTGduT0QwR25Scl9XUUhYODlCMmhHc2FNd19NQXhCQWdwOWtPcUZBTmg4azV6M0o0OExkTUlBRzNxNTZ2RmhKaVBIenhya285d180RVh0UEZIbTFOOFM3Sm9ybGQ5UGVLSkVJeXFSSzZFclcxck1yOG4tbVAtX293aUZGbmFoc3ItWmZLcm93MF95OVVlU1pDMG82ZHYzbUpzUkxpX0ZLUDJn"
 
 def processar_node_xml(elem, contagem_nomes=None):
@@ -345,10 +346,6 @@ def processar_node_xml(elem, contagem_nomes=None):
     classe = elem.attrib.get("class", "Folder")
     
     contagem_nomes[nome_base] = contagem_nomes.get(nome_base, 0) + 1
-    if contagem_nomes[nome_base] > 1:
-        child_key = f"{nome_base}_{contagem_nomes[nome_base]}"
-    else:
-        child_key = nome_base
 
     properties = {
         "Name": nome_base,
@@ -424,10 +421,18 @@ def carregarasset():
         if download_url:
             file_res = requests.get(download_url, timeout=15)
             services_mestres = {}
+            conteudo_bruto = file_res.content
             
+            # Valida se o arquivo retornado e binario (.rbxm)
+            if conteudo_bruto.startswith(b"<roblox!"):
+                return jsonify({
+                    "sucesso": False,
+                    "erro": "O asset retornado esta no formato BINARIO (.rbxm) e nao em XML (.rbxmx). O ElementTree nao consegue ler binarios.",
+                    "download_url": download_url
+                })
+            
+            # Processamento de XML (.rbxmx)
             try:
-                conteudo_bruto = file_res.content
-                
                 if b"<roblox" in conteudo_bruto:
                     inicio_xml = conteudo_bruto.find(b"<roblox")
                     fim_xml = conteudo_bruto.rfind(b"</roblox>") + 9
@@ -441,12 +446,14 @@ def carregarasset():
                     services_mestres[service_name] = processar_node_xml(item)
                     
             except Exception as err:
-                return jsonify({"erro": str(err)})
+                return jsonify({"erro_xml": str(err)})
+
+            # Retorna o dicionario diretamente sem str() para o Luau receber como Tabela/JSON puro
             return jsonify({
                 "sucesso": True,
                 "asset_id": asset_id,
                 "download_url": download_url,
-                "services": str(services_mestres)
+                "services": services_mestres
             })
             
         return jsonify({"erro": "Asset nao encontrado", "detalhes": str(data)})
