@@ -335,37 +335,45 @@ import io
 import os
 import requests
 import xml.etree.ElementTree as ET
-import pyroblox  # Usa a biblioteca pyroblox instalada
 
-API_KEY = "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJMU5pSXNJbXRwWkNJNkluTnBaeTB5TURJeExUQTNMVEV6VkRFNE9qVXhPalE1V2lJc0luUjVjQ0k2SWtwWFZDSjkuZXlKaGRXUWlPaUpTYjJKc2IzaEpiblJsY201aGJDSXNJbWx6Y3lJNklrTnNiM1ZrUVhWMGFHVnVkR2xqWVhScGIyNVRaWEoyYVdObElpd2lZbUZ6WlVGd2FVdGxlU0k2SW5oR04wTlZObGx1YzBVMmFrZGlja3R0WVhoaFVHRnZTV3huYTFCTWNEVkZWVU50VEhKNlZqTmFlSFJqTkROUU1DSXNJbTkzYm1WeVNXUWlPaUl5TURNMU5qVTROelUwSWl3aVpYaHdJam94TnpnNU16VTJNelkzTENKcFlYUWlPakUzT0Rrek5USTNOamNzSW01aVppSTZNVGM0T1RNMU1qYzJOMzAuUXVyaDllaXpRWDZ1M2tyTjBuVVlXSXdQQzd2M0FBZ2ZWYTFkNzQ5TmVlQUZqMGRIdHdEYkd1LTFicTcyT1A0WUQ0YXRIN2FzRm5UU04wY2wzeFlpZkVRV1VIN3ozVk92Q0RvSVR0TE9icVF4VV9tUEU1QmQ5NGtjMTNJbnJhLVJoNUVSMlREakhxam02RDhqekpsUDdMY2VVNnlNZ2pkSk1YaHI1ZVdjUWRIcTU5THpQNGdtTGduT0QwR25Scl9XUUhYODlCMmhHc2FNd19NQXhCQWdwOWtPcUZBTmg4azV6M0o0OExkTUlBRzNxNTZ2RmhKaVBIenhya285d180RVh0UEZIbTFOOFM3Sm9ybGQ5UGVLSkVJeXFSSzZFclcxck1yOG4tbVAtX293aUZGbmFoc3ItWmZLcm93MF95OVVlU1pDMG82ZHYzbUpzUkxpX0ZLUDJn"
+API_KEY = "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJMU5pSXNJbXRwWkNJNkluTnBaeTB5TURJeExUQTNMVEV6VkRFNE9qVXhPalE1V2lJc0luUjVjQ0k2SWtwWFZDSjkuZXlKaGRXUQ..."
 
-def converter_instancia_pyroblox(inst):
-    """Converte os objetos descompactados pelo pyroblox para o seu JSON com Children"""
-    nome = getattr(inst, 'Name', inst.__class__.__name__)
-    classe = inst.__class__.__name__
-    
+def processar_node_xml(elem, contagem_nomes=None):
+    if contagem_nomes is None:
+        contagem_nomes = {}
+
+    nome_base = elem.attrib.get("name", "Instance")
+    classe = elem.attrib.get("class", "Folder")
+
     properties = {
-        "Name": nome,
+        "Name": nome_base,
         "ClassName": classe
     }
-    
-    # Extrai o código de scripts se existir
-    script_code = getattr(inst, 'Source', None)
-    
     children = {}
-    if hasattr(inst, 'Children'):
-        for child in inst.Children:
-            nome_filho = getattr(child, 'Name', child.__class__.__name__)
+    script_code = None
+
+    for child in elem:
+        if child.tag == "Properties":
+            for prop in child:
+                prop_name = prop.attrib.get("name", prop.tag)
+                prop_val = prop.text or ""
+                properties[prop_name] = prop_val
+                
+                if prop_name == "Source":
+                    script_code = prop_val
+                    
+        elif child.tag == "Item":
+            filho_processado = processar_node_xml(child)
+            nome_filho = filho_processado["Properties"]["Name"]
             
-            # Evita sobreescrever chaves repetidas
             idx = 1
             chave_final = nome_filho
             while chave_final in children:
                 idx += 1
                 chave_final = f"{nome_filho}_{idx}"
                 
-            children[chave_final] = converter_instancia_pyroblox(child)
-            
+            children[chave_final] = filho_processado
+
     return {
         "Instance": classe,
         "Properties": properties,
@@ -385,10 +393,10 @@ def carregarasset():
         if not asset_id:
             return jsonify({"erro": "Asset ID nao informado"})
             
-        roblox_url = f"https://apis.roblox.com/asset-delivery-api/v1/assetId/{asset_id}"
+        roblox_url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
         headers = {
             "User-Agent": "Roblox/WinInet",
-            "Accept": "*/*",
+            "Accept": "application/xml, text/xml, */*",
             "x-api-key": API_KEY
         }
         
@@ -396,51 +404,28 @@ def carregarasset():
         data = res.json()
         
         download_url = None
-        if isinstance(data, list) and len(data) > 0:
-            item = data[0]
-            if "locations" in item and len(item["locations"]) > 0:
-                download_url = item["locations"][0].get("location")
-            elif "location" in item:
-                download_url = item.get("location")
-        elif isinstance(data, dict):
-            if "location" in data:
-                download_url = data["location"]
-            elif "locations" in data and len(data["locations"]) > 0:
-                download_url = data["locations"][0].get("location")
+        if "locations" in data and len(data["locations"]) > 0:
+            download_url = data["locations"][0].get("location")
+        elif isinstance(data, list) and len(data) > 0:
+            download_url = data[0].get("locations", [{}])[0].get("location")
 
         if download_url:
-            file_res = requests.get(download_url, timeout=15)
+            file_res = requests.get(download_url, headers={"Accept": "application/xml"}, timeout=15)
             conteudo_bruto = file_res.content
+            
             services_mestres = {}
             
-            # Se for formato binário (.rbxm), usa pyroblox para descompactar todas as Parts
-            if conteudo_bruto.startswith(b"<roblox!"):
-                modelo_descompactado = pyroblox.decode(conteudo_bruto)
-                
-                children_reais = {}
-                for item in getattr(modelo_descompactado, 'Children', [modelo_descompactado]):
-                    nome_item = getattr(item, 'Name', item.__class__.__name__)
-                    children_reais[nome_item] = converter_instancia_pyroblox(item)
-                    
-                services_mestres["Workspace"] = {
-                    "Instance": "Workspace",
-                    "Properties": {"Name": "Workspace", "ClassName": "Workspace"},
-                    "Children": children_reais,
-                    "Script": None
-                }
+            if b"<roblox" in conteudo_bruto:
+                inicio_xml = conteudo_bruto.find(b"<roblox")
+                fim_xml = conteudo_bruto.rfind(b"</roblox>") + 9
+                xml_valido = conteudo_bruto[inicio_xml:fim_xml]
+                root = ET.fromstring(xml_valido)
             else:
-                # Processamento XML padrão (.rbxmx)
-                if b"<roblox" in conteudo_bruto:
-                    inicio_xml = conteudo_bruto.find(b"<roblox")
-                    fim_xml = conteudo_bruto.rfind(b"</roblox>") + 9
-                    xml_valido = conteudo_bruto[inicio_xml:fim_xml]
-                    root = ET.fromstring(xml_valido)
-                else:
-                    root = ET.fromstring(conteudo_bruto)
+                root = ET.fromstring(conteudo_bruto)
 
-                for item in root.findall("Item"):
-                    service_name = item.attrib.get("name", item.attrib.get("class"))
-                    services_mestres[service_name] = processar_node_xml(item)
+            for item in root.findall("Item"):
+                service_name = item.attrib.get("name", item.attrib.get("class"))
+                services_mestres[service_name] = processar_node_xml(item)
 
             return jsonify({
                 "sucesso": True,
