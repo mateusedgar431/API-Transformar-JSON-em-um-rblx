@@ -337,12 +337,21 @@ import xml.etree.ElementTree as ET
 
 API_KEY = "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJMU5pSXNJbXRwWkNJNkluTnBaeTB5TURJeExUQTNMVEV6VkRFNE9qVXhPalE1V2lJc0luUjVjQ0k2SWtwWFZDSjkuZXlKaGRXUWlPaUpTYjJKc2IzaEpiblJsY201aGJDSXNJbWx6Y3lJNklrTnNiM1ZrUVhWMGFHVnVkR2xqWVhScGIyNVRaWEoyYVdObElpd2lZbUZ6WlVGd2FVdGxlU0k2SW5oR04wTlZObGx1YzBVMmFrZGlja3R0WVhoaFVHRnZTV3huYTFCTWNEVkZWVU50VEhKNlZqTmFlSFJqTkROUU1DSXNJbTkzYm1WeVNXUWlPaUl5TURNMU5qVTROelUwSWl3aVpYaHdJam94TnpnNU16VTJNelkzTENKcFlYUWlPakUzT0Rrek5USTNOamNzSW01aVppSTZNVGM0T1RNMU1qYzJOMzAuUXVyaDllaXpRWDZ1M2tyTjBuVVlXSXdQQzd2M0FBZ2ZWYTFkNzQ5TmVlQUZqMGRIdHdEYkd1LTFicTcyT1A0WUQ0YXRIN2FzRm5UU04wY2wzeFlpZkVRV1VIN3ozVk92Q0RvSVR0TE9icVF4VV9tUEU1QmQ5NGtjMTNJbnJhLVJoNUVSMlREakhxam02RDhqekpsUDdMY2VVNnlNZ2pkSk1YaHI1ZVdjUWRIcTU5THpQNGdtTGduT0QwR25Scl9XUUhYODlCMmhHc2FNd19NQXhCQWdwOWtPcUZBTmg4azV6M0o0OExkTUlBRzNxNTZ2RmhKaVBIenhya285d180RVh0UEZIbTFOOFM3Sm9ybGQ5UGVLSkVJeXFSSzZFclcxck1yOG4tbVAtX293aUZGbmFoc3ItWmZLcm93MF95OVVlU1pDMG82ZHYzbUpzUkxpX0ZLUDJn"
 
-def processar_node_xml(elem):
-    nome = elem.attrib.get("name", "Instance")
+def processar_node_xml(elem, contagem_nomes=None):
+    if contagem_nomes is None:
+        contagem_nomes = {}
+
+    nome_base = elem.attrib.get("name", "Instance")
     classe = elem.attrib.get("class", "Folder")
     
+    contagem_nomes[nome_base] = contagem_nomes.get(nome_base, 0) + 1
+    if contagem_nomes[nome_base] > 1:
+        child_key = f"{nome_base}_{contagem_nomes[nome_base]}"
+    else:
+        child_key = nome_base
+
     properties = {
-        "Name": nome,
+        "Name": nome_base,
         "ClassName": classe
     }
     children = {}
@@ -359,8 +368,16 @@ def processar_node_xml(elem):
                     script_code = prop_val
                     
         elif child.tag == "Item":
-            child_name = child.attrib.get("name", child.attrib.get("class", "Item"))
-            children[child_name] = processar_node_xml(child)
+            filho_processado = processar_node_xml(child)
+            nome_filho = filho_processado["Properties"]["Name"]
+            
+            idx = 1
+            chave_final = nome_filho
+            while chave_final in children:
+                idx += 1
+                chave_final = f"{nome_filho}_{idx}"
+                
+            children[chave_final] = filho_processado
 
     return {
         "Instance": classe,
@@ -389,15 +406,9 @@ def carregarasset():
         }
         
         res = requests.get(roblox_url, headers=headers, timeout=15)
-        
-        try:
-            data = res.json()
-        except Exception:
-            data = {"raw_text": res.text, "status_code": res.status_code}
+        data = res.json()
         
         download_url = None
-        
-        # Mapeamento profundo das rotas da Open Cloud Asset Delivery
         if isinstance(data, list) and len(data) > 0:
             item = data[0]
             if "locations" in item and len(item["locations"]) > 0:
@@ -415,10 +426,20 @@ def carregarasset():
             services_mestres = {}
             
             try:
-                root = ET.fromstring(file_res.content)
+                conteudo_bruto = file_res.content
+                
+                if b"<roblox" in conteudo_bruto:
+                    inicio_xml = conteudo_bruto.find(b"<roblox")
+                    fim_xml = conteudo_bruto.rfind(b"</roblox>") + 9
+                    xml_valido = conteudo_bruto[inicio_xml:fim_xml]
+                    root = ET.fromstring(xml_valido)
+                else:
+                    root = ET.fromstring(conteudo_bruto)
+
                 for item in root.findall("Item"):
                     service_name = item.attrib.get("name", item.attrib.get("class"))
                     services_mestres[service_name] = processar_node_xml(item)
+                    
             except Exception:
                 services_mestres = {
                     "Workspace": {
@@ -449,12 +470,7 @@ def carregarasset():
                 "services": str(services_mestres)
             })
             
-        # Converte a resposta bruta em String para você conseguir ver no print do Roblox
-        return jsonify({
-            "erro": "Asset nao encontrado", 
-            "detalhes": str(data),
-            "status_http": res.status_code
-        })
+        return jsonify({"erro": "Asset nao encontrado", "detalhes": str(data)})
         
     except Exception as err:
         return jsonify({"erro_python": str(err)})
