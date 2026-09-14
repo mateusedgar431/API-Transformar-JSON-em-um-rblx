@@ -461,8 +461,16 @@ def carregarasset():
 
         if download_url:
             file_res = requests.get(download_url, timeout=15)
-            services_mestres = {}
             conteudo_bruto = file_res.content
+            
+            # Validação: verifica se o arquivo realmente baixou algo
+            if not conteudo_bruto or len(conteudo_bruto) == 0:
+                return jsonify({
+                    "erro": "O arquivo retornado pela Roblox veio vazio",
+                    "status_code": file_res.status_code
+                })
+
+            services_mestres = {}
             
             # Se for formato binário (.rbxm)
             if conteudo_bruto.startswith(b"<roblox!"):
@@ -474,7 +482,7 @@ def carregarasset():
                     "Script": None
                 }
             else:
-                # Se for formato XML puro (.rbxmx)
+                # Se for XML (.rbxmx)
                 if b"<roblox" in conteudo_bruto:
                     inicio_xml = conteudo_bruto.find(b"<roblox")
                     fim_xml = conteudo_bruto.rfind(b"</roblox>") + 9
