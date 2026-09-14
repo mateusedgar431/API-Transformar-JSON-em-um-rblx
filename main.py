@@ -389,17 +389,26 @@ def carregarasset():
         }
         
         res = requests.get(roblox_url, headers=headers, timeout=15)
-        data = res.json()
         
-        # Procura a URL de download em todas as chaves possiveis da Open Cloud
+        try:
+            data = res.json()
+        except Exception:
+            data = {"raw_text": res.text, "status_code": res.status_code}
+        
         download_url = None
-        if isinstance(data, dict):
+        
+        # Mapeamento profundo das rotas da Open Cloud Asset Delivery
+        if isinstance(data, list) and len(data) > 0:
+            item = data[0]
+            if "locations" in item and len(item["locations"]) > 0:
+                download_url = item["locations"][0].get("location")
+            elif "location" in item:
+                download_url = item.get("location")
+        elif isinstance(data, dict):
             if "location" in data:
                 download_url = data["location"]
             elif "locations" in data and len(data["locations"]) > 0:
                 download_url = data["locations"][0].get("location")
-        elif isinstance(data, list) and len(data) > 0:
-            download_url = data[0].get("location")
 
         if download_url:
             file_res = requests.get(download_url, timeout=15)
@@ -440,7 +449,12 @@ def carregarasset():
                 "SERVICES_MESTRES": services_mestres
             })
             
-        return jsonify({"erro": "Asset nao encontrado", "detalhes": data})
+        # Converte a resposta bruta em String para você conseguir ver no print do Roblox
+        return jsonify({
+            "erro": "Asset nao encontrado", 
+            "detalhes": str(data),
+            "status_http": res.status_code
+        })
         
     except Exception as err:
         return jsonify({"erro_python": str(err)})
