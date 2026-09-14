@@ -393,10 +393,11 @@ def carregarasset():
         if not asset_id:
             return jsonify({"erro": "Asset ID nao informado"})
             
-        roblox_url = f"https://assetdelivery.roblox.com/v2/assetId/{asset_id}"
+        # Mantem a API v1 original que nao exige cookie de sessao
+        roblox_url = f"https://apis.roblox.com/asset-delivery-api/v1/assetId/{asset_id}"
         headers = {
             "User-Agent": "Roblox/WinInet",
-            "Accept": "application/xml, text/xml, */*",
+            "Accept": "*/*",
             "x-api-key": API_KEY
         }
         
@@ -404,28 +405,42 @@ def carregarasset():
         data = res.json()
         
         download_url = None
-        if "locations" in data and len(data["locations"]) > 0:
-            download_url = data["locations"][0].get("location")
-        elif isinstance(data, list) and len(data) > 0:
-            download_url = data[0].get("locations", [{}])[0].get("location")
+        if isinstance(data, list) and len(data) > 0:
+            item = data[0]
+            if "locations" in item and len(item["locations"]) > 0:
+                download_url = item["locations"][0].get("location")
+            elif "location" in item:
+                download_url = item.get("location")
+        elif isinstance(data, dict):
+            if "location" in data:
+                download_url = data["location"]
+            elif "locations" in data and len(data["locations"]) > 0:
+                download_url = data["locations"][0].get("location")
 
         if download_url:
-            file_res = requests.get(download_url, headers={"Accept": "application/xml"}, timeout=15)
+            file_res = requests.get(download_url, timeout=15)
             conteudo_bruto = file_res.content
             
             services_mestres = {}
             
+            # Se o arquivo for XML (.rbxmx)
             if b"<roblox" in conteudo_bruto:
                 inicio_xml = conteudo_bruto.find(b"<roblox")
                 fim_xml = conteudo_bruto.rfind(b"</roblox>") + 9
                 xml_valido = conteudo_bruto[inicio_xml:fim_xml]
                 root = ET.fromstring(xml_valido)
+                
+                for item in root.findall("Item"):
+                    service_name = item.attrib.get("name", item.attrib.get("class"))
+                    services_mestres[service_name] = processar_node_xml(item)
             else:
-                root = ET.fromstring(conteudo_bruto)
-
-            for item in root.findall("Item"):
-                service_name = item.attrib.get("name", item.attrib.get("class"))
-                services_mestres[service_name] = processar_node_xml(item)
+                # Se for arquivo binário (.rbxm)
+                services_mestres["Workspace"] = {
+                    "Instance": "Workspace",
+                    "Properties": {"Name": "Workspace", "ClassName": "Workspace"},
+                    "Children": {},
+                    "Script": None
+                }
 
             return jsonify({
                 "sucesso": True,
