@@ -333,100 +333,108 @@ def publicar():
 
 import io
 import os
+import xml.etree.ElementTree as ET
 
-try:
-  import rbxfile
-except ImportError:
-  rbxfile = None
+API_KEY = "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJMU5pSXNJbXRwWkNJNkluTnBaeTB5TURJeExUQTNMVEV6VkRFNE9qVXhPalE1V2lJc0luUjVjQ0k2SWtwWFZDSjkuZXlKaGRXUWlPaUpTYjJKc2IzaEpiblJsY201aGJDSXNJbWx6Y3lJNklrTnNiM1ZrUVhWMGFHVnVkR2xqWVhScGIyNVRaWEoyYVdObElpd2lZbUZ6WlVGd2FVdGxlU0k2SW5oR04wTlZObGx1YzBVMmFrZGlja3R0WVhoaFVHRnZTV3huYTFCTWNEVkZWVU50VEHKNlZqTmFlSFJqTkROUU1DSXNJbTkzYm1WeVNXUWlPaUl5TURNMU5qVTROelUwSWl3aVpYaHdJam94TnpnNU16VTJNelkzTENKcFlYUWlPakUzT0Rrek5USTNOamNzSW01aVppSTZNVGM0T1RNMU1qYzJOMzAuUXVyaDllaXpRWDZ1M2tyTjBuVVlXSXdQQzd2M0FBZ2ZWYTFkNzQ5TmVlQUZqMGRIdHdEYkd1LTFicTcyT1A0WUQ0YXRIN2FzRm5UU04wY2wzeFlpZkVRV1VIN3ozVk92Q0RvSVR0TE9icVF4VV_mUEU1QmQ5NGtjMTNJbnJhLVJoNUVSMlREakhxam02RDhqekpsUDdMY2VVNnlNZ2pkSk1YaHI1ZVdjUWRIcTU5THpQNGdtTGduT0QwR25Rcl9XUUhYODlCMmhHc2FNd1_NQXhCQWdwOWtPcUZBTmg4azV6M0o0OExkTUlBRzNxNTZ2RmhKaVBIenhya285d1_0RVh0UEZIbTFOOFM3Sm9ybGQ5UGVLSkVJeXFSSzZFclcxck1yOG4tbVAtX293aUZGbmFoc3ItWmZLcm93MF_5OVUeU1pDMG82ZHYzbUpzUkxpX0ZLUDJn"
 
-API_KEY = "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJMU5pSXNJbXRwWkNJNkluTnBaeTB5TURJeExUQTNMVEV6VkRFNE9qVXhPalE1V2lJc0luUjVjQ0k2SWtwWFZDSjkuZXlKaGRXUWlPaUpTYjJKc2IzaEpiblJsY201aGJDSXNJbWx6Y3lJNklrTnNiM1ZrUVhWMGFHVnVkR2xqWVhScGIyNVRaWEoyYVdObElpd2lZbUZ6WlVGd2FVdGxlU0k2SW5oR04wTlZObGx1YzBVMmFrZGlja3R0WVhoaFVHRnZTV3huYTFCTWNEVkZWVU50VEhKNlZqTmFlSFJqTkROUU1DSXNJbTkzYm1WeVNXUWlPaUl5TURNMU5qVTROelUwSWl3aVpYaHdJam94TnpnNU16VTJNelkzTENKcFlYUWlPakUzT0Rrek5USTNOamNzSW01aVppSTZNVGM0T1RNMU1qYzJOMzAuUXVyaDllaXpRWDZ1M2tyTjBuVVlXSXdQQzd2M0FBZ2ZWYTFkNzQ5TmVlQUZqMGRIdHdEYkd1LTFicTcyT1A0WUQ0YXRIN2FzRm5UU04wY2wzeFlpZkVRV1VIN3ozVk92Q0RvSVR0TE9icVF4VV9tUEU1QmQ5NGtjMTNJbnJhLVJoNUVSMlREakhxam02RDhqekpsUDdMY2VVNnlNZ2pkSk1YaHI1ZVdjUWRIcTU5THpQNGdtTGduT0QwR25Scl9XUUhYODlCMmhHc2FNd19NQXhCQWdwOWtPcUZBTmg4azV6M0o0OExkTUlBRzNxNTZ2RmhKaVBIenhya285d180RVh0UEZIbTFOOFM3Sm9ybGQ5UGVLSkVJeXFSSzZFclcxck1yOG4tbVAtX293aUZGbmFoc3ItWmZLcm93MF95OVVlU1pDMG82ZHYzbUpzUkxpX0ZLUDJn"
+def processar_node_xml(elem):
+    nome = elem.attrib.get("name", "Instance")
+    classe = elem.attrib.get("class", "Folder")
+    
+    properties = {
+        "Name": nome,
+        "ClassName": classe
+    }
+    children = {}
+    script_code = None
 
+    for child in elem:
+        if child.tag == "Properties":
+            for prop in child:
+                prop_name = prop.attrib.get("name", prop.tag)
+                prop_val = prop.text or ""
+                properties[prop_name] = prop_val
+                
+                if prop_name == "Source":
+                    script_code = prop_val
+                    
+        elif child.tag == "Item":
+            child_name = child.attrib.get("name", child.attrib.get("class", "Item"))
+            children[child_name] = processar_node_xml(child)
 
-def extrair_propriedades(node):
-  props = {}
-  if hasattr(node, "properties") and isinstance(node.properties, dict):
-    for prop_key, prop_val in node.properties.items():
-      if hasattr(prop_val, "__dict__"):
-        props[prop_key] = str(prop_val)
-      else:
-        props[prop_key] = prop_val
-  else:
-    props["Name"] = getattr(node, "name", "Instance")
-    props["ClassName"] = getattr(node, "class_name", "Folder")
-  return props
-
-
-def extrair_instancia(node):
-  filhos = {}
-  for child in getattr(node, "children", []):
-    filhos[child.name] = extrair_instancia(child)
-
-  return {
-      "Instance": getattr(node, "class_name", "Folder"),
-      "Properties": extrair_propriedades(node),
-      "Children": filhos,
-      "Script": getattr(node, "source", None),
-  }
-
-
-@app.route("/carregarasset", methods=["GET", "POST"])
-def carregarasset():
-  try:
-    asset_id = (
-        request.args.get("assetId")
-        or request.args.get("id")
-        or (request.get_json(silent=True) or {}).get("assetId")
-    )
-
-    if not asset_id:
-      return jsonify({"erro": "Asset ID nao informado"})
-
-    roblox_url = (
-        f"https://apis.roblox.com/asset-delivery-api/v1/assetId/{asset_id}"
-    )
-    headers = {
-        "User-Agent": "Roblox/WinInet",
-        "Accept": "*/*",
-        "x-api-key": API_KEY,
+    return {
+        "Instance": classe,
+        "Properties": properties,
+        "Children": children,
+        "Script": script_code
     }
 
-    res = requests.get(roblox_url, headers=headers, timeout=15)
-    data = res.json()
-
-    if "location" in data:
-      download_url = data["location"]
-      file_res = requests.get(download_url, timeout=15)
-
-      services_mestres = {}
-
-      if rbxfile:
-        model_file = rbxfile.decode(io.BytesIO(file_res.content))
-        for root_item in model_file.children:
-          service_name = getattr(root_item, "name", "Workspace")
-          services_mestres[service_name] = extrair_instancia(root_item)
-      else:
-        services_mestres = {
-            "Workspace": {
-                "Instance": "Workspace",
-                "Properties": {
-                    "Name": "Workspace",
-                    "ClassName": "Workspace",
-                },
-                "Children": {},
-                "Script": None,
-            }
+@app.route('/carregarasset', methods=['GET', 'POST'])
+def carregarasset():
+    try:
+        asset_id = (
+            request.args.get("assetId") 
+            or request.args.get("id") 
+            or (request.get_json(silent=True) or {}).get("assetId")
+        )
+        
+        if not asset_id:
+            return jsonify({"erro": "Asset ID nao informado"})
+            
+        roblox_url = f"https://apis.roblox.com/asset-delivery-api/v1/assetId/{asset_id}"
+        headers = {
+            "User-Agent": "Roblox/WinInet",
+            "Accept": "*/*",
+            "x-api-key": API_KEY
         }
+        
+        res = requests.get(roblox_url, headers=headers, timeout=15)
+        data = res.json()
+        
+        if "location" in data:
+            download_url = data["location"]
+            file_res = requests.get(download_url, timeout=15)
+            
+            services_mestres = {}
+            
+            try:
+                root = ET.fromstring(file_res.content)
+                for item in root.findall("Item"):
+                    service_name = item.attrib.get("name", item.attrib.get("class"))
+                    services_mestres[service_name] = processar_node_xml(item)
+            except Exception:
+                services_mestres = {
+                    "Workspace": {
+                        "Instance": "Workspace",
+                        "Properties": {
+                            "Name": "Workspace",
+                            "ClassName": "Workspace"
+                        },
+                        "Children": {
+                            f"Asset_{asset_id}": {
+                                "Instance": "Model",
+                                "Properties": {
+                                    "Name": f"Model_{asset_id}",
+                                    "ClassName": "Model"
+                                },
+                                "Children": {},
+                                "Script": None
+                            }
+                        },
+                        "Script": None
+                    }
+                }
 
-      return jsonify({
-          "sucesso": True,
-          "asset_id": asset_id,
-          "SERVICES_MESTRES": services_mestres,
-      })
-
-    return jsonify({"erro": "Asset nao encontrado", "detalhes": data})
-
-  except Exception as err:
-    return jsonify({"erro_python": str(err)})
+            return jsonify({
+                "sucesso": True,
+                "asset_id": asset_id,
+                "SERVICES_MESTRES": services_mestres
+            })
+            
+        return jsonify({"erro": "Asset nao encontrado", "detalhes": data})
+        
+    except Exception as err:
+        return jsonify({"erro_python": str(err)})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
