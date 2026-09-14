@@ -440,29 +440,8 @@ def carregarasset():
                     service_name = item.attrib.get("name", item.attrib.get("class"))
                     services_mestres[service_name] = processar_node_xml(item)
                     
-            except Exception:
-                services_mestres = {
-                    "Workspace": {
-                        "Instance": "Workspace",
-                        "Properties": {
-                            "Name": "Workspace",
-                            "ClassName": "Workspace"
-                        },
-                        "Children": {
-                            f"Asset_{asset_id}": {
-                                "Instance": "Model",
-                                "Properties": {
-                                    "Name": f"Model_{asset_id}",
-                                    "ClassName": "Model"
-                                },
-                                "Children": {},
-                                "Script": None
-                            }
-                        },
-                        "Script": None
-                    }
-                }
-
+            except Exception as err:
+                return jsonify({"erro": str(err)})
             return jsonify({
                 "sucesso": True,
                 "asset_id": asset_id,
