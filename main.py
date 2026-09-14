@@ -391,10 +391,18 @@ def carregarasset():
         res = requests.get(roblox_url, headers=headers, timeout=15)
         data = res.json()
         
-        if "location" in data:
-            download_url = data["location"]
+        # Procura a URL de download em todas as chaves possiveis da Open Cloud
+        download_url = None
+        if isinstance(data, dict):
+            if "location" in data:
+                download_url = data["location"]
+            elif "locations" in data and len(data["locations"]) > 0:
+                download_url = data["locations"][0].get("location")
+        elif isinstance(data, list) and len(data) > 0:
+            download_url = data[0].get("location")
+
+        if download_url:
             file_res = requests.get(download_url, timeout=15)
-            
             services_mestres = {}
             
             try:
@@ -428,6 +436,7 @@ def carregarasset():
             return jsonify({
                 "sucesso": True,
                 "asset_id": asset_id,
+                "download_url": download_url,
                 "SERVICES_MESTRES": services_mestres
             })
             
