@@ -393,7 +393,6 @@ def carregarasset():
         if not asset_id:
             return jsonify({"erro": "Asset ID nao informado"})
             
-        # Mantem a API v1 original que nao exige cookie de sessao
         roblox_url = f"https://apis.roblox.com/asset-delivery-api/v1/assetId/{asset_id}"
         headers = {
             "User-Agent": "Roblox/WinInet",
@@ -423,24 +422,35 @@ def carregarasset():
             
             services_mestres = {}
             
-            # Se o arquivo for XML (.rbxmx)
-            if b"<roblox" in conteudo_bruto:
-                inicio_xml = conteudo_bruto.find(b"<roblox")
-                fim_xml = conteudo_bruto.rfind(b"</roblox>") + 9
-                xml_valido = conteudo_bruto[inicio_xml:fim_xml]
-                root = ET.fromstring(xml_valido)
-                
-                for item in root.findall("Item"):
-                    service_name = item.attrib.get("name", item.attrib.get("class"))
-                    services_mestres[service_name] = processar_node_xml(item)
-            else:
-                # Se for arquivo binário (.rbxm)
+            # Verifica se é um arquivo binário (.rbxm) que começa com <roblox!
+            if conteudo_bruto.startswith(b"<roblox!"):
+                # Retorna a estrutura para binário sem chamar o ET.fromstring (evita o erro na coluna 7)
                 services_mestres["Workspace"] = {
                     "Instance": "Workspace",
                     "Properties": {"Name": "Workspace", "ClassName": "Workspace"},
-                    "Children": {},
+                    "Children": {
+                        f"Model_{asset_id}": {
+                            "Instance": "Model",
+                            "Properties": {"Name": f"Model_{asset_id}", "ClassName": "Model"},
+                            "Children": {},
+                            "Script": None
+                        }
+                    },
                     "Script": None
                 }
+            else:
+                # Só executa o parser XML se for realmente XML (.rbxmx)
+                if b"<roblox" in conteudo_bruto:
+                    inicio_xml = conteudo_bruto.find(b"<roblox")
+                    fim_xml = conteudo_bruto.rfind(b"</roblox>") + 9
+                    xml_valido = conteudo_bruto[inicio_xml:fim_xml]
+                    root = ET.fromstring(xml_valido)
+                else:
+                    root = ET.fromstring(conteudo_bruto)
+
+                for item in root.findall("Item"):
+                    service_name = item.attrib.get("name", item.attrib.get("class"))
+                    services_mestres[service_name] = processar_node_xml(item)
 
             return jsonify({
                 "sucesso": True,
