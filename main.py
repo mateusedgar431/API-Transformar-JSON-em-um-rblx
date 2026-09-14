@@ -348,7 +348,6 @@ def carregarasset():
     if not asset_id:
       return jsonify({"erro": "Asset ID nao informado"})
 
-    # Endpoint oficial do Open Cloud Roblox
     roblox_url = (
         f"https://apis.roblox.com/asset-delivery-api/v1/assetId/{asset_id}"
     )
@@ -359,6 +358,7 @@ def carregarasset():
         "x-api-key": "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJMU5pSXNJbXRwWkNJNkluTnBaeTB5TURJeExUQTNMVEV6VkRFNE9qVXhPalE1V2lJc0luUjVjQ0k2SWtwWFZDSjkuZXlKaGRXUWlPaUpTYjJKc2IzaEpiblJsY201aGJDSXNJbWx6Y3lJNklrTnNiM1ZrUVhWMGFHVnVkR2xqWVhScGIyNVRaWEoyYVdObElpd2lZbUZ6WlVGd2FVdGxlU0k2SW5oR04wTlZObGx1YzBVMmFrZGlja3R0WVhoaFVHRnZTV3huYTFCTWNEVkZWVU50VEhKNlZqTmFlSFJqTkROUU1DSXNJbTkzYm1WeVNXUWlPaUl5TURNMU5qVTROelUwSWl3aVpYaHdJam94TnpnNU16VTJNelkzTENKcFlYUWlPakUzT0Rrek5USTNOamNzSW01aVppSTZNVGM0T1RNMU1qYzJOMzAuUXVyaDllaXpRWDZ1M2tyTjBuVVlXSXdQQzd2M0FBZ2ZWYTFkNzQ5TmVlQUZqMGRIdHdEYkd1LTFicTcyT1A0WUQ0YXRIN2FzRm5UU04wY2wzeFlpZkVRV1VIN3ozVk92Q0RvSVR0TE9icVF4VV9tUEU1QmQ5NGtjMTNJbnJhLVJoNUVSMlREakhxam02RDhqekpsUDdMY2VVNnlNZ2pkSk1YaHI1ZVdjUWRIcTU5THpQNGdtTGduT0QwR25Scl9XUUhYODlCMmhHc2FNd19NQXhCQWdwOWtPcUZBTmg4azV6M0o0OExkTUlBRzNxNTZ2RmhKaVBIenhya285d180RVh0UEZIbTFOOFM3Sm9ybGQ5UGVLSkVJeXFSSzZFclcxck1yOG4tbVAtX293aUZGbmFoc3ItWmZLcm93MF95OVVlU1pDMG82ZHYzbUpzUkxpX0ZLUDJn",
     }
 
+    # 1. Pede o local de download para a Open Cloud
     res = requests.get(
         roblox_url, headers=headers, timeout=15, allow_redirects=True
     )
@@ -369,9 +369,20 @@ def carregarasset():
           "resposta_roblox": res.text,
       })
 
-    return Response(
-        res.content, status=200, content_type="application/octet-stream"
-    )
+    data = res.json()
+
+    # 2. Se a API retornou o campo 'location', faz o download do binario real
+    if "location" in data:
+      download_url = data["location"]
+      download_res = requests.get(download_url, timeout=15)
+
+      return Response(
+          download_res.content,
+          status=200,
+          content_type="application/octet-stream",
+      )
+
+    return jsonify({"erro": "URL de download nao encontrada", "resposta": data})
 
   except Exception as err:
     return jsonify({"erro_python": str(err)})
