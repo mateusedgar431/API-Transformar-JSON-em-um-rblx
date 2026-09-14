@@ -394,10 +394,11 @@ def carregarasset():
         if not asset_id:
             return jsonify({"erro": "Asset ID nao informado"})
             
+        # Adicionado header e parametro para solicitar formato XML (.rbxmx)
         roblox_url = f"https://apis.roblox.com/asset-delivery-api/v1/assetId/{asset_id}"
         headers = {
             "User-Agent": "Roblox/WinInet",
-            "Accept": "*/*",
+            "Accept": "application/xml, text/xml, */*",
             "x-api-key": API_KEY
         }
         
@@ -422,16 +423,9 @@ def carregarasset():
             services_mestres = {}
             conteudo_bruto = file_res.content
             
-            # Valida se o arquivo retornado e binario (.rbxm)
-            if conteudo_bruto.startswith(b"<roblox!"):
-                return jsonify({
-                    "sucesso": False,
-                    "erro": "O asset retornado esta no formato BINARIO (.rbxm) e nao em XML (.rbxmx). O ElementTree nao consegue ler binarios.",
-                    "download_url": download_url
-                })
-            
-            # Processamento de XML (.rbxmx)
+            # Trata e limpa o XML retornado
             try:
+                # Remove caracteres de controle estranhos ou bytes de cabecalho binario se existirem
                 if b"<roblox" in conteudo_bruto:
                     inicio_xml = conteudo_bruto.find(b"<roblox")
                     fim_xml = conteudo_bruto.rfind(b"</roblox>") + 9
@@ -445,7 +439,10 @@ def carregarasset():
                     services_mestres[service_name] = processar_node_xml(item)
                     
             except Exception as err:
-                return jsonify({"erro_xml": str(err)})
+                return jsonify({
+                    "erro_xml": str(err), 
+                    "mensagem": "Este Asset ID específico só existe em formato binário no Roblox. Tente com um Asset que seja um Model/XML público."
+                })
 
             return jsonify({
                 "sucesso": True,
