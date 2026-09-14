@@ -337,52 +337,47 @@ import xml.etree.ElementTree as ET
 
 API_KEY = "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJMU5pSXNJbXRwWkNJNkluTnBaeTB5TURJeExUQTNMVEV6VkRFNE9qVXhPalE1V2lJc0luUjVjQ0k2SWtwWFZDSjkuZXlKaGRXUWlPaUpTYjJKc2IzaEpiblJsY201aGJDSXNJbWx6Y3lJNklrTnNiM1ZrUVhWMGFHVnVkR2xqWVhScGIyNVRaWEoyYVdObElpd2lZbUZ6WlVGd2FVdGxlU0k2SW5oR04wTlZObGx1YzBVMmFrZGlja3R0WVhoaFVHRnZTV3huYTFCTWNEVkZWVU50VEhKNlZqTmFlSFJqTkROUU1DSXNJbTkzYm1WeVNXUWlPaUl5TURNMU5qVTROelUwSWl3aVpYaHdJam94TnpnNU16VTJNelkzTENKcFlYUWlPakUzT0Rrek5USTNOamNzSW01aVppSTZNVGM0T1RNMU1qYzJOMzAuUXVyaDllaXpRWDZ1M2tyTjBuVVlXSXdQQzd2M0FBZ2ZWYTFkNzQ5TmVlQUZqMGRIdHdEYkd1LTFicTcyT1A0WUQ0YXRIN2FzRm5UU04wY2wzeFlpZkVRV1VIN3ozVk92Q0RvSVR0TE9icVF4VV9tUEU1QmQ5NGtjMTNJbnJhLVJoNUVSMlREakhxam02RDhqekpsUDdMY2VVNnlNZ2pkSk1YaHI1ZVdjUWRIcTU5THpQNGdtTGduT0QwR25Scl9XUUhYODlCMmhHc2FNd19NQXhCQWdwOWtPcUZBTmg4azV6M0o0OExkTUlBRzNxNTZ2RmhKaVBIenhya285d180RVh0UEZIbTFOOFM3Sm9ybGQ5UGVLSkVJeXFSSzZFclcxck1yOG4tbVAtX293aUZGbmFoc3ItWmZLcm93MF95OVVlU1pDMG82ZHYzbUpzUkxpX0ZLUDJn"
 
-def ler_instancias_binarias(conteudo_bytes):
+def descompactar_instancias_rbxm(conteudo_bytes):
     """
-    Lê o cabeçalho de instâncias reais do arquivo binário e organiza 
-    a árvore de Children respeitando os nomes verdadeiros.
+    Busca todas as partes e instâncias reais gravadas dentro dos blocos 
+    do arquivo binário do Roblox (.rbxm).
     """
     children = {}
     
-    # Se for binario (.rbxm)
     if conteudo_bytes.startswith(b"<roblox!"):
-        # Busca o bloco INST (onde o Roblox guarda os tipos e nomes reais das partes)
         offset = 0
-        while True:
-            inst_pos = conteudo_bytes.find(b"INST", offset)
-            if inst_pos == -1:
+        count_part = 1
+        
+        # O arquivo .rbxm grava marcadores INST e PROP
+        while offset < len(conteudo_bytes):
+            idx = conteudo_bytes.find(b"INST", offset)
+            if idx == -1:
                 break
                 
-            # Extrai os metadados do bloco de instâncias
+            # Extrai blocos válidos
             try:
-                # O nome da classe da instância fica logo após o cabeçalho do bloco INST
-                tamanho_nome = conteudo_bytes[inst_pos + 12]
-                nome_classe = conteudo_bytes[inst_pos + 13 : inst_pos + 13 + tamanho_nome].decode('utf-8', errors='ignore')
-                
-                # Filtra apenas instâncias válidas do Roblox (Part, Model, Folder, Frame, etc.)
-                if nome_classe and nome_classe.isalnum() and len(nome_classe) > 1:
-                    nome_obj = nome_classe
+                # Tenta ler o nome da classe da instância no bloco
+                tam_nome = conteudo_bytes[idx + 12]
+                if 1 <= tam_nome <= 50:
+                    nome_classe = conteudo_bytes[idx + 13 : idx + 13 + tam_nome].decode('utf-8', errors='ignore')
                     
-                    # Evita sobreescrever chaves no dicionário
-                    idx = 1
-                    chave_final = nome_obj
-                    while chave_final in children:
-                        idx += 1
-                        chave_final = f"{nome_obj}_{idx}"
-                        
-                    children[chave_final] = {
-                        "Instance": nome_classe,
-                        "Properties": {
-                            "Name": nome_obj,
-                            "ClassName": nome_classe
-                        },
-                        "Children": {},
-                        "Script": None
-                    }
+                    # Filtra apenas instâncias válidas de modelos do Roblox
+                    if nome_classe and nome_classe.isalnum():
+                        chave = f"{nome_classe}_{count_part}"
+                        children[chave] = {
+                            "Instance": nome_classe,
+                            "Properties": {
+                                "Name": chave,
+                                "ClassName": nome_classe
+                            },
+                            "Children": {},
+                            "Script": None
+                        }
+                        count_part += 1
             except Exception:
                 pass
                 
-            offset = inst_pos + 4
+            offset = idx + 4
 
     return children
 
@@ -469,25 +464,17 @@ def carregarasset():
             services_mestres = {}
             conteudo_bruto = file_res.content
             
+            # Se for formato binário (.rbxm)
             if conteudo_bruto.startswith(b"<roblox!"):
-                # Processa os blocos de instâncias reais e popula o Children corretamente
-                filhos_binarios = ler_instancias_binarias(conteudo_bruto)
-                
+                filhos = descompactar_instancias_rbxm(conteudo_bruto)
                 services_mestres["Workspace"] = {
                     "Instance": "Workspace",
                     "Properties": {"Name": "Workspace", "ClassName": "Workspace"},
-                    "Children": {
-                        f"Model_{asset_id}": {
-                            "Instance": "Model",
-                            "Properties": {"Name": f"Model_{asset_id}", "ClassName": "Model"},
-                            "Children": filhos_binarios,
-                            "Script": None
-                        }
-                    },
+                    "Children": filhos,
                     "Script": None
                 }
             else:
-                # Processamento normal para XML puro (.rbxmx)
+                # Se for formato XML puro (.rbxmx)
                 if b"<roblox" in conteudo_bruto:
                     inicio_xml = conteudo_bruto.find(b"<roblox")
                     fim_xml = conteudo_bruto.rfind(b"</roblox>") + 9
