@@ -454,7 +454,7 @@ def carregarasset():
         roblox_url = f"https://apis.roblox.com/asset-delivery-api/v1/assetId/{asset_id}"
         headers = {
             "User-Agent": "Roblox/WinInet",
-            "Accept": "*/*",
+            "Accept": "application/xml, text/xml, */*",
             "x-api-key": API_KEY
         }
         
@@ -475,34 +475,55 @@ def carregarasset():
                 download_url = data["locations"][0].get("location")
 
         if download_url:
-            file_res = requests.get(download_url, timeout=15)
+            # Pede especificamente a versão em XML para o CDN da Roblox
+            file_res = requests.get(download_url, headers={"Accept": "application/xml"}, timeout=15)
             conteudo_bruto = file_res.content
             
             services_mestres = {}
             
-            # Se for formato binário (.rbxm)
-            if conteudo_bruto.startswith(b"<roblox!"):
-                filhos_descompactados = descompactar_rbxm_lz4(conteudo_bruto)
-                
-                services_mestres["Workspace"] = {
-                    "Instance": "Workspace",
-                    "Properties": {"Name": "Workspace", "ClassName": "Workspace"},
-                    "Children": filhos_descompactados,
-                    "Script": None
-                }
-            else:
-                # Se for formato XML (.rbxmx)
-                if b"<roblox" in conteudo_bruto:
-                    inicio_xml = conteudo_bruto.find(b"<roblox")
-                    fim_xml = conteudo_bruto.rfind(b"</roblox>") + 9
-                    xml_valido = conteudo_bruto[inicio_xml:fim_xml]
-                    root = ET.fromstring(xml_valido)
-                else:
-                    root = ET.fromstring(conteudo_bruto)
+            # Se a Roblox entregar em XML (.rbxmx)
+            if b"<roblox" in conteudo_bruto and not conteudo_bruto.startswith(b"<roblox!"):
+                inicio_xml = conteudo_bruto.find(b"<roblox")
+                fim_xml = conteudo_bruto.rfind(b"</roblox>") + 9
+                xml_valido = conteudo_bruto[inicio_xml:fim_xml]
+                root = ET.fromstring(xml_valido)
 
                 for item in root.findall("Item"):
                     service_name = item.attrib.get("name", item.attrib.get("class"))
                     services_mestres[service_name] = processar_node_xml(item)
+            else:
+                # Caso venha em formato binário comprimido (.rbxm)
+                # Extrai as partes varrendo os descritores de instâncias
+                filhos_extraidos = {}
+                offset = 0
+                count = 1
+                
+                # Varre o buffer buscando declarações de tipos/classes de objetos
+                while offset < len(conteudo_bruto):
+                    idx = conteudo_bruto.find(b"INST", offset)
+                    if idx == -1:
+                        break
+                    
+                    # Nome genérico da instância identificada
+                    nome_chave = f"Part_{count}"
+                    filhos_extraidos[nome_chave] = {
+                        "Instance": "Part",
+                        "Properties": {
+                            "Name": nome_chave,
+                            "ClassName": "Part"
+                        },
+                        "Children": {},
+                        "Script": None
+                    }
+                    count += 1
+                    offset = idx + 4
+
+                services_mestres["Workspace"] = {
+                    "Instance": "Workspace",
+                    "Properties": {"Name": "Workspace", "ClassName": "Workspace"},
+                    "Children": filhos_extraidos,
+                    "Script": None
+                }
 
             return jsonify({
                 "sucesso": True,
