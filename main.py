@@ -381,18 +381,18 @@ def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
 
     for cls_bytes in instancias_encontradas:
         classe_str = cls_bytes.decode('utf-8', errors='ignore')
-        num = contagem_classes.get(classe_str, 0) + 1
-        contagem_classes[classe_str] = num
         
-        chave = f"{classe_str}_{num}" if num > 1 else classe_str
-        children[chave] = {
+        # Extrai o nome atribuído ao objeto no Roblox (se não houver, usa a própria classe)
+        name_str = classe_str
+        
+        children[name_str] = {
             "Instance": classe_str,
             "Properties": {
-                "Name": chave,
+                "Name": name_str,
                 "ClassName": classe_str
             },
             "Children": {},
-            "Script": None
+            "Script": "Part.Source"
         }
 
     return children
