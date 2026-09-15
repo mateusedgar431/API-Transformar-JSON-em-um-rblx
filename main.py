@@ -338,61 +338,100 @@ import requests
 import xml.etree.ElementTree as ET
 import lz4.block
 
-API_KEY = "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJMU5pSXNJbXRwWkNJNkluTnBaeTB5TURJeExUQTNMVEV6VkRFNE9qVXhPalE1V2lJc0luUjVjQ0k2SWtwWFZDSjkuZXlKaGRXUWlPaUpTYjJKc2IzaEpiblJsY201aGJDSXNJbWx6Y3lJNklrTnNiM1ZrUVhWMGFHVnVkR2xqWVhScGIyNVRaWEoyYVdObElpd2lZbUZ6WlVGd2FVdGxlU0k2SW5oR04wTlZObGx1YzBVMmFrZGlja3R0WVhoaFVHRnZTV3huYTFCTWNEVkZWVU50VEhKNlZqTmFlSFJqTkROUU1DSXNJbTkzYm1WeVNXUWlPaUl5TURNMU5qVTROelUwSWl3aVpYaHdJam94TnpnNU16VTJNelkzTENKcFlYUWlPakUzT0Rrek5USTNOamNzSW01aVppSTZNVGM0T1RNMU1qYzJOMzAuUXVyaDllaXpRWDZ1M2tyTjBuVVlXSXdQQzd2M0FBZ2ZWYTFkNzQ5TmVlQUZqMGRIdHdEYkd1LTFicTcyT1A0WUQ0YXRIN2FzRm5UU04wY2wzeFlpZkVRV1VIN3ozVk92Q0RvSVR0TE9icVF4VV9tUEU1QmQ5NGtjMTNJbnJhLVJoNUVSMlREakhxam02RDhqekpsUDdMY2VVNnlNZ2pkSk1YaHI1ZVdjUWRIcTU5THpQNGdtTGduT0QwR25Scl9XUUhYODlCMmhHc2FNd19NQXhCQWdwOWtPcUZBTmg4azV6M0o0OExkTUlBRzNxNTZ2RmhKaVBIenhya285d180RVh0UEZIbTFOOFM3Sm9ybGQ5UGVLSkVJeXFSSzZFclcxck1yOG4tbVAtX293aUZGbmFoc3ItWmZLcm93MF95OVVlU1pDMG82ZHYzbUpzUkxpX0ZLUDJn"
+API_KEY = "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJMU5pSXNJbXRwWkNJNkluTnBaeTB5TURJeExUQTNMVEV6VkRFNE9qVXhPalE1V2lJc0luUjVjQ0k2SWtwWFZDSjkuZXlKaGRXUQ..."
 
-def descompactar_rbxm_lz4(conteudo_bytes):
+def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
     """
-    Descompacta os blocos LZ4 do formato binário do Roblox (.rbxm)
-    e extrai as instâncias e partes reais guardadas no arquivo.
+    Descompacta os blocos INST e PROP do arquivo .rbxm para extrair 
+    os nomes verdadeiros e as ClassNames originais criadas pelo dono.
     """
-    children = {}
     if not conteudo_bytes.startswith(b"<roblox!"):
-        return children
+        return {}
 
-    try:
-        pos = 32
-        inst_count = 1
+    children = {}
+    classes_encontradas = []
+    
+    pos = 32
+    while pos < len(conteudo_bytes):
+        if pos + 8 > len(conteudo_bytes):
+            break
+            
+        chunk_header = conteudo_bytes[pos:pos+8]
+        chunk_type = chunk_header[:4]
+        compressed_len = struct.unpack(">I", chunk_header[4:8])[0]
         
-        while pos < len(conteudo_bytes):
-            if pos + 8 > len(conteudo_bytes):
-                break
-                
-            chunk_header = conteudo_bytes[pos:pos+8]
-            chunk_type = chunk_header[:4]
-            compressed_len = struct.unpack(">I", chunk_header[4:8])[0]
-            
-            pos += 8
-            if compressed_len == 0:
-                pos += 16
-                continue
-            
-            chunk_data = conteudo_bytes[pos:pos+compressed_len]
-            pos += compressed_len
-            
-            # Quando encontra um bloco de instâncias (INST)
-            if chunk_type == b"INST":
-                try:
-                    uncompressed_data = lz4.block.decompress(chunk_data)
-                    if len(uncompressed_data) > 4:
-                        len_name = uncompressed_data[0]
-                        class_name = uncompressed_data[1:1+len_name].decode('utf-8', errors='ignore')
+        pos += 8
+        if compressed_len == 0:
+            pos += 16
+            continue
+        
+        chunk_data = conteudo_bytes[pos:pos+compressed_len]
+        pos += compressed_len
+        
+        # Bloco INST: pega as ClassNames reais (Part, MeshPart, Model, Script...)
+        if chunk_type == b"INST":
+            try:
+                uncompressed = lz4.block.decompress(chunk_data)
+                if len(uncompressed) > 4:
+                    tam_nome = uncompressed[0]
+                    classe_real = uncompressed[1:1+tam_nome].decode('utf-8', errors='ignore')
+                    if classe_real and classe_real.isalnum():
+                        classes_encontradas.append(classe_real)
+            except Exception:
+                pass
+
+        # Bloco PROP: pega as propriedades e tenta rastrear os nomes reais
+        elif chunk_type == b"PROP":
+            try:
+                uncompressed = lz4.block.decompress(chunk_data)
+                if b"Name" in uncompressed:
+                    idx_name = uncompressed.find(b"Name")
+                    trecho = uncompressed[idx_name+4:idx_name+60]
+                    nome_real = ""
+                    for byte in trecho:
+                        if 32 <= byte <= 126:
+                            nome_real += chr(byte)
+                        elif nome_real:
+                            break
+                    
+                    if nome_real and nome_real not in ["Name", "ClassName", "Value", "roblox"]:
+                        classe_atual = classes_encontradas[-1] if classes_encontradas else "Part"
                         
-                        if class_name and class_name.isalnum():
-                            nome_obj = f"{class_name}_{inst_count}"
-                            children[nome_obj] = {
-                                "Instance": class_name,
-                                "Properties": {
-                                    "Name": class_name,
-                                    "ClassName": class_name
-                                },
-                                "Children": {},
-                                "Script": None
-                            }
-                            inst_count += 1
-                except Exception:
-                    pass
-    except Exception:
-        pass
+                        # Garante chaves únicas caso existam partes com mesmo nome
+                        chave_final = nome_real
+                        idx = 1
+                        while chave_final in children:
+                            idx += 1
+                            chave_final = f"{nome_real}_{idx}"
+
+                        children[chave_final] = {
+                            "Instance": classe_atual,
+                            "Properties": {
+                                "Name": nome_real,
+                                "ClassName": classe_atual
+                            },
+                            "Children": {},
+                            "Script": None
+                        }
+            except Exception:
+                pass
+
+    # Se a seção PROP não mapear os nomes, utiliza as ClassNames encontradas
+    if not children:
+        for idx, classe in enumerate(classes_encontradas):
+            chave_final = classe
+            if chave_final in children:
+                chave_final = f"{classe}_{idx+1}"
+
+            children[chave_final] = {
+                "Instance": classe,
+                "Properties": {
+                    "Name": classe,
+                    "ClassName": classe
+                },
+                "Children": {},
+                "Script": None
+            }
 
     return children
 
@@ -454,7 +493,7 @@ def carregarasset():
         roblox_url = f"https://apis.roblox.com/asset-delivery-api/v1/assetId/{asset_id}"
         headers = {
             "User-Agent": "Roblox/WinInet",
-            "Accept": "application/xml, text/xml, */*",
+            "Accept": "*/*",
             "x-api-key": API_KEY
         }
         
@@ -475,55 +514,32 @@ def carregarasset():
                 download_url = data["locations"][0].get("location")
 
         if download_url:
-            # Pede especificamente a versão em XML para o CDN da Roblox
-            file_res = requests.get(download_url, headers={"Accept": "application/xml"}, timeout=15)
+            file_res = requests.get(download_url, timeout=15)
             conteudo_bruto = file_res.content
-            
             services_mestres = {}
             
-            # Se a Roblox entregar em XML (.rbxmx)
-            if b"<roblox" in conteudo_bruto and not conteudo_bruto.startswith(b"<roblox!"):
-                inicio_xml = conteudo_bruto.find(b"<roblox")
-                fim_xml = conteudo_bruto.rfind(b"</roblox>") + 9
-                xml_valido = conteudo_bruto[inicio_xml:fim_xml]
-                root = ET.fromstring(xml_valido)
+            if conteudo_bruto.startswith(b"<roblox!"):
+                # Extrai as instâncias com a ClassName e o Nome reais
+                filhos_reais = extrair_instancias_e_nomes_rbxm(conteudo_bruto)
+                
+                services_mestres["Workspace"] = {
+                    "Instance": "Workspace",
+                    "Properties": {"Name": "Workspace", "ClassName": "Workspace"},
+                    "Children": filhos_reais,
+                    "Script": None
+                }
+            else:
+                if b"<roblox" in conteudo_bruto:
+                    inicio_xml = conteudo_bruto.find(b"<roblox")
+                    fim_xml = conteudo_bruto.rfind(b"</roblox>") + 9
+                    xml_valido = conteudo_bruto[inicio_xml:fim_xml]
+                    root = ET.fromstring(xml_valido)
+                else:
+                    root = ET.fromstring(conteudo_bruto)
 
                 for item in root.findall("Item"):
                     service_name = item.attrib.get("name", item.attrib.get("class"))
                     services_mestres[service_name] = processar_node_xml(item)
-            else:
-                # Caso venha em formato binário comprimido (.rbxm)
-                # Extrai as partes varrendo os descritores de instâncias
-                filhos_extraidos = {}
-                offset = 0
-                count = 1
-                
-                # Varre o buffer buscando declarações de tipos/classes de objetos
-                while offset < len(conteudo_bruto):
-                    idx = conteudo_bruto.find(b"INST", offset)
-                    if idx == -1:
-                        break
-                    
-                    # Nome genérico da instância identificada
-                    nome_chave = f"Part_{count}"
-                    filhos_extraidos[nome_chave] = {
-                        "Instance": "Part",
-                        "Properties": {
-                            "Name": nome_chave,
-                            "ClassName": "Part"
-                        },
-                        "Children": {},
-                        "Script": None
-                    }
-                    count += 1
-                    offset = idx + 4
-
-                services_mestres["Workspace"] = {
-                    "Instance": "Workspace",
-                    "Properties": {"Name": "Workspace", "ClassName": "Workspace"},
-                    "Children": filhos_extraidos,
-                    "Script": None
-                }
 
             return jsonify({
                 "sucesso": True,
