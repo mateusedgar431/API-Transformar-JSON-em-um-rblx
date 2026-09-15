@@ -333,10 +333,68 @@ def publicar():
 
 import io
 import os
+import struct
 import requests
 import xml.etree.ElementTree as ET
+import lz4.block
 
 API_KEY = "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJMU5pSXNJbXRwWkNJNkluTnBaeTB5TURJeExUQTNMVEV6VkRFNE9qVXhPalE1V2lJc0luUjVjQ0k2SWtwWFZDSjkuZXlKaGRXUWlPaUpTYjJKc2IzaEpiblJsY201aGJDSXNJbWx6Y3lJNklrTnNiM1ZrUVhWMGFHVnVkR2xqWVhScGIyNVRaWEoyYVdObElpd2lZbUZ6WlVGd2FVdGxlU0k2SW5oR04wTlZObGx1YzBVMmFrZGlja3R0WVhoaFVHRnZTV3huYTFCTWNEVkZWVU50VEhKNlZqTmFlSFJqTkROUU1DSXNJbTkzYm1WeVNXUWlPaUl5TURNMU5qVTROelUwSWl3aVpYaHdJam94TnpnNU16VTJNelkzTENKcFlYUWlPakUzT0Rrek5USTNOamNzSW01aVppSTZNVGM0T1RNMU1qYzJOMzAuUXVyaDllaXpRWDZ1M2tyTjBuVVlXSXdQQzd2M0FBZ2ZWYTFkNzQ5TmVlQUZqMGRIdHdEYkd1LTFicTcyT1A0WUQ0YXRIN2FzRm5UU04wY2wzeFlpZkVRV1VIN3ozVk92Q0RvSVR0TE9icVF4VV9tUEU1QmQ5NGtjMTNJbnJhLVJoNUVSMlREakhxam02RDhqekpsUDdMY2VVNnlNZ2pkSk1YaHI1ZVdjUWRIcTU5THpQNGdtTGduT0QwR25Scl9XUUhYODlCMmhHc2FNd19NQXhCQWdwOWtPcUZBTmg4azV6M0o0OExkTUlBRzNxNTZ2RmhKaVBIenhya285d180RVh0UEZIbTFOOFM3Sm9ybGQ5UGVLSkVJeXFSSzZFclcxck1yOG4tbVAtX293aUZGbmFoc3ItWmZLcm93MF95OVVlU1pDMG82ZHYzbUpzUkxpX0ZLUDJn"
+
+def descompactar_rbxm_lz4(conteudo_bytes):
+    """
+    Descompacta os blocos LZ4 do formato binário do Roblox (.rbxm)
+    e extrai as instâncias e partes reais guardadas no arquivo.
+    """
+    children = {}
+    if not conteudo_bytes.startswith(b"<roblox!"):
+        return children
+
+    try:
+        pos = 32
+        inst_count = 1
+        
+        while pos < len(conteudo_bytes):
+            if pos + 8 > len(conteudo_bytes):
+                break
+                
+            chunk_header = conteudo_bytes[pos:pos+8]
+            chunk_type = chunk_header[:4]
+            compressed_len = struct.unpack(">I", chunk_header[4:8])[0]
+            
+            pos += 8
+            if compressed_len == 0:
+                pos += 16
+                continue
+            
+            chunk_data = conteudo_bytes[pos:pos+compressed_len]
+            pos += compressed_len
+            
+            # Quando encontra um bloco de instâncias (INST)
+            if chunk_type == b"INST":
+                try:
+                    uncompressed_data = lz4.block.decompress(chunk_data)
+                    if len(uncompressed_data) > 4:
+                        len_name = uncompressed_data[0]
+                        class_name = uncompressed_data[1:1+len_name].decode('utf-8', errors='ignore')
+                        
+                        if class_name and class_name.isalnum():
+                            nome_obj = f"{class_name}_{inst_count}"
+                            children[nome_obj] = {
+                                "Instance": class_name,
+                                "Properties": {
+                                    "Name": class_name,
+                                    "ClassName": class_name
+                                },
+                                "Children": {},
+                                "Script": None
+                            }
+                            inst_count += 1
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    return children
 
 def processar_node_xml(elem, contagem_nomes=None):
     if contagem_nomes is None:
@@ -422,24 +480,18 @@ def carregarasset():
             
             services_mestres = {}
             
-            # Verifica se é um arquivo binário (.rbxm) que começa com <roblox!
+            # Se for formato binário (.rbxm)
             if conteudo_bruto.startswith(b"<roblox!"):
-                # Retorna a estrutura para binário sem chamar o ET.fromstring (evita o erro na coluna 7)
+                filhos_descompactados = descompactar_rbxm_lz4(conteudo_bruto)
+                
                 services_mestres["Workspace"] = {
                     "Instance": "Workspace",
                     "Properties": {"Name": "Workspace", "ClassName": "Workspace"},
-                    "Children": {
-                        f"Model_{asset_id}": {
-                            "Instance": "Model",
-                            "Properties": {"Name": f"Model_{asset_id}", "ClassName": "Model"},
-                            "Children": {},
-                            "Script": None
-                        }
-                    },
+                    "Children": filhos_descompactados,
                     "Script": None
                 }
             else:
-                # Só executa o parser XML se for realmente XML (.rbxmx)
+                # Se for formato XML (.rbxmx)
                 if b"<roblox" in conteudo_bruto:
                     inicio_xml = conteudo_bruto.find(b"<roblox")
                     fim_xml = conteudo_bruto.rfind(b"</roblox>") + 9
