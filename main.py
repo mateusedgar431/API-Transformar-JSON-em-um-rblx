@@ -341,8 +341,8 @@ API_KEY = "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJM
 
 def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
     """
-    Varre o buffer binario descompactado separando as sequencias de texto (Name)
-    das palavras reservadas de tipos de instancia (ClassName).
+    Descompacta o RBXM, remove cabeçalhos de controle (INST, PROP, PRNT) 
+    e extrai as instâncias e nomes reais limpando rólhos de bytes.
     """
     if not conteudo_bytes.startswith(b"<roblox!"):
         return {}
@@ -351,7 +351,7 @@ def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
     pos = 32
     buffer_descompactado = bytearray()
 
-    # Descompactacao dos blocos LZ4 internos do formato rbxm
+    # 1. Descompacta os blocos LZ4
     while pos < len(conteudo_bytes) - 8:
         chunk_header = conteudo_bytes[pos:pos+8]
         compressed_len = struct.unpack(">I", chunk_header[4:8])[0]
@@ -377,25 +377,47 @@ def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
     if not buffer_descompactado:
         buffer_descompactado = bytearray(conteudo_bytes)
 
-    # 1. Identifica os tipos de Classe (Item class)
+    # 2. Extrai as classes reais (Item class)
     padrao_classe = rb'(Part|MeshPart|Model|Script|LocalScript|Folder|Decal|Texture|Attachment|Sound|Frame|ScreenGui|TextLabel|BasePart|UnionOperation)'
     classes_brutas = re.findall(padrao_classe, buffer_descompactado)
     classes_encontradas = [c.decode('utf-8', errors='ignore') for c in classes_brutas]
 
-    # 2. Busca sequencias de texto no buffer para resgatar os nomes personalizados (string name="Name")
-    padrao_strings = rb'[A-Za-z0-9_\-\s]{2,30}'
-    todas_strings = [s.decode('utf-8', errors='ignore').strip() for s in re.findall(padrao_strings, buffer_descompactado)]
-    
-    # Filtra mantendo apenas strings que NAO sao nomes de classe nem apenas numeros
-    nomes_reais = [s for s in todas_strings if s not in classes_encontradas and len(s) > 1 and not s.isdigit()]
+    if not classes_encontradas:
+        return {}
 
+    # 3. Lista de palavras de controle interno e ruídos do ZSTD/RBXM para filtrar
+    palavras_bloqueadas = {
+        'INST', 'PROP', 'PRNT', 'END', 'META', 'SSTR', 'SIGN', 
+        'roblox', 'Name', 'ClassName', 'Source', 'Value', 'Workspace',
+        'zstd', '0fB', 'nINSTZ', 'HD_BodyPROP'
+    }
+
+    # 4. Extrai apenas textos limpos de propriedades
+    padrao_strings = rb'[A-Za-z0-9_\-\s]{2,30}'
+    raw_strings = re.findall(padrao_strings, buffer_descompactado)
+    
+    nomes_limpos = []
+    for s in raw_strings:
+        texto = s.decode('utf-8', errors='ignore').strip()
+        # Filtra lixo binário, números puros e metadados
+        if (
+            texto 
+            and texto not in classes_encontradas 
+            and texto not in palavras_bloqueadas 
+            and not any(b in texto for b in ['INST', 'PROP', 'PRNT'])
+            and len(texto) > 1 
+            and not texto.isdigit()
+        ):
+            nomes_limpos.append(texto)
+
+    # 5. Mapeia e monta a estrutura das Instâncias
     contagem = {}
     for idx, classe_str in enumerate(classes_encontradas):
-        # Associa o name_str extraido da tabela de strings do buffer
-        if idx < len(nomes_reais):
-            name_str = nomes_reais[idx]
+        # Associa o nome limpo extraído ou usa a classe como fallback
+        if idx < len(nomes_limpos):
+            name_str = nomes_limpos[idx]
         else:
-            name_str = f"Objeto_{idx+1}"
+            name_str = classe_str
 
         num = contagem.get(name_str, 0) + 1
         contagem[name_str] = num
@@ -404,8 +426,8 @@ def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
         children[chave_final] = {
             "Instance": classe_str,
             "Properties": {
-                "Name": name_str,            # Nome real lido do buffer (string name="Name")
-                "ClassName": classe_str      # Tipo de classe (Item class)
+                "Name": name_str,
+                "ClassName": classe_str
             },
             "Children": {},
             "Script": None
