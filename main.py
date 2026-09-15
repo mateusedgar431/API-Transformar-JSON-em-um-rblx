@@ -341,17 +341,31 @@ API_KEY = "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJM
 
 def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
     """
-    Descompacta o RBXM, remove cabeçalhos de controle (INST, PROP, PRNT) 
-    e extrai as instâncias e nomes reais limpando rólhos de bytes.
+    Processa o buffer do Roblox. Se for XML processa as tags diretamente;
+    se for binario .rbxm, limpa os metadados do sistema para evitar nomes corrompidos.
     """
-    if not conteudo_bytes.startswith(b"<roblox!"):
-        return {}
+    # 1. Se o arquivo veio em XML (.rbxmx)
+    if b"<roblox" in conteudo_bytes:
+        try:
+            inicio_xml = conteudo_bytes.find(b"<roblox")
+            fim_xml = conteudo_bytes.rfind(b"</roblox>") + 9
+            xml_valido = conteudo_bytes[inicio_xml:fim_xml]
+            root = ET.fromstring(xml_valido)
+            
+            children = {}
+            for item in root.findall("Item"):
+                filho = processar_node_xml(item)
+                nome = filho["Properties"]["Name"]
+                children[nome] = filho
+            return children
+        except Exception:
+            pass
 
+    # 2. Se for binario .rbxm
     children = {}
     pos = 32
     buffer_descompactado = bytearray()
 
-    # 1. Descompacta os blocos LZ4
     while pos < len(conteudo_bytes) - 8:
         chunk_header = conteudo_bytes[pos:pos+8]
         compressed_len = struct.unpack(">I", chunk_header[4:8])[0]
@@ -377,7 +391,7 @@ def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
     if not buffer_descompactado:
         buffer_descompactado = bytearray(conteudo_bytes)
 
-    # 2. Extrai as classes reais (Item class)
+    # Identifica as classes reais do Roblox
     padrao_classe = rb'(Part|MeshPart|Model|Script|LocalScript|Folder|Decal|Texture|Attachment|Sound|Frame|ScreenGui|TextLabel|BasePart|UnionOperation)'
     classes_brutas = re.findall(padrao_classe, buffer_descompactado)
     classes_encontradas = [c.decode('utf-8', errors='ignore') for c in classes_brutas]
@@ -385,37 +399,35 @@ def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
     if not classes_encontradas:
         return {}
 
-    # 3. Lista de palavras de controle interno e ruídos do ZSTD/RBXM para filtrar
-    palavras_bloqueadas = {
+    # Lista de nomes de propriedades internas do Roblox para IGNORAR
+    propriedades_sistema = {
         'INST', 'PROP', 'PRNT', 'END', 'META', 'SSTR', 'SIGN', 
         'roblox', 'Name', 'ClassName', 'Source', 'Value', 'Workspace',
-        'zstd', '0fB', 'nINSTZ', 'HD_BodyPROP'
+        'AttributesSerialize', 'Capabilities', 'DefinesCapabilities',
+        'CFrame', 'Color3', 'Vector3', 'Size', 'Position', 'Anchored',
+        'CanCollide', 'Transparency', 'Reflectance', 'Locked'
     }
 
-    # 4. Extrai apenas textos limpos de propriedades
-    padrao_strings = rb'[A-Za-z0-9_\-\s]{2,30}'
-    raw_strings = re.findall(padrao_strings, buffer_descompactado)
+    # Busca apenas nomes de texto com mais de 3 letras que NAO sejam propriedades de sistema
+    padrao_nomes = rb'\b[A-Za-z][A-Za-z0-9_\s]{2,30}\b'
+    candidatos_raw = re.findall(padrao_nomes, buffer_descompactado)
     
-    nomes_limpos = []
-    for s in raw_strings:
-        texto = s.decode('utf-8', errors='ignore').strip()
-        # Filtra lixo binário, números puros e metadados
+    nomes_validos = []
+    for cand in candidatos_raw:
+        txt = cand.decode('utf-8', errors='ignore').strip()
         if (
-            texto 
-            and texto not in classes_encontradas 
-            and texto not in palavras_bloqueadas 
-            and not any(b in texto for b in ['INST', 'PROP', 'PRNT'])
-            and len(texto) > 1 
-            and not texto.isdigit()
+            txt 
+            and txt not in classes_encontradas 
+            and txt not in propriedades_sistema
+            and len(txt) > 3
         ):
-            nomes_limpos.append(texto)
+            nomes_validos.append(txt)
 
-    # 5. Mapeia e monta a estrutura das Instâncias
     contagem = {}
     for idx, classe_str in enumerate(classes_encontradas):
-        # Associa o nome limpo extraído ou usa a classe como fallback
-        if idx < len(nomes_limpos):
-            name_str = nomes_limpos[idx]
+        # Se houver um nome valido extraido, usa ele; senao usa o nome da classe
+        if idx < len(nomes_validos):
+            name_str = nomes_validos[idx]
         else:
             name_str = classe_str
 
