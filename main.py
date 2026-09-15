@@ -341,7 +341,7 @@ API_KEY = "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJM
 
 def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
     """
-    Varre o arquivo descompactado em busca dos nomes e fontes reais das Instâncias.
+    Descompacta o RBXM e separa os nomes reais (strings) das classes.
     """
     if not conteudo_bytes.startswith(b"<roblox!"):
         return {}
@@ -350,6 +350,7 @@ def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
     pos = 32
     buffer_descompactado = bytearray()
 
+    # Descompactação dos chunks LZ4
     while pos < len(conteudo_bytes) - 8:
         chunk_header = conteudo_bytes[pos:pos+8]
         compressed_len = struct.unpack(">I", chunk_header[4:8])[0]
@@ -371,36 +372,39 @@ def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
         except Exception:
             buffer_descompactado.extend(chunk_data)
 
-    # Procura por blocos de código de script ou texto de propriedades no buffer descompactado
-    padrao_script = rb'Script\x00+([^\x00]{3,50})'
-    padrao_instancias = rb'(Part|MeshPart|Model|Script|LocalScript|Folder|Decal|Texture|Attachment|Sound|Frame|ScreenGui|TextLabel)'
-    
-    instancias_encontradas = re.findall(padrao_instancias, buffer_descompactado)
-    if not instancias_encontradas:
-        instancias_encontradas = re.findall(padrao_instancias, conteudo_bytes)
+    # 1. Extrai as classes válidas (Item class)
+    padrão_classe = rb'(Part|MeshPart|Model|Script|LocalScript|Folder|Decal|Texture|Attachment|Sound|Frame|ScreenGui|TextLabel|BasePart|UnionOperation)'
+    classes_encontradas = [c.decode('utf-8', errors='ignore') for c in re.findall(padrão_classe, buffer_descompactado)]
 
-    # Tentativa de busca por trechos de código Lua dentro do buffer
-    scripts_encontrados = re.findall(rb'(print\(.*?\)|function.*?\nend|local\s+\w+\s*=)', buffer_descompactado)
+    # 2. Extrai sequências de texto legível para tentar achar os Names reais (string name="Name")
+    strings_legiveis = [s.decode('utf-8', errors='ignore') for s in re.findall(rb'[A-Za-z0-9_-]{3,30}', buffer_descompactado)]
+    # Filtra palavras reservadas que são apenas nomes de classe
+    nomes_candidatos = [s for s in strings_legiveis if s not in classes_encontradas and not s.isdigit()]
 
-    for idx, cls_bytes in enumerate(instancias_encontradas, start=1):
-        classe_str = cls_bytes.decode('utf-8', errors='ignore')
-        
-        # Define o nome real se encontrado no buffer, caso contrário usa o nome da instância
-        name_str = classe_str
-        
-        # Pega o código real do script caso exista um trecho descompactado
-        script_code = None
-        if "Script" in classe_str and scripts_encontrados:
-            script_code = scripts_encontrados[0].decode('utf-8', errors='ignore')
+    if not classes_encontradas:
+        return {}
 
-        children[f"{name_str}_{idx}"] = {
+    contagem = {}
+    for idx, classe_str in enumerate(classes_encontradas):
+        # Tenta pegar um nome real extraído do buffer; se não houver, usa a própria classe
+        if idx < len(nomes_candidatos):
+            name_str = nomes_candidatos[idx]
+        else:
+            name_str = classe_str
+
+        # Garante chave única no dicionário para não sobrescrever objetos com mesmo nome
+        num = contagem.get(name_str, 0) + 1
+        contagem[name_str] = num
+        chave_final = f"{name_str}_{num}" if num > 1 else name_str
+
+        children[chave_final] = {
             "Instance": classe_str,
             "Properties": {
                 "Name": name_str,
                 "ClassName": classe_str
             },
             "Children": {},
-            "Script": script_code
+            "Script": None
         }
 
     return children
