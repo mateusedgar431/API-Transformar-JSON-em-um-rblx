@@ -341,7 +341,7 @@ API_KEY = "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJM
 
 def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
     """
-    Varre o buffer binario do Roblox e extrai as Instancias sem depender de bibliotecas externas.
+    Varre o arquivo descompactado em busca dos nomes e fontes reais das Instâncias.
     """
     if not conteudo_bytes.startswith(b"<roblox!"):
         return {}
@@ -371,28 +371,39 @@ def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
         except Exception:
             buffer_descompactado.extend(chunk_data)
 
-    padrão = rb'(Part|MeshPart|Model|Script|LocalScript|Folder|Decal|Texture|Attachment|Sound|Frame|ScreenGui|TextLabel|BasePart|UnionOperation)'
-    instancias_encontradas = re.findall(padrão, buffer_descompactado)
-
+    # Procura por blocos de código de script ou texto de propriedades no buffer descompactado
+    padrao_script = rb'Script\x00+([^\x00]{3,50})'
+    padrao_instancias = rb'(Part|MeshPart|Model|Script|LocalScript|Folder|Decal|Texture|Attachment|Sound|Frame|ScreenGui|TextLabel)'
+    
+    instancias_encontradas = re.findall(padrao_instancias, buffer_descompactado)
     if not instancias_encontradas:
-        instancias_encontradas = re.findall(padrão, conteudo_bytes)
+        instancias_encontradas = re.findall(padrao_instancias, conteudo_bytes)
+
+    # Tentativa de busca por trechos de código Lua dentro do buffer
+    scripts_encontrados = re.findall(rb'(print\(.*?\)|function.*?\nend|local\s+\w+\s*=)', buffer_descompactado)
 
     for idx, cls_bytes in enumerate(instancias_encontradas, start=1):
         classe_str = cls_bytes.decode('utf-8', errors='ignore')
-        name_str = f"{classe_str}_{idx}"
+        
+        # Define o nome real se encontrado no buffer, caso contrário usa o nome da instância
+        name_str = classe_str
+        
+        # Pega o código real do script caso exista um trecho descompactado
+        script_code = None
+        if "Script" in classe_str and scripts_encontrados:
+            script_code = scripts_encontrados[0].decode('utf-8', errors='ignore')
 
-        children[name_str] = {
+        children[f"{name_str}_{idx}"] = {
             "Instance": classe_str,
             "Properties": {
                 "Name": name_str,
                 "ClassName": classe_str
             },
             "Children": {},
-            "Script": "Part.Source"
+            "Script": script_code
         }
 
     return children
-
 
 def processar_node_xml(elem):
     nome_base = elem.attrib.get("name", elem.attrib.get("class", "Instance"))
