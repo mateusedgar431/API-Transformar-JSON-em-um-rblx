@@ -341,19 +341,17 @@ API_KEY = "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJM
 
 def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
     """
-    Varre o buffer binario do Roblox e extrai todas as Parts e Instancias contidas no arquivo.
+    Varre o buffer binario do Roblox e extrai as Instancias contidas no arquivo.
     """
     if not conteudo_bytes.startswith(b"<roblox!"):
         return {}
 
     children = {}
-    contagem_classes = {}
     pos = 32
     buffer_descompactado = bytearray()
 
     while pos < len(conteudo_bytes) - 8:
         chunk_header = conteudo_bytes[pos:pos+8]
-        chunk_type = chunk_header[:4]
         compressed_len = struct.unpack(">I", chunk_header[4:8])[0]
         
         pos += 8
@@ -381,10 +379,8 @@ def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
 
     for cls_bytes in instancias_encontradas:
         classe_str = cls_bytes.decode('utf-8', errors='ignore')
-        
-        # Extrai o nome atribuído ao objeto no Roblox (se não houver, usa a própria classe)
-        name_str = classe_str
-        
+        name_str = name
+
         children[name_str] = {
             "Instance": classe_str,
             "Properties": {
@@ -392,11 +388,10 @@ def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
                 "ClassName": classe_str
             },
             "Children": {},
-            "Script": "Part.Source"
+            "Script": Part.Source
         }
 
     return children
-
 
 def processar_node_xml(elem):
     nome_base = elem.attrib.get("name", elem.attrib.get("class", "Instance"))
