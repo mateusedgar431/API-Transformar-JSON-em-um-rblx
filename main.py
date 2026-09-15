@@ -341,7 +341,7 @@ API_KEY = "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJM
 
 def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
     """
-    Varre o buffer binario do Roblox e extrai as Instancias contidas no arquivo.
+    Varre o buffer binario do Roblox e extrai as Instancias sem depender de bibliotecas externas.
     """
     if not conteudo_bytes.startswith(b"<roblox!"):
         return {}
@@ -377,9 +377,9 @@ def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
     if not instancias_encontradas:
         instancias_encontradas = re.findall(padrão, conteudo_bytes)
 
-    for cls_bytes in instancias_encontradas:
+    for idx, cls_bytes in enumerate(instancias_encontradas, start=1):
         classe_str = cls_bytes.decode('utf-8', errors='ignore')
-        name_str = name
+        name_str = f"{classe_str}_{idx}"
 
         children[name_str] = {
             "Instance": classe_str,
@@ -388,10 +388,11 @@ def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
                 "ClassName": classe_str
             },
             "Children": {},
-            "Script": Part.Source
+            "Script": "Part.Source"
         }
 
     return children
+
 
 def processar_node_xml(elem):
     nome_base = elem.attrib.get("name", elem.attrib.get("class", "Instance"))
