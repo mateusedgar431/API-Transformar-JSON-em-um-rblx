@@ -341,7 +341,8 @@ API_KEY = "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJM
 
 def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
     """
-    Descompacta o RBXM e separa os nomes reais (strings) das classes.
+    Varre o buffer binario descompactado separando as sequencias de texto (Name)
+    das palavras reservadas de tipos de instancia (ClassName).
     """
     if not conteudo_bytes.startswith(b"<roblox!"):
         return {}
@@ -350,7 +351,7 @@ def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
     pos = 32
     buffer_descompactado = bytearray()
 
-    # Descompactação dos chunks LZ4
+    # Descompactacao dos blocos LZ4 internos do formato rbxm
     while pos < len(conteudo_bytes) - 8:
         chunk_header = conteudo_bytes[pos:pos+8]
         compressed_len = struct.unpack(">I", chunk_header[4:8])[0]
@@ -367,32 +368,35 @@ def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
         pos += compressed_len
 
         try:
+            import lz4.block
             decompressed = lz4.block.decompress(chunk_data)
             buffer_descompactado.extend(decompressed)
         except Exception:
             buffer_descompactado.extend(chunk_data)
 
-    # 1. Extrai as classes válidas (Item class)
-    padrão_classe = rb'(Part|MeshPart|Model|Script|LocalScript|Folder|Decal|Texture|Attachment|Sound|Frame|ScreenGui|TextLabel|BasePart|UnionOperation)'
-    classes_encontradas = [c.decode('utf-8', errors='ignore') for c in re.findall(padrão_classe, buffer_descompactado)]
+    if not buffer_descompactado:
+        buffer_descompactado = bytearray(conteudo_bytes)
 
-    # 2. Extrai sequências de texto legível para tentar achar os Names reais (string name="Name")
-    strings_legiveis = [s.decode('utf-8', errors='ignore') for s in re.findall(rb'[A-Za-z0-9_-]{3,30}', buffer_descompactado)]
-    # Filtra palavras reservadas que são apenas nomes de classe
-    nomes_candidatos = [s for s in strings_legiveis if s not in classes_encontradas and not s.isdigit()]
+    # 1. Identifica os tipos de Classe (Item class)
+    padrao_classe = rb'(Part|MeshPart|Model|Script|LocalScript|Folder|Decal|Texture|Attachment|Sound|Frame|ScreenGui|TextLabel|BasePart|UnionOperation)'
+    classes_brutas = re.findall(padrao_classe, buffer_descompactado)
+    classes_encontradas = [c.decode('utf-8', errors='ignore') for c in classes_brutas]
 
-    if not classes_encontradas:
-        return {}
+    # 2. Busca sequencias de texto no buffer para resgatar os nomes personalizados (string name="Name")
+    padrao_strings = rb'[A-Za-z0-9_\-\s]{2,30}'
+    todas_strings = [s.decode('utf-8', errors='ignore').strip() for s in re.findall(padrao_strings, buffer_descompactado)]
+    
+    # Filtra mantendo apenas strings que NAO sao nomes de classe nem apenas numeros
+    nomes_reais = [s for s in todas_strings if s not in classes_encontradas and len(s) > 1 and not s.isdigit()]
 
     contagem = {}
     for idx, classe_str in enumerate(classes_encontradas):
-        # Tenta pegar um nome real extraído do buffer; se não houver, usa a própria classe
-        if idx < len(nomes_candidatos):
-            name_str = nomes_candidatos[idx]
+        # Associa o name_str extraido da tabela de strings do buffer
+        if idx < len(nomes_reais):
+            name_str = nomes_reais[idx]
         else:
-            name_str = classe_str
+            name_str = f"Objeto_{idx+1}"
 
-        # Garante chave única no dicionário para não sobrescrever objetos com mesmo nome
         num = contagem.get(name_str, 0) + 1
         contagem[name_str] = num
         chave_final = f"{name_str}_{num}" if num > 1 else name_str
@@ -400,8 +404,8 @@ def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
         children[chave_final] = {
             "Instance": classe_str,
             "Properties": {
-                "Name": name_str,
-                "ClassName": classe_str
+                "Name": name_str,            # Nome real lido do buffer (string name="Name")
+                "ClassName": classe_str      # Tipo de classe (Item class)
             },
             "Children": {},
             "Script": None
