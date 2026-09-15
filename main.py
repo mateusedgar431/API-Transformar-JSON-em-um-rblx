@@ -342,16 +342,16 @@ API_KEY = "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJM
 
 def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
     """
-    Descompacta os blocos INST e PROP do arquivo .rbxm para extrair 
-    os nomes verdadeiros e as ClassNames originais criadas pelo dono.
+    Descompacta os blocos INST do arquivo .rbxm para extrair todas 
+    as ClassNames e instâncias reais presentes no modelo.
     """
     if not conteudo_bytes.startswith(b"<roblox!"):
         return {}
 
     children = {}
-    classes_encontradas = []
-    
     pos = 32
+    contagem_classes = {}
+
     while pos < len(conteudo_bytes):
         if pos + 8 > len(conteudo_bytes):
             break
@@ -368,70 +368,39 @@ def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
         chunk_data = conteudo_bytes[pos:pos+compressed_len]
         pos += compressed_len
         
-        # Bloco INST: pega as ClassNames reais (Part, MeshPart, Model, Script...)
+        # Processa o bloco INST para pegar cada tipo de objeto real (Part, Model, MeshPart, etc)
         if chunk_type == b"INST":
             try:
                 uncompressed = lz4.block.decompress(chunk_data)
                 if len(uncompressed) > 4:
                     tam_nome = uncompressed[0]
                     classe_real = uncompressed[1:1+tam_nome].decode('utf-8', errors='ignore')
-                    if classe_real and classe_real.isalnum():
-                        classes_encontradas.append(classe_real)
-            except Exception:
-                pass
-
-        # Bloco PROP: pega as propriedades e tenta rastrear os nomes reais
-        elif chunk_type == b"PROP":
-            try:
-                uncompressed = lz4.block.decompress(chunk_data)
-                if b"Name" in uncompressed:
-                    idx_name = uncompressed.find(b"Name")
-                    trecho = uncompressed[idx_name+4:idx_name+60]
-                    nome_real = ""
-                    for byte in trecho:
-                        if 32 <= byte <= 126:
-                            nome_real += chr(byte)
-                        elif nome_real:
-                            break
                     
-                    if nome_real and nome_real not in ["Name", "ClassName", "Value", "roblox"]:
-                        classe_atual = classes_encontradas[-1] if classes_encontradas else "Part"
-                        
-                        # Garante chaves únicas caso existam partes com mesmo nome
-                        chave_final = nome_real
-                        idx = 1
-                        while chave_final in children:
-                            idx += 1
-                            chave_final = f"{nome_real}_{idx}"
+                    # Pega a quantidade de objetos dessa classe declarados no bloco
+                    if len(uncompressed) >= 1 + tam_nome + 4:
+                        qtd_objetos = struct.unpack("<I", uncompressed[1+tam_nome:5+tam_nome])[0]
+                    else:
+                        qtd_objetos = 1
 
-                        children[chave_final] = {
-                            "Instance": classe_atual,
-                            "Properties": {
-                                "Name": nome_real,
-                                "ClassName": classe_atual
-                            },
-                            "Children": {},
-                            "Script": None
-                        }
+                    if classe_real and classe_real.isalnum():
+                        for _ in range(max(1, min(qtd_objetos, 500))):
+                            num = contagem_classes.get(classe_real, 0) + 1
+                            contagem_classes[classe_real] = num
+                            
+                            # Usa o nome da ClassName real (ex: Part, Model, MeshPart)
+                            chave = f"{classe_real}_{num}" if num > 1 else classe_real
+                            
+                            children[chave] = {
+                                "Instance": classe_real,
+                                "Properties": {
+                                    "Name": classe_real,
+                                    "ClassName": classe_real
+                                },
+                                "Children": {},
+                                "Script": None
+                            }
             except Exception:
                 pass
-
-    # Se a seção PROP não mapear os nomes, utiliza as ClassNames encontradas
-    if not children:
-        for idx, classe in enumerate(classes_encontradas):
-            chave_final = classe
-            if chave_final in children:
-                chave_final = f"{classe}_{idx+1}"
-
-            children[chave_final] = {
-                "Instance": classe,
-                "Properties": {
-                    "Name": classe,
-                    "ClassName": classe
-                },
-                "Children": {},
-                "Script": None
-            }
 
     return children
 
@@ -519,7 +488,6 @@ def carregarasset():
             services_mestres = {}
             
             if conteudo_bruto.startswith(b"<roblox!"):
-                # Extrai as instâncias com a ClassName e o Nome reais
                 filhos_reais = extrair_instancias_e_nomes_rbxm(conteudo_bruto)
                 
                 services_mestres["Workspace"] = {
