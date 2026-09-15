@@ -497,18 +497,18 @@ def carregarasset():
             elif "locations" in data and len(data["locations"]) > 0:
                 download_url = data["locations"][0].get("location")
 
-if download_url:
-    # O segredo está no Accept-Encoding: identity
-    # Ele força a Roblox a entregar o binário RBXM bruto original sem ZSTD
-    file_res = requests.get(
-        download_url, 
-        headers={
-            "User-Agent": "Roblox/WinInet",
-            "Accept-Encoding": "identity"
-        }, 
-        timeout=15
-    )
-    conteudo_bruto = file_res.content
+        if download_url:
+            # O segredo está no Accept-Encoding: identity
+            # Ele força a Roblox a entregar o binário RBXM bruto original sem ZSTD
+            file_res = requests.get(
+                download_url, 
+                headers={
+                    "User-Agent": "Roblox/WinInet",
+                    "Accept-Encoding": "identity"
+                }, 
+                timeout=15
+            )
+            conteudo_bruto = file_res.content
             services_mestres = {}
 
             if conteudo_bruto.startswith(b"<roblox!"):
