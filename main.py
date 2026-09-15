@@ -339,120 +339,13 @@ import xml.etree.ElementTree as ET
 import lz4.block
 API_KEY = "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJMU5pSXNJbXRwWkNJNkluTnBaeTB5TURJeExUQTNMVEV6VkRFNE9qVXhPalE1V2lJc0luUjVjQ0k2SWtwWFZDSjkuZXlKaGRXUWlPaUpTYjJKc2IzaEpiblJsY201aGJDSXNJbWx6Y3lJNklrTnNiM1ZrUVhWMGFHVnVkR2xqWVhScGIyNVRaWEoyYVdObElpd2lZbUZ6WlVGd2FVdGxlU0k2SW5oR04wTlZObGx1YzBVMmFrZGlja3R0WVhoaFVHRnZTV3huYTFCTWNEVkZWVU50VEhKNlZqTmFlSFJqTkROUU1DSXNJbTkzYm1WeVNXUWlPaUl5TURNMU5qVTROelUwSWl3aVpYaHdJam94TnpnNU16VTJNelkzTENKcFlYUWlPakUzT0Rrek5USTNOamNzSW01aVppSTZNVGM0T1RNMU1qYzJOMzAuUXVyaDllaXpRWDZ1M2tyTjBuVVlXSXdQQzd2M0FBZ2ZWYTFkNzQ5TmVlQUZqMGRIdHdEYkd1LTFicTcyT1A0WUQ0YXRIN2FzRm5UU04wY2wzeFlpZkVRV1VIN3ozVk92Q0RvSVR0TE9icVF4VV9tUEU1QmQ5NGtjMTNJbnJhLVJoNUVSMlREakhxam02RDhqekpsUDdMY2VVNnlNZ2pkSk1YaHI1ZVdjUWRIcTU5THpQNGdtTGduT0QwR25Scl9XUUhYODlCMmhHc2FNd19NQXhCQWdwOWtPcUZBTmg4azV6M0o0OExkTUlBRzNxNTZ2RmhKaVBIenhya285d180RVh0UEZIbTFOOFM3Sm9ybGQ5UGVLSkVJeXFSSzZFclcxck1yOG4tbVAtX293aUZGbmFoc3ItWmZLcm93MF95OVVlU1pDMG82ZHYzbUpzUkxpX0ZLUDJn"
 
-def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
-    """
-    Processa o buffer do Roblox. Se for XML processa as tags diretamente;
-    se for binario .rbxm, limpa os metadados do sistema para evitar nomes corrompidos.
-    """
-    # 1. Se o arquivo veio em XML (.rbxmx)
-    if b"<roblox" in conteudo_bytes:
-        try:
-            inicio_xml = conteudo_bytes.find(b"<roblox")
-            fim_xml = conteudo_bytes.rfind(b"</roblox>") + 9
-            xml_valido = conteudo_bytes[inicio_xml:fim_xml]
-            root = ET.fromstring(xml_valido)
-            
-            children = {}
-            for item in root.findall("Item"):
-                filho = processar_node_xml(item)
-                nome = filho["Properties"]["Name"]
-                children[nome] = filho
-            return children
-        except Exception:
-            pass
-
-    # 2. Se for binario .rbxm
-    children = {}
-    pos = 32
-    buffer_descompactado = bytearray()
-
-    while pos < len(conteudo_bytes) - 8:
-        chunk_header = conteudo_bytes[pos:pos+8]
-        compressed_len = struct.unpack(">I", chunk_header[4:8])[0]
-        
-        pos += 8
-        if compressed_len == 0:
-            pos += 16
-            continue
-
-        if pos + compressed_len > len(conteudo_bytes):
-            break
-
-        chunk_data = conteudo_bytes[pos:pos+compressed_len]
-        pos += compressed_len
-
-        try:
-            import lz4.block
-            decompressed = lz4.block.decompress(chunk_data)
-            buffer_descompactado.extend(decompressed)
-        except Exception:
-            buffer_descompactado.extend(chunk_data)
-
-    if not buffer_descompactado:
-        buffer_descompactado = bytearray(conteudo_bytes)
-
-    # Identifica as classes reais do Roblox
-    padrao_classe = rb'(Part|MeshPart|Model|Script|LocalScript|Folder|Decal|Texture|Attachment|Sound|Frame|ScreenGui|TextLabel|BasePart|UnionOperation)'
-    classes_brutas = re.findall(padrao_classe, buffer_descompactado)
-    classes_encontradas = [c.decode('utf-8', errors='ignore') for c in classes_brutas]
-
-    if not classes_encontradas:
-        return {}
-
-    # Lista de nomes de propriedades internas do Roblox para IGNORAR
-    propriedades_sistema = {
-        'INST', 'PROP', 'PRNT', 'END', 'META', 'SSTR', 'SIGN', 
-        'roblox', 'Name', 'ClassName', 'Source', 'Value', 'Workspace',
-        'AttributesSerialize', 'Capabilities', 'DefinesCapabilities',
-        'CFrame', 'Color3', 'Vector3', 'Size', 'Position', 'Anchored',
-        'CanCollide', 'Transparency', 'Reflectance', 'Locked'
-    }
-
-    # Busca apenas nomes de texto com mais de 3 letras que NAO sejam propriedades de sistema
-    padrao_nomes = rb'\b[A-Za-z][A-Za-z0-9_\s]{2,30}\b'
-    candidatos_raw = re.findall(padrao_nomes, buffer_descompactado)
-    
-    nomes_validos = []
-    for cand in candidatos_raw:
-        txt = cand.decode('utf-8', errors='ignore').strip()
-        if (
-            txt 
-            and txt not in classes_encontradas 
-            and txt not in propriedades_sistema
-            and len(txt) > 3
-        ):
-            nomes_validos.append(txt)
-
-    contagem = {}
-    for idx, classe_str in enumerate(classes_encontradas):
-        # Se houver um nome valido extraido, usa ele; senao usa o nome da classe
-        if idx < len(nomes_validos):
-            name_str = nomes_validos[idx]
-        else:
-            name_str = classe_str
-
-        num = contagem.get(name_str, 0) + 1
-        contagem[name_str] = num
-        chave_final = f"{name_str}_{num}" if num > 1 else name_str
-
-        children[chave_final] = {
-            "Instance": classe_str,
-            "Properties": {
-                "Name": name_str,
-                "ClassName": classe_str
-            },
-            "Children": {},
-            "Script": None
-        }
-
-    return children
-
 def processar_node_xml(elem):
-    # 'class' do nó <Item class="..."> vira classe_str
+    """
+    Processa um nó <Item> do XML do Roblox (.rbxmx), extraindo 
+    exatamente o ClassName da tag Item e o Name da propriedade string.
+    """
     classe_str = elem.attrib.get("class", "Folder")
-    
-    # Nome padrão inicial caso não ache a propriedade Name
-    name_str = elem.attrib.get("name", classe_str)
+    name_str = classe_str
     
     properties = {
         "Name": name_str,
@@ -467,7 +360,6 @@ def processar_node_xml(elem):
                 prop_name = prop.attrib.get("name", prop.tag)
                 prop_val = prop.text or ""
                 
-                # Se for a propriedade Name (<string name="Name">), atualiza name_str
                 if prop_name == "Name":
                     name_str = prop_val
                     properties["Name"] = name_str
@@ -495,6 +387,95 @@ def processar_node_xml(elem):
         "Children": children,
         "Script": script_code
     }
+
+def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
+    """
+    Descompacta o buffer binário do .rbxm (LZ4) e extrai 
+    as instâncias e nomes de forma estruturada.
+    """
+    if not conteudo_bytes.startswith(b"<roblox!"):
+        return {}
+
+    children = {}
+    pos = 32
+    buffer_descompactado = bytearray()
+
+    # Descompactação dos blocos LZ4 internos do formato rbxm
+    while pos < len(conteudo_bytes) - 8:
+        chunk_header = conteudo_bytes[pos:pos+8]
+        compressed_len = struct.unpack(">I", chunk_header[4:8])[0]
+        
+        pos += 8
+        if compressed_len == 0:
+            pos += 16
+            continue
+
+        if pos + compressed_len > len(conteudo_bytes):
+            break
+
+        chunk_data = conteudo_bytes[pos:pos+compressed_len]
+        pos += compressed_len
+
+        try:
+            import lz4.block
+            decompressed = lz4.block.decompress(chunk_data)
+            buffer_descompactado.extend(decompressed)
+        except Exception:
+            buffer_descompactado.extend(chunk_data)
+
+    if not buffer_descompactado:
+        buffer_descompactado = bytearray(conteudo_bytes)
+
+    # Identifica os tipos de Classe
+    padrao_classe = rb'(Part|MeshPart|Model|Script|LocalScript|Folder|Decal|Texture|Attachment|Sound|Frame|ScreenGui|TextLabel|BasePart|UnionOperation)'
+    classes_brutas = re.findall(padrao_classe, buffer_descompactado)
+    classes_encontradas = [c.decode('utf-8', errors='ignore') for c in classes_brutas]
+
+    if not classes_encontradas:
+        return {}
+
+    # Filtra palavras reservadas e metadados internos do binário
+    palavras_bloqueadas = {
+        'INST', 'PROP', 'PRNT', 'END', 'META', 'SSTR', 'SIGN', 
+        'roblox', 'Name', 'ClassName', 'Source', 'Value', 'Workspace'
+    }
+
+    padrao_strings = rb'\b[A-Za-z][A-Za-z0-9_\s]{1,24}\b'
+    candidatos_raw = re.findall(padrao_strings, buffer_descompactado)
+    
+    nomes_limpos = []
+    for cand in candidatos_raw:
+        texto = cand.decode('utf-8', errors='ignore').strip()
+        if (
+            texto 
+            and texto not in classes_encontradas 
+            and texto not in palavras_bloqueadas 
+            and len(texto) > 1
+        ):
+            nomes_limpos.append(texto)
+
+    contagem = {}
+    for idx, classe_str in enumerate(classes_encontradas):
+        if idx < len(nomes_limpos):
+            name_str = nomes_limpos[idx]
+        else:
+            name_str = classe_str
+
+        num = contagem.get(name_str, 0) + 1
+        contagem[name_str] = num
+        chave_final = f"{name_str}_{num}" if num > 1 else name_str
+
+        children[chave_final] = {
+            "Instance": classe_str,
+            "Properties": {
+                "Name": name_str,
+                "ClassName": classe_str
+            },
+            "Children": {},
+            "Script": None
+        }
+
+    return children
 
 @app.route('/carregarasset', methods=['GET', 'POST'])
 def carregarasset():
