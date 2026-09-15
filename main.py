@@ -333,19 +333,23 @@ def publicar():
 
 import io
 import os
+import re
 import struct
 import xml.etree.ElementTree as ET
 import lz4.block
-
 API_KEY = "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJMU5pSXNJbXRwWkNJNkluTnBaeTB5TURJeExUQTNMVEV6VkRFNE9qVXhPalE1V2lJc0luUjVjQ0k2SWtwWFZDSjkuZXlKaGRXUWlPaUpTYjJKc2IzaEpiblJsY201aGJDSXNJbWx6Y3lJNklrTnNiM1ZrUVhWMGFHVnVkR2xqWVhScGIyNVRaWEoyYVdObElpd2lZbUZ6WlVGd2FVdGxlU0k2SW5oR04wTlZObGx1YzBVMmFrZGlja3R0WVhoaFVHRnZTV3huYTFCTWNEVkZWVU50VEhKNlZqTmFlSFJqTkROUU1DSXNJbTkzYm1WeVNXUWlPaUl5TURNMU5qVTROelUwSWl3aVpYaHdJam94TnpnNU16VTJNelkzTENKcFlYUWlPakUzT0Rrek5USTNOamNzSW01aVppSTZNVGM0T1RNMU1qYzJOMzAuUXVyaDllaXpRWDZ1M2tyTjBuVVlXSXdQQzd2M0FBZ2ZWYTFkNzQ5TmVlQUZqMGRIdHdEYkd1LTFicTcyT1A0WUQ0YXRIN2FzRm5UU04wY2wzeFlpZkVRV1VIN3ozVk92Q0RvSVR0TE9icVF4VV9tUEU1QmQ5NGtjMTNJbnJhLVJoNUVSMlREakhxam02RDhqekpsUDdMY2VVNnlNZ2pkSk1YaHI1ZVdjUWRIcTU5THpQNGdtTGduT0QwR25Scl9XUUhYODlCMmhHc2FNd19NQXhCQWdwOWtPcUZBTmg4azV6M0o0OExkTUlBRzNxNTZ2RmhKaVBIenhya285d180RVh0UEZIbTFOOFM3Sm9ybGQ5UGVLSkVJeXFSSzZFclcxck1yOG4tbVAtX293aUZGbmFoc3ItWmZLcm93MF95OVVlU1pDMG82ZHYzbUpzUkxpX0ZLUDJn"
 
 def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
+    """
+    Varre o buffer binario do Roblox e extrai todas as Parts e Instancias contidas no arquivo.
+    """
     if not conteudo_bytes.startswith(b"<roblox!"):
         return {}
 
     children = {}
-    pos = 32
     contagem_classes = {}
+    pos = 32
+    buffer_descompactado = bytearray()
 
     while pos < len(conteudo_bytes) - 8:
         chunk_header = conteudo_bytes[pos:pos+8]
@@ -356,53 +360,43 @@ def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
         if compressed_len == 0:
             pos += 16
             continue
-        
+
         if pos + compressed_len > len(conteudo_bytes):
             break
 
         chunk_data = conteudo_bytes[pos:pos+compressed_len]
         pos += compressed_len
-        
-        if chunk_type == b"INST":
-            try:
-                # Descompacta o bloco LZ4
-                uncompressed = lz4.block.decompress(chunk_data)
-                
-                # No bloco INST:
-                # 4 bytes: Class ID
-                # String: Nome da classe
-                if len(uncompressed) > 4:
-                    # Lê o tamanho do nome da classe
-                    tam_nome = struct.unpack("<I", uncompressed[4:8])[0] if len(uncompressed) >= 8 else uncompressed[0]
-                    
-                    # Procura caracteres legíveis que formam a classe (ex: Part, MeshPart)
-                    nome_bytes = bytearray()
-                    for b in uncompressed[4:]:
-                        if 65 <= b <= 90 or 97 <= b <= 122:  # A-Z, a-z
-                            nome_bytes.append(b)
-                        elif len(nome_bytes) > 2:
-                            break
-                            
-                    classe_real = nome_bytes.decode('utf-8', errors='ignore')
 
-                    if classe_real and len(classe_real) >= 3:
-                        num = contagem_classes.get(classe_real, 0) + 1
-                        contagem_classes[classe_real] = num
-                        chave = f"{classe_real}_{num}" if num > 1 else classe_real
-                        
-                        children[chave] = {
-                            "Instance": classe_real,
-                            "Properties": {
-                                "Name": chave,
-                                "ClassName": classe_real
-                            },
-                            "Children": {},
-                            "Script": None
-                        }
-            except Exception:
-                pass
+        try:
+            decompressed = lz4.block.decompress(chunk_data)
+            buffer_descompactado.extend(decompressed)
+        except Exception:
+            buffer_descompactado.extend(chunk_data)
+
+    padrão = rb'(Part|MeshPart|Model|Script|LocalScript|Folder|Decal|Texture|Attachment|Sound|Frame|ScreenGui|TextLabel|BasePart|UnionOperation)'
+    instancias_encontradas = re.findall(padrão, buffer_descompactado)
+
+    if not instancias_encontradas:
+        instancias_encontradas = re.findall(padrão, conteudo_bytes)
+
+    for cls_bytes in instancias_encontradas:
+        classe_str = cls_bytes.decode('utf-8', errors='ignore')
+        num = contagem_classes.get(classe_str, 0) + 1
+        contagem_classes[classe_str] = num
+        
+        chave = f"{classe_str}_{num}" if num > 1 else classe_str
+        children[chave] = {
+            "Instance": classe_str,
+            "Properties": {
+                "Name": chave,
+                "ClassName": classe_str
+            },
+            "Children": {},
+            "Script": None
+        }
 
     return children
+
 
 def processar_node_xml(elem):
     nome_base = elem.attrib.get("name", elem.attrib.get("class", "Instance"))
@@ -457,52 +451,72 @@ def carregarasset():
         if not asset_id:
             return jsonify({"erro": "Asset ID nao informado"})
             
-        roblox_url = f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}"
+        roblox_url = f"https://apis.roblox.com/asset-delivery-api/v1/assetId/{asset_id}"
         headers = {
             "User-Agent": "Roblox/WinInet",
-            "Accept": "application/xml, text/xml"
+            "Accept": "*/*",
+            "x-api-key": API_KEY
         }
         
-        res = requests.get(roblox_url, headers=headers, timeout=15, allow_redirects=True)
-        conteudo_bruto = res.content
-        services_mestres = {}
+        res = requests.get(roblox_url, headers=headers, timeout=15)
+        data = res.json()
+        
+        download_url = None
+        if isinstance(data, list) and len(data) > 0:
+            item = data[0]
+            if "locations" in item and len(item["locations"]) > 0:
+                download_url = item["locations"][0].get("location")
+            elif "location" in item:
+                download_url = item.get("location")
+        elif isinstance(data, dict):
+            if "location" in data:
+                download_url = data["location"]
+            elif "locations" in data and len(data["locations"]) > 0:
+                download_url = data["locations"][0].get("location")
 
-        if conteudo_bruto.startswith(b"<roblox!"):
-            filhos_reais = extrair_instancias_e_nomes_rbxm(conteudo_bruto)
-            
-            services_mestres["Workspace"] = {
-                "Instance": "Workspace",
-                "Properties": {"Name": "Workspace", "ClassName": "Workspace"},
-                "Children": filhos_reais,
-                "Script": None
-            }
-        else:
-            try:
-                if b"<roblox" in conteudo_bruto:
-                    inicio_xml = conteudo_bruto.find(b"<roblox")
-                    fim_xml = conteudo_bruto.rfind(b"</roblox>") + 9
-                    xml_valido = conteudo_bruto[inicio_xml:fim_xml]
-                    root = ET.fromstring(xml_valido)
-                else:
-                    root = ET.fromstring(conteudo_bruto)
+        if download_url:
+            file_res = requests.get(download_url, timeout=15)
+            conteudo_bruto = file_res.content
+            services_mestres = {}
 
-                for item in root.findall("Item"):
-                    service_name = item.attrib.get("name", item.attrib.get("class", "Folder"))
-                    services_mestres[service_name] = processar_node_xml(item)
-            except Exception:
+            if conteudo_bruto.startswith(b"<roblox!"):
+                filhos_reais = extrair_instancias_e_nomes_rbxm(conteudo_bruto)
+                
                 services_mestres["Workspace"] = {
                     "Instance": "Workspace",
                     "Properties": {"Name": "Workspace", "ClassName": "Workspace"},
-                    "Children": {},
+                    "Children": filhos_reais,
                     "Script": None
                 }
+            else:
+                try:
+                    if b"<roblox" in conteudo_bruto:
+                        inicio_xml = conteudo_bruto.find(b"<roblox")
+                        fim_xml = conteudo_bruto.rfind(b"</roblox>") + 9
+                        xml_valido = conteudo_bruto[inicio_xml:fim_xml]
+                        root = ET.fromstring(xml_valido)
+                    else:
+                        root = ET.fromstring(conteudo_bruto)
 
-        return jsonify({
-            "sucesso": True,
-            "asset_id": asset_id,
-            "download_url": res.url,
-            "services": services_mestres
-        })
+                    for item in root.findall("Item"):
+                        service_name = item.attrib.get("name", item.attrib.get("class", "Folder"))
+                        services_mestres[service_name] = processar_node_xml(item)
+                except Exception:
+                    services_mestres["Workspace"] = {
+                        "Instance": "Workspace",
+                        "Properties": {"Name": "Workspace", "ClassName": "Workspace"},
+                        "Children": {},
+                        "Script": None
+                    }
+
+            return jsonify({
+                "sucesso": True,
+                "asset_id": asset_id,
+                "download_url": download_url,
+                "services": services_mestres
+            })
+            
+        return jsonify({"erro": "Asset nao encontrado", "detalhes": str(data)})
         
     except Exception as err:
         return jsonify({"erro_python": str(err)})
