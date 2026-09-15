@@ -340,20 +340,14 @@ import lz4.block
 API_KEY = "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJMU5pSXNJbXRwWkNJNkluTnBaeTB5TURJeExUQTNMVEV6VkRFNE9qVXhPalE1V2lJc0luUjVjQ0k2SWtwWFZDSjkuZXlKaGRXUWlPaUpTYjJKc2IzaEpiblJsY201aGJDSXNJbWx6Y3lJNklrTnNiM1ZrUVhWMGFHVnVkR2xqWVhScGIyNVRaWEoyYVdObElpd2lZbUZ6WlVGd2FVdGxlU0k2SW5oR04wTlZObGx1YzBVMmFrZGlja3R0WVhoaFVHRnZTV3huYTFCTWNEVkZWVU50VEhKNlZqTmFlSFJqTkROUU1DSXNJbTkzYm1WeVNXUWlPaUl5TURNMU5qVTROelUwSWl3aVpYaHdJam94TnpnNU16VTJNelkzTENKcFlYUWlPakUzT0Rrek5USTNOamNzSW01aVppSTZNVGM0T1RNMU1qYzJOMzAuUXVyaDllaXpRWDZ1M2tyTjBuVVlXSXdQQzd2M0FBZ2ZWYTFkNzQ5TmVlQUZqMGRIdHdEYkd1LTFicTcyT1A0WUQ0YXRIN2FzRm5UU04wY2wzeFlpZkVRV1VIN3ozVk92Q0RvSVR0TE9icVF4VV9tUEU1QmQ5NGtjMTNJbnJhLVJoNUVSMlREakhxam02RDhqekpsUDdMY2VVNnlNZ2pkSk1YaHI1ZVdjUWRIcTU5THpQNGdtTGduT0QwR25Scl9XUUhYODlCMmhHc2FNd19NQXhCQWdwOWtPcUZBTmg4azV6M0o0OExkTUlBRzNxNTZ2RmhKaVBIenhya285d180RVh0UEZIbTFOOFM3Sm9ybGQ5UGVLSkVJeXFSSzZFclcxck1yOG4tbVAtX293aUZGbmFoc3ItWmZLcm93MF95OVVlU1pDMG82ZHYzbUpzUkxpX0ZLUDJn"
 
 def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
-    """
-    Varre os blocos binários do arquivo .rbxm e descompacta os blocos INST e PROP via LZ4.
-    """
     if not conteudo_bytes.startswith(b"<roblox!"):
         return {}
 
     children = {}
-    pos = 32  # Pula os 32 bytes do cabeçalho inicial <roblox!
+    pos = 32
     contagem_classes = {}
 
-    while pos < len(conteudo_bytes):
-        if pos + 8 > len(conteudo_bytes):
-            break
-            
+    while pos < len(conteudo_bytes) - 8:
         chunk_header = conteudo_bytes[pos:pos+8]
         chunk_type = chunk_header[:4]
         compressed_len = struct.unpack(">I", chunk_header[4:8])[0]
@@ -369,41 +363,46 @@ def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
         chunk_data = conteudo_bytes[pos:pos+compressed_len]
         pos += compressed_len
         
-        # Leitura de instâncias reais (INST)
         if chunk_type == b"INST":
             try:
+                # Descompacta o bloco LZ4
                 uncompressed = lz4.block.decompress(chunk_data)
+                
+                # No bloco INST:
+                # 4 bytes: Class ID
+                # String: Nome da classe
                 if len(uncompressed) > 4:
-                    tam_nome = uncompressed[0]
-                    classe_real = uncompressed[1:1+tam_nome].decode('utf-8', errors='ignore')
+                    # Lê o tamanho do nome da classe
+                    tam_nome = struct.unpack("<I", uncompressed[4:8])[0] if len(uncompressed) >= 8 else uncompressed[0]
                     
-                    if len(uncompressed) >= 1 + tam_nome + 4:
-                        qtd_objetos = struct.unpack("<I", uncompressed[1+tam_nome:5+tam_nome])[0]
-                    else:
-                        qtd_objetos = 1
+                    # Procura caracteres legíveis que formam a classe (ex: Part, MeshPart)
+                    nome_bytes = bytearray()
+                    for b in uncompressed[4:]:
+                        if 65 <= b <= 90 or 97 <= b <= 122:  # A-Z, a-z
+                            nome_bytes.append(b)
+                        elif len(nome_bytes) > 2:
+                            break
+                            
+                    classe_real = nome_bytes.decode('utf-8', errors='ignore')
 
-                    if classe_real and classe_real.isalnum():
-                        qtd_segura = min(max(1, qtd_objetos), 2000)
-                        for _ in range(qtd_segura):
-                            num = contagem_classes.get(classe_real, 0) + 1
-                            contagem_classes[classe_real] = num
-                            
-                            chave = f"{classe_real}_{num}" if num > 1 else classe_real
-                            
-                            children[chave] = {
-                                "Instance": classe_real,
-                                "Properties": {
-                                    "Name": chave,
-                                    "ClassName": classe_real
-                                },
-                                "Children": {},
-                                "Script": None
-                            }
+                    if classe_real and len(classe_real) >= 3:
+                        num = contagem_classes.get(classe_real, 0) + 1
+                        contagem_classes[classe_real] = num
+                        chave = f"{classe_real}_{num}" if num > 1 else classe_real
+                        
+                        children[chave] = {
+                            "Instance": classe_real,
+                            "Properties": {
+                                "Name": chave,
+                                "ClassName": classe_real
+                            },
+                            "Children": {},
+                            "Script": None
+                        }
             except Exception:
                 pass
 
     return children
-
 
 def processar_node_xml(elem):
     nome_base = elem.attrib.get("name", elem.attrib.get("class", "Instance"))
@@ -461,7 +460,7 @@ def carregarasset():
         roblox_url = f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}"
         headers = {
             "User-Agent": "Roblox/WinInet",
-            "Accept": "*/*"
+            "Accept": "application/xml, text/xml"
         }
         
         res = requests.get(roblox_url, headers=headers, timeout=15, allow_redirects=True)
