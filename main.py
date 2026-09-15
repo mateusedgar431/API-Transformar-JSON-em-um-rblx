@@ -406,12 +406,15 @@ def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
     return children
 
 def processar_node_xml(elem):
-    nome_base = elem.attrib.get("name", elem.attrib.get("class", "Instance"))
-    classe = elem.attrib.get("class", "Folder")
-
+    # 'class' do nó <Item class="..."> vira classe_str
+    classe_str = elem.attrib.get("class", "Folder")
+    
+    # Nome padrão inicial caso não ache a propriedade Name
+    name_str = elem.attrib.get("name", classe_str)
+    
     properties = {
-        "Name": nome_base,
-        "ClassName": classe
+        "Name": name_str,
+        "ClassName": classe_str
     }
     children = {}
     script_code = None
@@ -421,7 +424,13 @@ def processar_node_xml(elem):
             for prop in child:
                 prop_name = prop.attrib.get("name", prop.tag)
                 prop_val = prop.text or ""
-                properties[prop_name] = prop_val
+                
+                # Se for a propriedade Name (<string name="Name">), atualiza name_str
+                if prop_name == "Name":
+                    name_str = prop_val
+                    properties["Name"] = name_str
+                else:
+                    properties[prop_name] = prop_val
                 
                 if prop_name == "Source":
                     script_code = prop_val
@@ -439,12 +448,11 @@ def processar_node_xml(elem):
             children[chave_final] = filho_processado
 
     return {
-        "Instance": classe,
+        "Instance": classe_str,
         "Properties": properties,
         "Children": children,
         "Script": script_code
     }
-
 
 @app.route('/carregarasset', methods=['GET', 'POST'])
 def carregarasset():
