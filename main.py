@@ -331,133 +331,170 @@ def publicar():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
-import io
 import os
-import re
 import struct
-import xml.etree.ElementTree as ET
 import lz4.block
-API_KEY = "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJMU5pSXNJbXRwWkNJNkluTnBaeTB5TURJeExUQTNMVEV6VkRFNE9qVXhPalE1V2lJc0luUjVjQ0k2SWtwWFZDSjkuZXlKaGRXUWlPaUpTYjJKc2IzaEpiblJsY201aGJDSXNJbWx6Y3lJNklrTnNiM1ZrUVhWMGFHVnVkR2xqWVhScGIyNVRaWEoyYVdObElpd2lZbUZ6WlVGd2FVdGxlU0k2SW5oR04wTlZObGx1YzBVMmFrZGlja3R0WVhoaFVHRnZTV3huYTFCTWNEVkZWVU50VEhKNlZqTmFlSFJqTkROUU1DSXNJbTkzYm1WeVNXUWlPaUl5TURNMU5qVTROelUwSWl3aVpYaHdJam94TnpnNU16VTJNelkzTENKcFlYUWlPakUzT0Rrek5USTNOamNzSW01aVppSTZNVGM0T1RNMU1qYzJOMzAuUXVyaDllaXpRWDZ1M2tyTjBuVVlXSXdQQzd2M0FBZ2ZWYTFkNzQ5TmVlQUZqMGRIdHdEYkd1LTFicTcyT1A0WUQ0YXRIN2FzRm5UU04wY2wzeFlpZkVRV1VIN3ozVk92Q0RvSVR0TE9icVF4VV9tUEU1QmQ5NGtjMTNJbnJhLVJoNUVSMlREakhxam02RDhqekpsUDdMY2VVNnlNZ2pkSk1YaHI1ZVdjUWRIcTU5THpQNGdtTGduT0QwR25Scl9XUUhYODlCMmhHc2FNd19NQXhCQWdwOWtPcUZBTmg4azV6M0o0OExkTUlBRzNxNTZ2RmhKaVBIenhya285d180RVh0UEZIbTFOOFM3Sm9ybGQ5UGVLSkVJeXFSSzZFclcxck1yOG4tbVAtX293aUZGbmFoc3ItWmZLcm93MF95OVVlU1pDMG82ZHYzbUpzUkxpX0ZLUDJn"
+import requests
 
-def processar_node_xml(elem):
-    """
-    Processa de forma estrita: ClassName vem do atributo class,
-    e Name vem exclusivamente da tag <string name="Name">.
-    """
-    # 1. Pega a classe diretamente da tag Item
-    classe_str = elem.attrib.get("class", "Folder")
-    
-    # Define valores padrão iniciais
-    name_str = classe_str
-    properties = {}
-    children = {}
-    script_code = None
+from flask import Flask, request, jsonify
 
-    # Varre as tags internas do XML
-    for child in elem:
-        if child.tag == "Properties":
-            for prop in child:
-                prop_name = prop.attrib.get("name", prop.tag)
-                
-                # Tratamento especial para pegar o texto interno das tags
-                if prop.tag in ["string", "token", "ProtectedString"]:
-                    prop_val = prop.text or ""
-                elif prop.tag == "bool":
-                    prop_val = (prop.text == "true")
-                else:
-                    prop_val = prop.text or ""
-                
-                # Se for a propriedade exata de Name, atualiza o nome do objeto
-                if prop_name == "Name":
-                    name_str = prop_val
-                
-                properties[prop_name] = prop_val
-                
-                # Captura o script se existir
-                if prop_name == "Source":
-                    script_code = prop_val
-                    
-        elif child.tag == "Item":
-            filho_processado = processar_node_xml(child)
-            nome_filho = filho_processado["Properties"].get("Name", filho_processado["Instance"])
-            
-            idx = 1
-            chave_final = nome_filho
-            while chave_final in children:
-                idx += 1
-                chave_final = f"{nome_filho}_{idx}"
-                
-            children[chave_final] = filho_processado
+app = Flask(__name__)
 
-    # Garante que a propriedade Name e ClassName estejam sempre presentes e corretas
-    properties["Name"] = name_str
-    properties["ClassName"] = classe_str
 
-    return {
-        "Instance": classe_str,
-        "Properties": properties,
-        "Children": children,
-        "Script": script_code
-    }
+# ============================================================
+# CONFIGURAÇÃO
+# ============================================================
 
-def read_u8(data, pos):
+API_KEY = os.environ.get("ROBLOX_API_KEY")
+
+if not API_KEY:
+    print("[AVISO] ROBLOX_API_KEY não foi configurada.")
+
+
+# ============================================================
+# LEITORES BÁSICOS
+# ============================================================
+
+def ler_u8(data, pos):
+    if pos + 1 > len(data):
+        raise ValueError("Fim inesperado do buffer")
+
     return data[pos], pos + 1
 
 
-def read_u32(data, pos):
+def ler_u32_le(data, pos):
+    if pos + 4 > len(data):
+        raise ValueError("Fim inesperado do buffer")
+
     return struct.unpack_from("<I", data, pos)[0], pos + 4
 
 
-def read_string(data, pos):
-    tamanho, pos = read_u32(data, pos)
+def ler_i32_le(data, pos):
+    if pos + 4 > len(data):
+        raise ValueError("Fim inesperado do buffer")
 
-    if pos + tamanho > len(data):
-        raise ValueError("String fora dos limites do chunk")
+    return struct.unpack_from("<i", data, pos)[0], pos + 4
 
-    valor = data[pos:pos + tamanho].decode("utf-8", errors="replace")
+
+def ler_f32_le(data, pos):
+    if pos + 4 > len(data):
+        raise ValueError("Fim inesperado do buffer")
+
+    return struct.unpack_from("<f", data, pos)[0], pos + 4
+
+
+def ler_f64_le(data, pos):
+    if pos + 8 > len(data):
+        raise ValueError("Fim inesperado do buffer")
+
+    return struct.unpack_from("<d", data, pos)[0], pos + 8
+
+
+def ler_string(data, pos):
+    tamanho, pos = ler_u32_le(data, pos)
+
+    if tamanho > len(data) - pos:
+        raise ValueError("String ultrapassa o buffer")
+
+    valor = data[pos:pos + tamanho].decode(
+        "utf-8",
+        errors="replace"
+    )
+
     return valor, pos + tamanho
 
 
-def unzigzag32(x):
-    return (x >> 1) ^ -(x & 1)
+# ============================================================
+# ZIGZAG / ARRAYS INTERCALADOS
+# ============================================================
+
+def zigzag_decode32(valor):
+    return (valor >> 1) ^ -(valor & 1)
 
 
-def deinterleave_i32(data, count):
-    """
-    O RBXM armazena os referents em bytes intercalados.
-    """
-    if len(data) < count * 4:
-        raise ValueError("Dados insuficientes para referents")
+def decode_interleaved_u32(data, quantidade):
+    if quantidade == 0:
+        return []
 
-    valores = []
+    if len(data) < quantidade * 4:
+        raise ValueError("Array intercalado inválido")
 
-    for i in range(count):
+    resultado = []
+
+    for i in range(quantidade):
+
         raw = bytes(
-            data[i + j * count]
+            data[i + j * quantidade]
             for j in range(4)
         )
 
-        numero = struct.unpack(">I", raw)[0]
-        valores.append(unzigzag32(numero))
+        resultado.append(
+            struct.unpack(">I", raw)[0]
+        )
+
+    return resultado
+
+
+def decode_interleaved_i32(data, quantidade):
+    valores = decode_interleaved_u32(
+        data,
+        quantidade
+    )
+
+    return [
+        zigzag_decode32(v)
+        for v in valores
+    ]
+
+
+def decode_float_array(data, quantidade):
+    if quantidade == 0:
+        return []
+
+    if len(data) < quantidade * 4:
+        raise ValueError("Float array inválido")
+
+    valores = []
+
+    for i in range(quantidade):
+
+        raw = bytes(
+            data[i + j * quantidade]
+            for j in range(4)
+        )
+
+        numero = struct.unpack(
+            ">I",
+            raw
+        )[0]
+
+        valores.append(
+            struct.unpack(
+                ">f",
+                struct.pack(">I", numero)
+            )[0]
+        )
 
     return valores
 
 
+# ============================================================
+# LEITOR DE CHUNKS RBXM
+# ============================================================
+
 def ler_chunks_rbxm(data):
-    """
-    Lê corretamente os chunks do formato binário RBXM.
 
-    Header de cada chunk:
-        4 bytes = nome
-        4 bytes = tamanho comprimido
-        4 bytes = tamanho descomprimido
-        4 bytes = reservado
-    """
+    if not (
+        data.startswith(b"<roblox!")
+        or data.startswith(b"<roblox")
+    ):
+        raise ValueError(
+            "Arquivo não possui cabeçalho RBXM"
+        )
 
-    if not data.startswith(b"<roblox"):
-        raise ValueError("Arquivo não parece ser RBXM")
-
+    # Cabeçalho RBXM normalmente ocupa 32 bytes.
     pos = 32
+
     chunks = []
 
     while pos + 16 <= len(data):
@@ -466,67 +503,112 @@ def ler_chunks_rbxm(data):
         pos += 4
 
         compressed_len = struct.unpack_from(
-            "<I", data, pos
+            "<I",
+            data,
+            pos
         )[0]
         pos += 4
 
         uncompressed_len = struct.unpack_from(
-            "<I", data, pos
+            "<I",
+            data,
+            pos
         )[0]
         pos += 4
 
         # reservado
         pos += 4
 
-        nome = nome_raw.rstrip(b"\x00").decode(
+        nome = nome_raw.rstrip(
+            b"\x00"
+        ).decode(
             "ascii",
             errors="ignore"
         )
 
+        if nome == "":
+            break
+
+        # ----------------------------------------------------
+        # CHUNK NÃO COMPRIMIDO
+        # ----------------------------------------------------
+
         if compressed_len == 0:
+
             tamanho = uncompressed_len
 
             if pos + tamanho > len(data):
                 raise ValueError(
-                    f"Chunk {nome} ultrapassa o arquivo"
+                    f"Chunk {nome} inválido"
                 )
 
-            payload = data[pos:pos + tamanho]
+            payload = data[
+                pos:pos + tamanho
+            ]
+
             pos += tamanho
 
+        # ----------------------------------------------------
+        # CHUNK COMPRIMIDO
+        # ----------------------------------------------------
+
         else:
+
             if pos + compressed_len > len(data):
                 raise ValueError(
-                    f"Chunk comprimido {nome} inválido"
+                    f"Chunk {nome} comprimido inválido"
                 )
 
             compressed = data[
                 pos:pos + compressed_len
             ]
+
             pos += compressed_len
 
-            # ZSTD
-            if compressed[:4] == b"\x28\xb5\x2f\xfd":
-                try:
-                    import zstandard as zstd
-                except ImportError:
-                    raise RuntimeError(
-                        "Instale zstandard: pip install zstandard"
-                    )
+            payload = None
 
-                payload = zstd.ZstdDecompressor().decompress(
-                    compressed,
-                    max_output_size=uncompressed_len
-                )
-
-            # LZ4
-            else:
+            # Tenta LZ4
+            try:
                 payload = lz4.block.decompress(
                     compressed,
                     uncompressed_size=uncompressed_len
                 )
+            except Exception:
+                pass
 
-        chunks.append((nome, payload))
+            # Se não conseguiu, tenta zstandard
+            if payload is None:
+
+                if compressed.startswith(
+                    b"\x28\xb5\x2f\xfd"
+                ):
+
+                    try:
+                        import zstandard as zstd
+
+                        payload = (
+                            zstd.ZstdDecompressor()
+                            .decompress(
+                                compressed,
+                                max_output_size=uncompressed_len
+                            )
+                        )
+
+                    except Exception as erro:
+                        raise ValueError(
+                            f"Não foi possível descompactar "
+                            f"chunk {nome}: {erro}"
+                        )
+
+            if payload is None:
+                raise ValueError(
+                    f"Compressão desconhecida "
+                    f"no chunk {nome}"
+                )
+
+        chunks.append(
+            (nome, payload)
+        )
 
         if nome == "END":
             break
@@ -534,15 +616,654 @@ def ler_chunks_rbxm(data):
     return chunks
 
 
-def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
+# ============================================================
+# DECODIFICADOR DE PROPRIEDADES
+# ============================================================
 
-    chunks = ler_chunks_rbxm(conteudo_bytes)
+def decodificar_prop(
+    type_id,
+    payload,
+    pos,
+    quantidade
+):
 
-    # ---------------------------------------------------------
-    # 1. INST
-    # ---------------------------------------------------------
+    # --------------------------------------------------------
+    # String
+    # --------------------------------------------------------
+
+    if type_id == 0x01:
+
+        valores = []
+
+        for _ in range(quantidade):
+
+            valor, pos = ler_string(
+                payload,
+                pos
+            )
+
+            valores.append(valor)
+
+        return valores, pos
+
+
+    # --------------------------------------------------------
+    # Bool
+    # --------------------------------------------------------
+
+    if type_id == 0x02:
+
+        if pos + quantidade > len(payload):
+            raise ValueError("Bool inválido")
+
+        valores = []
+
+        for i in range(quantidade):
+            valores.append(
+                payload[pos + i] != 0
+            )
+
+        return valores, pos + quantidade
+
+
+    # --------------------------------------------------------
+    # Int32
+    # --------------------------------------------------------
+
+    if type_id == 0x03:
+
+        tamanho = quantidade * 4
+
+        raw = payload[
+            pos:pos + tamanho
+        ]
+
+        valores = decode_interleaved_i32(
+            raw,
+            quantidade
+        )
+
+        return valores, pos + tamanho
+
+
+    # --------------------------------------------------------
+    # Float32
+    # --------------------------------------------------------
+
+    if type_id == 0x04:
+
+        tamanho = quantidade * 4
+
+        raw = payload[
+            pos:pos + tamanho
+        ]
+
+        valores = decode_float_array(
+            raw,
+            quantidade
+        )
+
+        return valores, pos + tamanho
+
+
+    # --------------------------------------------------------
+    # Double
+    # --------------------------------------------------------
+
+    if type_id == 0x05:
+
+        valores = []
+
+        for _ in range(quantidade):
+
+            valor, pos = ler_f64_le(
+                payload,
+                pos
+            )
+
+            valores.append(valor)
+
+        return valores, pos
+
+
+    # --------------------------------------------------------
+    # UDim
+    # --------------------------------------------------------
+
+    if type_id == 0x06:
+
+        escalas = decode_float_array(
+            payload[
+                pos:
+                pos + quantidade * 4
+            ],
+            quantidade
+        )
+
+        pos += quantidade * 4
+
+        offsets = decode_interleaved_i32(
+            payload[
+                pos:
+                pos + quantidade * 4
+            ],
+            quantidade
+        )
+
+        pos += quantidade * 4
+
+        valores = []
+
+        for i in range(quantidade):
+
+            valores.append({
+                "Scale": escalas[i],
+                "Offset": offsets[i]
+            })
+
+        return valores, pos
+
+
+    # --------------------------------------------------------
+    # UDim2
+    # --------------------------------------------------------
+
+    if type_id == 0x07:
+
+        sx = decode_float_array(
+            payload[
+                pos:
+                pos + quantidade * 4
+            ],
+            quantidade
+        )
+
+        pos += quantidade * 4
+
+        sy = decode_float_array(
+            payload[
+                pos:
+                pos + quantidade * 4
+            ],
+            quantidade
+        )
+
+        pos += quantidade * 4
+
+        ox = decode_interleaved_i32(
+            payload[
+                pos:
+                pos + quantidade * 4
+            ],
+            quantidade
+        )
+
+        pos += quantidade * 4
+
+        oy = decode_interleaved_i32(
+            payload[
+                pos:
+                pos + quantidade * 4
+            ],
+            quantidade
+        )
+
+        pos += quantidade * 4
+
+        valores = []
+
+        for i in range(quantidade):
+
+            valores.append({
+                "X": {
+                    "Scale": sx[i],
+                    "Offset": ox[i]
+                },
+                "Y": {
+                    "Scale": sy[i],
+                    "Offset": oy[i]
+                }
+            })
+
+        return valores, pos
+
+
+    # --------------------------------------------------------
+    # BrickColor / Token
+    # --------------------------------------------------------
+
+    if type_id == 0x0B:
+
+        tamanho = quantidade * 4
+
+        valores = decode_interleaved_u32(
+            payload[
+                pos:
+                pos + tamanho
+            ],
+            quantidade
+        )
+
+        return valores, pos + tamanho
+
+
+    # --------------------------------------------------------
+    # Color3
+    # --------------------------------------------------------
+
+    if type_id == 0x0C:
+
+        r = decode_float_array(
+            payload[
+                pos:
+                pos + quantidade * 4
+            ],
+            quantidade
+        )
+
+        pos += quantidade * 4
+
+        g = decode_float_array(
+            payload[
+                pos:
+                pos + quantidade * 4
+            ],
+            quantidade
+        )
+
+        pos += quantidade * 4
+
+        b = decode_float_array(
+            payload[
+                pos:
+                pos + quantidade * 4
+            ],
+            quantidade
+        )
+
+        pos += quantidade * 4
+
+        valores = []
+
+        for i in range(quantidade):
+
+            valores.append({
+                "R": r[i],
+                "G": g[i],
+                "B": b[i]
+            })
+
+        return valores, pos
+
+
+    # --------------------------------------------------------
+    # Vector2
+    # --------------------------------------------------------
+
+    if type_id == 0x0D:
+
+        x = decode_float_array(
+            payload[
+                pos:
+                pos + quantidade * 4
+            ],
+            quantidade
+        )
+
+        pos += quantidade * 4
+
+        y = decode_float_array(
+            payload[
+                pos:
+                pos + quantidade * 4
+            ],
+            quantidade
+        )
+
+        pos += quantidade * 4
+
+        valores = []
+
+        for i in range(quantidade):
+
+            valores.append({
+                "X": x[i],
+                "Y": y[i]
+            })
+
+        return valores, pos
+
+
+    # --------------------------------------------------------
+    # Vector3
+    # --------------------------------------------------------
+
+    if type_id == 0x0E:
+
+        x = decode_float_array(
+            payload[
+                pos:
+                pos + quantidade * 4
+            ],
+            quantidade
+        )
+
+        pos += quantidade * 4
+
+        y = decode_float_array(
+            payload[
+                pos:
+                pos + quantidade * 4
+            ],
+            quantidade
+        )
+
+        pos += quantidade * 4
+
+        z = decode_float_array(
+            payload[
+                pos:
+                pos + quantidade * 4
+            ],
+            quantidade
+        )
+
+        pos += quantidade * 4
+
+        valores = []
+
+        for i in range(quantidade):
+
+            valores.append({
+                "X": x[i],
+                "Y": y[i],
+                "Z": z[i]
+            })
+
+        return valores, pos
+
+
+    # --------------------------------------------------------
+    # Token / Enum
+    # --------------------------------------------------------
+
+    if type_id == 0x12:
+
+        tamanho = quantidade * 4
+
+        valores = decode_interleaved_u32(
+            payload[
+                pos:
+                pos + tamanho
+            ],
+            quantidade
+        )
+
+        return valores, pos + tamanho
+
+
+    # --------------------------------------------------------
+    # Referent
+    # --------------------------------------------------------
+
+    if type_id == 0x13:
+
+        tamanho = quantidade * 4
+
+        raw = payload[
+            pos:
+            pos + tamanho
+        ]
+
+        deltas = decode_interleaved_i32(
+            raw,
+            quantidade
+        )
+
+        valores = []
+
+        atual = 0
+
+        for delta in deltas:
+
+            atual += delta
+
+            if atual == -1:
+                valores.append(None)
+            else:
+                valores.append(atual)
+
+        return valores, pos + tamanho
+
+
+    # --------------------------------------------------------
+    # Vector3int16
+    # --------------------------------------------------------
+
+    if type_id == 0x14:
+
+        valores = []
+
+        for _ in range(quantidade):
+
+            if pos + 6 > len(payload):
+                raise ValueError(
+                    "Vector3int16 inválido"
+                )
+
+            x, y, z = struct.unpack_from(
+                "<hhh",
+                payload,
+                pos
+            )
+
+            pos += 6
+
+            valores.append({
+                "X": x,
+                "Y": y,
+                "Z": z
+            })
+
+        return valores, pos
+
+
+    # --------------------------------------------------------
+    # NumberRange
+    # --------------------------------------------------------
+
+    if type_id == 0x17:
+
+        valores = []
+
+        for _ in range(quantidade):
+
+            minimo, pos = ler_f32_le(
+                payload,
+                pos
+            )
+
+            maximo, pos = ler_f32_le(
+                payload,
+                pos
+            )
+
+            valores.append({
+                "Min": minimo,
+                "Max": maximo
+            })
+
+        return valores, pos
+
+
+    # --------------------------------------------------------
+    # Rect
+    # --------------------------------------------------------
+
+    if type_id == 0x18:
+
+        x0 = decode_float_array(
+            payload[
+                pos:
+                pos + quantidade * 4
+            ],
+            quantidade
+        )
+
+        pos += quantidade * 4
+
+        y0 = decode_float_array(
+            payload[
+                pos:
+                pos + quantidade * 4
+            ],
+            quantidade
+        )
+
+        pos += quantidade * 4
+
+        x1 = decode_float_array(
+            payload[
+                pos:
+                pos + quantidade * 4
+            ],
+            quantidade
+        )
+
+        pos += quantidade * 4
+
+        y1 = decode_float_array(
+            payload[
+                pos:
+                pos + quantidade * 4
+            ],
+            quantidade
+        )
+
+        pos += quantidade * 4
+
+        valores = []
+
+        for i in range(quantidade):
+
+            valores.append({
+                "Min": {
+                    "X": x0[i],
+                    "Y": y0[i]
+                },
+                "Max": {
+                    "X": x1[i],
+                    "Y": y1[i]
+                }
+            })
+
+        return valores, pos
+
+
+    # --------------------------------------------------------
+    # Color3uint8
+    # --------------------------------------------------------
+
+    if type_id == 0x1A:
+
+        if pos + quantidade * 3 > len(payload):
+            raise ValueError(
+                "Color3uint8 inválido"
+            )
+
+        r = payload[
+            pos:
+            pos + quantidade
+        ]
+
+        pos += quantidade
+
+        g = payload[
+            pos:
+            pos + quantidade
+        ]
+
+        pos += quantidade
+
+        b = payload[
+            pos:
+            pos + quantidade
+        ]
+
+        pos += quantidade
+
+        valores = []
+
+        for i in range(quantidade):
+
+            valores.append({
+                "R": r[i],
+                "G": g[i],
+                "B": b[i]
+            })
+
+        return valores, pos
+
+
+    # --------------------------------------------------------
+    # Int64
+    # --------------------------------------------------------
+
+    if type_id == 0x1B:
+
+        valores = []
+
+        for _ in range(quantidade):
+
+            if pos + 8 > len(payload):
+                raise ValueError(
+                    "Int64 inválido"
+                )
+
+            valor = int.from_bytes(
+                payload[pos:pos + 8],
+                "big",
+                signed=True
+            )
+
+            pos += 8
+
+            valores.append(valor)
+
+        return valores, pos
+
+
+    # --------------------------------------------------------
+    # Tipo não conhecido
+    # --------------------------------------------------------
+
+    raise ValueError(
+        f"Tipo PROP não implementado: "
+        f"0x{type_id:02X}"
+    )
+
+
+# ============================================================
+# PARSER PRINCIPAL RBXM
+# ============================================================
+
+def extrair_instancias_e_nomes_rbxm(
+    conteudo_bytes
+):
+
+    chunks = ler_chunks_rbxm(
+        conteudo_bytes
+    )
+
+    # --------------------------------------------------------
+    # Todas as classes encontradas
+    # --------------------------------------------------------
 
     classes = {}
+
+    # --------------------------------------------------------
+    # INST
+    # --------------------------------------------------------
 
     for nome_chunk, payload in chunks:
 
@@ -551,39 +1272,52 @@ def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
 
         pos = 0
 
-        class_id, pos = read_u32(payload, pos)
-
-        class_name, pos = read_string(
+        class_id, pos = ler_u32_le(
             payload,
             pos
         )
 
-        object_format, pos = read_u8(
+        class_name, pos = ler_string(
             payload,
             pos
         )
 
-        quantidade, pos = read_u32(
+        object_format, pos = ler_u8(
             payload,
             pos
         )
 
-        referents_raw = payload[
-            pos:pos + quantidade * 4
+        quantidade, pos = ler_u32_le(
+            payload,
+            pos
+        )
+
+        tamanho_refs = quantidade * 4
+
+        if pos + tamanho_refs > len(payload):
+            continue
+
+        refs_raw = payload[
+            pos:
+            pos + tamanho_refs
         ]
 
-        referents_delta = deinterleave_i32(
-            referents_raw,
+        pos += tamanho_refs
+
+        refs_delta = decode_interleaved_i32(
+            refs_raw,
             quantidade
         )
 
         referents = []
 
-        acumulado = 0
+        atual = 0
 
-        for valor in referents_delta:
-            acumulado += valor
-            referents.append(acumulado)
+        for delta in refs_delta:
+
+            atual += delta
+
+            referents.append(atual)
 
         classes[class_id] = {
             "ClassName": class_name,
@@ -591,302 +1325,783 @@ def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
             "Names": [None] * quantidade
         }
 
-        # Se for Service, existem bytes extras.
-        if object_format == 1:
-            pos += quantidade
 
-    # ---------------------------------------------------------
-    # 2. PROP -> Name
-    # ---------------------------------------------------------
-
-    for nome_chunk, payload in chunks:
-
-        if nome_chunk != "PROP":
-            continue
-
-        pos = 0
-
-        class_id, pos = read_u32(
-            payload,
-            pos
-        )
-
-        prop_name, pos = read_string(
-            payload,
-            pos
-        )
-
-        type_id, pos = read_u8(
-            payload,
-            pos
-        )
-
-        classe = classes.get(class_id)
-
-        if not classe:
-            continue
-
-        quantidade = len(
-            classe["Referents"]
-        )
-
-        # Name é String = TypeID 0x01
-        if prop_name == "Name" and type_id == 0x01:
-
-            nomes = []
-
-            for _ in range(quantidade):
-
-                valor, pos = read_string(
-                    payload,
-                    pos
-                )
-
-                nomes.append(valor)
-
-            classe["Names"] = nomes
-
-    # ---------------------------------------------------------
-    # 3. Criar somente instâncias que realmente existem
-    # ---------------------------------------------------------
+    # --------------------------------------------------------
+    # Criar objetos
+    # --------------------------------------------------------
 
     todas = {}
 
     for class_id, classe in classes.items():
 
         class_name = classe["ClassName"]
-        referents = classe["Referents"]
-        nomes = classe["Names"]
 
-        for i, referent in enumerate(referents):
+        for referent in classe["Referents"]:
 
-            if i < len(nomes) and nomes[i]:
-                name = nomes[i]
-            else:
-                name = class_name
-
-            # Referent é único, então não precisamos
-            # inventar objetos através de regex.
             todas[referent] = {
                 "Instance": class_name,
+
                 "Properties": {
-                    "Name": name,
+                    "Name": class_name,
                     "ClassName": class_name,
                     "Referent": referent
                 },
+
                 "Children": {},
+
                 "Script": None
             }
 
-    # ---------------------------------------------------------
-    # 4. PRNT -> montar árvore real
-    # ---------------------------------------------------------
+
+    # --------------------------------------------------------
+    # PROP
+    # --------------------------------------------------------
+
+    for nome_chunk, payload in chunks:
+
+        if nome_chunk != "PROP":
+            continue
+
+        try:
+
+            pos = 0
+
+            class_id, pos = ler_u32_le(
+                payload,
+                pos
+            )
+
+            prop_name, pos = ler_string(
+                payload,
+                pos
+            )
+
+            type_id, pos = ler_u8(
+                payload,
+                pos
+            )
+
+            classe = classes.get(
+                class_id
+            )
+
+            if not classe:
+                continue
+
+            referents = classe[
+                "Referents"
+            ]
+
+            quantidade = len(
+                referents
+            )
+
+            valores, pos = decodificar_prop(
+                type_id,
+                payload,
+                pos,
+                quantidade
+            )
+
+            for i, referent in enumerate(
+                referents
+            ):
+
+                if referent not in todas:
+                    continue
+
+                if i >= len(valores):
+                    continue
+
+                valor = valores[i]
+
+                todas[referent][
+                    "Properties"
+                ][prop_name] = valor
+
+                # --------------------------------------------
+                # SOURCE REAL
+                # --------------------------------------------
+
+                if prop_name == "Source":
+
+                    if isinstance(
+                        valor,
+                        str
+                    ):
+
+                        todas[referent][
+                            "Script"
+                        ] = valor
+
+        except Exception as erro:
+
+            print(
+                "[RBXM] Erro lendo PROP:",
+                erro
+            )
+
+            continue
+
+
+    # --------------------------------------------------------
+    # PRNT
+    # --------------------------------------------------------
+
+    relacionamentos = []
 
     for nome_chunk, payload in chunks:
 
         if nome_chunk != "PRNT":
             continue
 
-        pos = 0
+        try:
 
-        version, pos = read_u8(
-            payload,
-            pos
+            pos = 0
+
+            version, pos = ler_u8(
+                payload,
+                pos
+            )
+
+            quantidade, pos = ler_u32_le(
+                payload,
+                pos
+            )
+
+            tamanho = quantidade * 4
+
+            child_raw = payload[
+                pos:
+                pos + tamanho
+            ]
+
+            pos += tamanho
+
+            parent_raw = payload[
+                pos:
+                pos + tamanho
+            ]
+
+            child_delta = decode_interleaved_i32(
+                child_raw,
+                quantidade
+            )
+
+            parent_delta = decode_interleaved_i32(
+                parent_raw,
+                quantidade
+            )
+
+            children_refs = []
+
+            atual = 0
+
+            for delta in child_delta:
+
+                atual += delta
+
+                children_refs.append(
+                    atual
+                )
+
+            parent_refs = []
+
+            atual = 0
+
+            for delta in parent_delta:
+
+                atual += delta
+
+                parent_refs.append(
+                    atual
+                )
+
+            for child_ref, parent_ref in zip(
+                children_refs,
+                parent_refs
+            ):
+
+                relacionamentos.append(
+                    (
+                        child_ref,
+                        parent_ref
+                    )
+                )
+
+        except Exception as erro:
+
+            print(
+                "[RBXM] Erro lendo PRNT:",
+                erro
+            )
+
+
+    # --------------------------------------------------------
+    # Montar árvore
+    # --------------------------------------------------------
+
+    possui_pai = set()
+
+    for child_ref, parent_ref in relacionamentos:
+
+        child = todas.get(
+            child_ref
         )
 
-        quantidade, pos = read_u32(
-            payload,
-            pos
+        parent = todas.get(
+            parent_ref
         )
 
-        child_raw = payload[
-            pos:pos + quantidade * 4
-        ]
+        if not child or not parent:
+            continue
 
-        pos += quantidade * 4
-
-        parent_raw = payload[
-            pos:pos + quantidade * 4
-        ]
-
-        child_delta = deinterleave_i32(
-            child_raw,
-            quantidade
+        nome = child[
+            "Properties"
+        ].get(
+            "Name",
+            child["Instance"]
         )
 
-        parent_delta = deinterleave_i32(
-            parent_raw,
-            quantidade
+        chave = nome
+        numero = 2
+
+        while chave in parent["Children"]:
+
+            chave = f"{nome}_{numero}"
+
+            numero += 1
+
+        parent["Children"][chave] = child
+
+        possui_pai.add(
+            child_ref
         )
 
-        filhos = []
-        pais = []
 
-        acumulado = 0
-
-        for valor in child_delta:
-            acumulado += valor
-            filhos.append(acumulado)
-
-        acumulado = 0
-
-        for valor in parent_delta:
-            acumulado += valor
-            pais.append(acumulado)
-
-        for child_ref, parent_ref in zip(
-            filhos,
-            pais
-        ):
-
-            child = todas.get(child_ref)
-
-            if not child:
-                continue
-
-            if parent_ref == -1:
-                continue
-
-            parent = todas.get(parent_ref)
-
-            if not parent:
-                continue
-
-            nome = child["Properties"]["Name"]
-
-            chave = nome
-            contador = 2
-
-            while chave in parent["Children"]:
-                chave = f"{nome}_{contador}"
-                contador += 1
-
-            parent["Children"][chave] = child
-
-    # ---------------------------------------------------------
-    # 5. Retornar somente os roots reais
-    # ---------------------------------------------------------
+    # --------------------------------------------------------
+    # Encontrar roots
+    # --------------------------------------------------------
 
     roots = {}
 
     for referent, instancia in todas.items():
 
-        tem_pai = False
+        if referent in possui_pai:
+            continue
 
-        # Procura se aparece como filho de alguma instância.
-        for outra in todas.values():
+        nome = instancia[
+            "Properties"
+        ].get(
+            "Name",
+            instancia["Instance"]
+        )
 
-            if referent in [
-                x["Properties"].get("Referent")
-                for x in outra["Children"].values()
-            ]:
-                tem_pai = True
-                break
+        chave = nome
+        numero = 2
 
-        if not tem_pai:
+        while chave in roots:
 
-            nome = instancia["Properties"]["Name"]
+            chave = f"{nome}_{numero}"
 
-            chave = nome
-            contador = 2
+            numero += 1
 
-            while chave in roots:
-                chave = f"{nome}_{contador}"
-                contador += 1
+        roots[chave] = instancia
 
-            roots[chave] = instancia
 
     return roots
-@app.route('/carregarasset', methods=['GET', 'POST'])
+
+
+# ============================================================
+# LIMPAR REFERENTS DA RESPOSTA
+# ============================================================
+
+def limpar_referents(obj):
+
+    if not isinstance(obj, dict):
+        return obj
+
+    resultado = {}
+
+    for chave, valor in obj.items():
+
+        if chave == "Referent":
+            continue
+
+        if chave == "Children":
+
+            resultado[chave] = {
+                nome: limpar_referents(
+                    filho
+                )
+                for nome, filho
+                in valor.items()
+            }
+
+        elif isinstance(valor, dict):
+
+            resultado[chave] = limpar_referents(
+                valor
+            )
+
+        elif isinstance(valor, list):
+
+            resultado[chave] = [
+                limpar_referents(x)
+                if isinstance(x, dict)
+                else x
+                for x in valor
+            ]
+
+        else:
+
+            resultado[chave] = valor
+
+    return resultado
+
+
+# ============================================================
+# ROTA /carregarasset
+# ============================================================
+
+@app.route(
+    "/carregarasset",
+    methods=["GET", "POST"]
+)
 def carregarasset():
+
     try:
+
+        # ----------------------------------------------------
+        # Asset ID
+        # ----------------------------------------------------
+
+        body = request.get_json(
+            silent=True
+        ) or {}
+
         asset_id = (
-            request.args.get("assetId") 
-            or request.args.get("id") 
-            or (request.get_json(silent=True) or {}).get("assetId")
+            request.args.get("assetId")
+            or request.args.get("id")
+            or body.get("assetId")
         )
-        
+
         if not asset_id:
-            return jsonify({"erro": "Asset ID nao informado"})
-            
-        roblox_url = f"https://apis.roblox.com/asset-delivery-api/v1/assetId/{asset_id}"
+
+            return jsonify({
+                "erro": "Asset ID nao informado"
+            }), 400
+
+
+        asset_id = str(
+            asset_id
+        ).strip()
+
+
+        # ----------------------------------------------------
+        # API key
+        # ----------------------------------------------------
+
+        if not API_KEY:
+
+            return jsonify({
+                "erro": "ROBLOX_API_KEY não configurada"
+            }), 500
+
+
+        # ----------------------------------------------------
+        # Asset Delivery API
+        # ----------------------------------------------------
+
+        roblox_url = (
+            "https://apis.roblox.com/"
+            "asset-delivery-api/v1/"
+            f"assetId/{asset_id}"
+        )
+
         headers = {
             "User-Agent": "Roblox/WinInet",
             "Accept": "*/*",
             "x-api-key": API_KEY
         }
-        
-        res = requests.get(roblox_url, headers=headers, timeout=15)
-        data = res.json()
-        
-        download_url = None
-        if isinstance(data, list) and len(data) > 0:
-            item = data[0]
-            if "locations" in item and len(item["locations"]) > 0:
-                download_url = item["locations"][0].get("location")
-            elif "location" in item:
-                download_url = item.get("location")
-        elif isinstance(data, dict):
-            if "location" in data:
-                download_url = data["location"]
-            elif "locations" in data and len(data["locations"]) > 0:
-                download_url = data["locations"][0].get("location")
 
-        if download_url:
-            # O segredo está no Accept-Encoding: identity
-            # Ele força a Roblox a entregar o binário RBXM bruto original sem ZSTD
-            file_res = requests.get(
-                download_url, 
-                headers={
-                    "User-Agent": "Roblox/WinInet",
-                    "Accept-Encoding": "identity"
-                }, 
-                timeout=15
-            )
-            conteudo_bruto = file_res.content
-            services_mestres = {}
+        res = requests.get(
+            roblox_url,
+            headers=headers,
+            timeout=15
+        )
 
-            if conteudo_bruto.startswith(b"<roblox!"):
-                filhos_reais = extrair_instancias_e_nomes_rbxm(conteudo_bruto)
-                
-                services_mestres["Workspace"] = {
-                    "Instance": "Workspace",
-                    "Properties": {"Name": "Workspace", "ClassName": "Workspace"},
-                    "Children": filhos_reais,
-                    "Script": None
-                }
-            else:
-                try:
-                    if b"<roblox" in conteudo_bruto:
-                        inicio_xml = conteudo_bruto.find(b"<roblox")
-                        fim_xml = conteudo_bruto.rfind(b"</roblox>") + 9
-                        xml_valido = conteudo_bruto[inicio_xml:fim_xml]
-                        root = ET.fromstring(xml_valido)
-                    else:
-                        root = ET.fromstring(conteudo_bruto)
 
-                    for item in root.findall("Item"):
-                        service_name = item.attrib.get("name", item.attrib.get("class", "Folder"))
-                        services_mestres[service_name] = processar_node_xml(item)
-                except Exception:
-                    services_mestres["Workspace"] = {
-                        "Instance": "Workspace",
-                        "Properties": {"Name": "Workspace", "ClassName": "Workspace"},
-                        "Children": {},
-                        "Script": None
-                    }
+        # ----------------------------------------------------
+        # Verificar resposta
+        # ----------------------------------------------------
+
+        try:
+
+            data = res.json()
+
+        except Exception:
 
             return jsonify({
-                "sucesso": True,
+                "erro": "Roblox retornou resposta inválida",
+                "status": res.status_code,
+                "resposta": res.text[:1000]
+            }), 502
+
+
+        if res.status_code >= 400:
+
+            return jsonify({
+                "erro": "Roblox recusou o asset",
+                "status": res.status_code,
+                "detalhes": data
+            }), res.status_code
+
+
+        # ----------------------------------------------------
+        # Encontrar download URL
+        # ----------------------------------------------------
+
+        download_url = None
+
+        if isinstance(data, list):
+
+            if data:
+
+                item = data[0]
+
+                if (
+                    isinstance(item, dict)
+                    and item.get("locations")
+                ):
+
+                    locations = item[
+                        "locations"
+                    ]
+
+                    if locations:
+
+                        download_url = (
+                            locations[0]
+                            .get("location")
+                        )
+
+                elif isinstance(item, dict):
+
+                    download_url = item.get(
+                        "location"
+                    )
+
+        elif isinstance(data, dict):
+
+            if data.get("location"):
+
+                download_url = data[
+                    "location"
+                ]
+
+            elif data.get("locations"):
+
+                locations = data[
+                    "locations"
+                ]
+
+                if locations:
+
+                    download_url = (
+                        locations[0]
+                        .get("location")
+                    )
+
+
+        # ----------------------------------------------------
+        # Asset não encontrado
+        # ----------------------------------------------------
+
+        if not download_url:
+
+            return jsonify({
+                "erro": "Asset nao encontrado",
                 "asset_id": asset_id,
-                "download_url": download_url,
-                "services": services_mestres
-            })
-            
-        return jsonify({"erro": "Asset nao encontrado", "detalhes": str(data)})
-        
-    except Exception as err:
-        return jsonify({"erro_python": str(err)})
+                "detalhes": data
+            }), 404
+
+
+        # ----------------------------------------------------
+        # Baixar RBXM
+        # ----------------------------------------------------
+
+        file_res = requests.get(
+            download_url,
+            headers={
+                "User-Agent": "Roblox/WinInet",
+                "Accept": "*/*",
+                "Accept-Encoding": "identity"
+            },
+            timeout=30
+        )
+
+        file_res.raise_for_status()
+
+        conteudo_bruto = (
+            file_res.content
+        )
+
+
+        # ----------------------------------------------------
+        # Resultado
+        # ----------------------------------------------------
+
+        services_mestres = {}
+
+
+        # ====================================================
+        # RBXM BINÁRIO
+        # ====================================================
+
+        if (
+            conteudo_bruto.startswith(
+                b"<roblox!"
+            )
+            or conteudo_bruto.startswith(
+                b"<roblox"
+            )
+        ):
+
+            filhos_reais = (
+                extrair_instancias_e_nomes_rbxm(
+                    conteudo_bruto
+                )
+            )
+
+            filhos_reais = limpar_referents(
+                filhos_reais
+            )
+
+            services_mestres[
+                "Workspace"
+            ] = {
+
+                "Instance": "Workspace",
+
+                "Properties": {
+                    "Name": "Workspace",
+                    "ClassName": "Workspace"
+                },
+
+                "Children": filhos_reais,
+
+                "Script": None
+            }
+
+
+        # ====================================================
+        # XML RBXLX / RBXM XML
+        # ====================================================
+
+        else:
+
+            import xml.etree.ElementTree as ET
+
+            try:
+
+                inicio = (
+                    conteudo_bruto.find(
+                        b"<roblox"
+                    )
+                )
+
+                if inicio >= 0:
+
+                    fim = (
+                        conteudo_bruto.rfind(
+                            b"</roblox>"
+                        )
+                    )
+
+                    if fim >= 0:
+
+                        fim += len(
+                            b"</roblox>"
+                        )
+
+                        xml_valido = (
+                            conteudo_bruto[
+                                inicio:fim
+                            ]
+                        )
+
+                    else:
+
+                        xml_valido = (
+                            conteudo_bruto[
+                                inicio:
+                            ]
+                        )
+
+                else:
+
+                    xml_valido = (
+                        conteudo_bruto
+                    )
+
+
+                root = ET.fromstring(
+                    xml_valido
+                )
+
+
+                def processar_xml(elem):
+
+                    classe = elem.attrib.get(
+                        "class",
+                        "Folder"
+                    )
+
+                    nome = elem.attrib.get(
+                        "referent",
+                        classe
+                    )
+
+                    properties = {
+                        "Name": nome,
+                        "ClassName": classe
+                    }
+
+                    children = {}
+
+                    script = None
+
+                    for child in elem:
+
+                        if child.tag == "Properties":
+
+                            for prop in child:
+
+                                prop_name = (
+                                    prop.attrib.get(
+                                        "name",
+                                        prop.tag
+                                    )
+                                )
+
+                                valor = (
+                                    prop.text
+                                    or ""
+                                )
+
+                                if prop.tag == "bool":
+
+                                    valor = (
+                                        valor.lower()
+                                        == "true"
+                                    )
+
+                                properties[
+                                    prop_name
+                                ] = valor
+
+                                if (
+                                    prop_name
+                                    == "Source"
+                                    and isinstance(
+                                        valor,
+                                        str
+                                    )
+                                ):
+
+                                    script = valor
+
+                        elif child.tag == "Item":
+
+                            filho = (
+                                processar_xml(
+                                    child
+                                )
+                            )
+
+                            filho_nome = (
+                                filho[
+                                    "Properties"
+                                ].get(
+                                    "Name",
+                                    filho[
+                                        "Instance"
+                                    ]
+                                )
+                            )
+
+                            chave = filho_nome
+                            numero = 2
+
+                            while chave in children:
+
+                                chave = (
+                                    f"{filho_nome}_"
+                                    f"{numero}"
+                                )
+
+                                numero += 1
+
+                            children[
+                                chave
+                            ] = filho
+
+
+                    return {
+                        "Instance": classe,
+                        "Properties": properties,
+                        "Children": children,
+                        "Script": script
+                    }
+
+
+                for item in root.findall(
+                    "Item"
+                ):
+
+                    processado = (
+                        processar_xml(
+                            item
+                        )
+                    )
+
+                    nome = (
+                        processado["Properties"].get("Name", processado["Instance"])
+                    )
+                    services_mestres[nome] = processado
+                    
+            except Exception as erro:
+                services_mestres["Workspace"] = {
+                    "Instance": "Workspace",
+                    "Properties": {
+                        "Name": "Workspace",
+                        "ClassName": "Workspace"
+                    },
+                    "Children": {},
+                    "Script": None
+                }
+                print("[XML] Erro:", erro)
+
+        return jsonify({
+            "sucesso": True,
+            "asset_id": asset_id,
+            "download_url": download_url,
+            "services": services_mestres
+        })
+
+    except requests.RequestException as erro:
+        return jsonify({
+            "erro": "Erro ao acessar Roblox",
+            "detalhes": str(erro)
+        }), 502
+
+    except Exception as erro:
+        print("[carregarasset] ERRO:", repr(erro))
+
+        return jsonify({
+            "erro_python": str(erro)
+        }), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
