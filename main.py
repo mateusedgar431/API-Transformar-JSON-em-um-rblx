@@ -341,37 +341,45 @@ API_KEY = "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJM
 
 def processar_node_xml(elem):
     """
-    Processa um nó <Item> do XML do Roblox (.rbxmx), extraindo 
-    exatamente o ClassName da tag Item e o Name da propriedade string.
+    Processa de forma estrita: ClassName vem do atributo class,
+    e Name vem exclusivamente da tag <string name="Name">.
     """
+    # 1. Pega a classe diretamente da tag Item
     classe_str = elem.attrib.get("class", "Folder")
-    name_str = classe_str
     
-    properties = {
-        "Name": name_str,
-        "ClassName": classe_str
-    }
+    # Define valores padrão iniciais
+    name_str = classe_str
+    properties = {}
     children = {}
     script_code = None
 
+    # Varre as tags internas do XML
     for child in elem:
         if child.tag == "Properties":
             for prop in child:
                 prop_name = prop.attrib.get("name", prop.tag)
-                prop_val = prop.text or ""
                 
+                # Tratamento especial para pegar o texto interno das tags
+                if prop.tag in ["string", "token", "ProtectedString"]:
+                    prop_val = prop.text or ""
+                elif prop.tag == "bool":
+                    prop_val = (prop.text == "true")
+                else:
+                    prop_val = prop.text or ""
+                
+                # Se for a propriedade exata de Name, atualiza o nome do objeto
                 if prop_name == "Name":
                     name_str = prop_val
-                    properties["Name"] = name_str
-                else:
-                    properties[prop_name] = prop_val
                 
+                properties[prop_name] = prop_val
+                
+                # Captura o script se existir
                 if prop_name == "Source":
                     script_code = prop_val
                     
         elif child.tag == "Item":
             filho_processado = processar_node_xml(child)
-            nome_filho = filho_processado["Properties"]["Name"]
+            nome_filho = filho_processado["Properties"].get("Name", filho_processado["Instance"])
             
             idx = 1
             chave_final = nome_filho
@@ -380,6 +388,10 @@ def processar_node_xml(elem):
                 chave_final = f"{nome_filho}_{idx}"
                 
             children[chave_final] = filho_processado
+
+    # Garante que a propriedade Name e ClassName estejam sempre presentes e corretas
+    properties["Name"] = name_str
+    properties["ClassName"] = classe_str
 
     return {
         "Instance": classe_str,
