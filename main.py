@@ -400,95 +400,403 @@ def processar_node_xml(elem):
         "Script": script_code
     }
 
-def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
-    """
-    Descompacta o buffer binário do .rbxm (LZ4) e extrai 
-    as instâncias e nomes de forma estruturada.
-    """
-    if not conteudo_bytes.startswith(b"<roblox!"):
-        return {}
+def read_u8(data, pos):
+    return data[pos], pos + 1
 
-    children = {}
+
+def read_u32(data, pos):
+    return struct.unpack_from("<I", data, pos)[0], pos + 4
+
+
+def read_string(data, pos):
+    tamanho, pos = read_u32(data, pos)
+
+    if pos + tamanho > len(data):
+        raise ValueError("String fora dos limites do chunk")
+
+    valor = data[pos:pos + tamanho].decode("utf-8", errors="replace")
+    return valor, pos + tamanho
+
+
+def unzigzag32(x):
+    return (x >> 1) ^ -(x & 1)
+
+
+def deinterleave_i32(data, count):
+    """
+    O RBXM armazena os referents em bytes intercalados.
+    """
+    if len(data) < count * 4:
+        raise ValueError("Dados insuficientes para referents")
+
+    valores = []
+
+    for i in range(count):
+        raw = bytes(
+            data[i + j * count]
+            for j in range(4)
+        )
+
+        numero = struct.unpack(">I", raw)[0]
+        valores.append(unzigzag32(numero))
+
+    return valores
+
+
+def ler_chunks_rbxm(data):
+    """
+    Lê corretamente os chunks do formato binário RBXM.
+
+    Header de cada chunk:
+        4 bytes = nome
+        4 bytes = tamanho comprimido
+        4 bytes = tamanho descomprimido
+        4 bytes = reservado
+    """
+
+    if not data.startswith(b"<roblox"):
+        raise ValueError("Arquivo não parece ser RBXM")
+
     pos = 32
-    buffer_descompactado = bytearray()
+    chunks = []
 
-    # Descompactação dos blocos LZ4 internos do formato rbxm
-    while pos < len(conteudo_bytes) - 8:
-        chunk_header = conteudo_bytes[pos:pos+8]
-        compressed_len = struct.unpack(">I", chunk_header[4:8])[0]
-        
-        pos += 8
+    while pos + 16 <= len(data):
+
+        nome_raw = data[pos:pos + 4]
+        pos += 4
+
+        compressed_len = struct.unpack_from(
+            "<I", data, pos
+        )[0]
+        pos += 4
+
+        uncompressed_len = struct.unpack_from(
+            "<I", data, pos
+        )[0]
+        pos += 4
+
+        # reservado
+        pos += 4
+
+        nome = nome_raw.rstrip(b"\x00").decode(
+            "ascii",
+            errors="ignore"
+        )
+
         if compressed_len == 0:
-            pos += 16
-            continue
+            tamanho = uncompressed_len
 
-        if pos + compressed_len > len(conteudo_bytes):
+            if pos + tamanho > len(data):
+                raise ValueError(
+                    f"Chunk {nome} ultrapassa o arquivo"
+                )
+
+            payload = data[pos:pos + tamanho]
+            pos += tamanho
+
+        else:
+            if pos + compressed_len > len(data):
+                raise ValueError(
+                    f"Chunk comprimido {nome} inválido"
+                )
+
+            compressed = data[
+                pos:pos + compressed_len
+            ]
+            pos += compressed_len
+
+            # ZSTD
+            if compressed[:4] == b"\x28\xb5\x2f\xfd":
+                try:
+                    import zstandard as zstd
+                except ImportError:
+                    raise RuntimeError(
+                        "Instale zstandard: pip install zstandard"
+                    )
+
+                payload = zstd.ZstdDecompressor().decompress(
+                    compressed,
+                    max_output_size=uncompressed_len
+                )
+
+            # LZ4
+            else:
+                payload = lz4.block.decompress(
+                    compressed,
+                    uncompressed_size=uncompressed_len
+                )
+
+        chunks.append((nome, payload))
+
+        if nome == "END":
             break
 
-        chunk_data = conteudo_bytes[pos:pos+compressed_len]
-        pos += compressed_len
+    return chunks
 
-        try:
-            import lz4.block
-            decompressed = lz4.block.decompress(chunk_data)
-            buffer_descompactado.extend(decompressed)
-        except Exception:
-            buffer_descompactado.extend(chunk_data)
 
-    if not buffer_descompactado:
-        buffer_descompactado = bytearray(conteudo_bytes)
+def extrair_instancias_e_nomes_rbxm(conteudo_bytes):
 
-    # Identifica os tipos de Classe
-    padrao_classe = rb'(Part|MeshPart|Model|Script|LocalScript|Folder|Decal|Texture|Attachment|Sound|Frame|ScreenGui|TextLabel|BasePart|UnionOperation)'
-    classes_brutas = re.findall(padrao_classe, buffer_descompactado)
-    classes_encontradas = [c.decode('utf-8', errors='ignore') for c in classes_brutas]
+    chunks = ler_chunks_rbxm(conteudo_bytes)
 
-    if not classes_encontradas:
-        return {}
+    # ---------------------------------------------------------
+    # 1. INST
+    # ---------------------------------------------------------
 
-    # Filtra palavras reservadas e metadados internos do binário
-    palavras_bloqueadas = {
-        'INST', 'PROP', 'PRNT', 'END', 'META', 'SSTR', 'SIGN', 
-        'roblox', 'Name', 'ClassName', 'Source', 'Value', 'Workspace'
-    }
+    classes = {}
 
-    padrao_strings = rb'\b[A-Za-z][A-Za-z0-9_\s]{1,24}\b'
-    candidatos_raw = re.findall(padrao_strings, buffer_descompactado)
-    
-    nomes_limpos = []
-    for cand in candidatos_raw:
-        texto = cand.decode('utf-8', errors='ignore').strip()
-        if (
-            texto 
-            and texto not in classes_encontradas 
-            and texto not in palavras_bloqueadas 
-            and len(texto) > 1
-        ):
-            nomes_limpos.append(texto)
+    for nome_chunk, payload in chunks:
 
-    contagem = {}
-    for idx, classe_str in enumerate(classes_encontradas):
-        if idx < len(nomes_limpos):
-            name_str = nomes_limpos[idx]
-        else:
-            name_str = classe_str
+        if nome_chunk != "INST":
+            continue
 
-        num = contagem.get(name_str, 0) + 1
-        contagem[name_str] = num
-        chave_final = f"{name_str}_{num}" if num > 1 else name_str
+        pos = 0
 
-        children[chave_final] = {
-            "Instance": classe_str,
-            "Properties": {
-                "Name": name_str,
-                "ClassName": classe_str
-            },
-            "Children": {},
-            "Script": None
+        class_id, pos = read_u32(payload, pos)
+
+        class_name, pos = read_string(
+            payload,
+            pos
+        )
+
+        object_format, pos = read_u8(
+            payload,
+            pos
+        )
+
+        quantidade, pos = read_u32(
+            payload,
+            pos
+        )
+
+        referents_raw = payload[
+            pos:pos + quantidade * 4
+        ]
+
+        referents_delta = deinterleave_i32(
+            referents_raw,
+            quantidade
+        )
+
+        referents = []
+
+        acumulado = 0
+
+        for valor in referents_delta:
+            acumulado += valor
+            referents.append(acumulado)
+
+        classes[class_id] = {
+            "ClassName": class_name,
+            "Referents": referents,
+            "Names": [None] * quantidade
         }
 
-    return children
+        # Se for Service, existem bytes extras.
+        if object_format == 1:
+            pos += quantidade
 
+    # ---------------------------------------------------------
+    # 2. PROP -> Name
+    # ---------------------------------------------------------
+
+    for nome_chunk, payload in chunks:
+
+        if nome_chunk != "PROP":
+            continue
+
+        pos = 0
+
+        class_id, pos = read_u32(
+            payload,
+            pos
+        )
+
+        prop_name, pos = read_string(
+            payload,
+            pos
+        )
+
+        type_id, pos = read_u8(
+            payload,
+            pos
+        )
+
+        classe = classes.get(class_id)
+
+        if not classe:
+            continue
+
+        quantidade = len(
+            classe["Referents"]
+        )
+
+        # Name é String = TypeID 0x01
+        if prop_name == "Name" and type_id == 0x01:
+
+            nomes = []
+
+            for _ in range(quantidade):
+
+                valor, pos = read_string(
+                    payload,
+                    pos
+                )
+
+                nomes.append(valor)
+
+            classe["Names"] = nomes
+
+    # ---------------------------------------------------------
+    # 3. Criar somente instâncias que realmente existem
+    # ---------------------------------------------------------
+
+    todas = {}
+
+    for class_id, classe in classes.items():
+
+        class_name = classe["ClassName"]
+        referents = classe["Referents"]
+        nomes = classe["Names"]
+
+        for i, referent in enumerate(referents):
+
+            if i < len(nomes) and nomes[i]:
+                name = nomes[i]
+            else:
+                name = class_name
+
+            # Referent é único, então não precisamos
+            # inventar objetos através de regex.
+            todas[referent] = {
+                "Instance": class_name,
+                "Properties": {
+                    "Name": name,
+                    "ClassName": class_name,
+                    "Referent": referent
+                },
+                "Children": {},
+                "Script": None
+            }
+
+    # ---------------------------------------------------------
+    # 4. PRNT -> montar árvore real
+    # ---------------------------------------------------------
+
+    for nome_chunk, payload in chunks:
+
+        if nome_chunk != "PRNT":
+            continue
+
+        pos = 0
+
+        version, pos = read_u8(
+            payload,
+            pos
+        )
+
+        quantidade, pos = read_u32(
+            payload,
+            pos
+        )
+
+        child_raw = payload[
+            pos:pos + quantidade * 4
+        ]
+
+        pos += quantidade * 4
+
+        parent_raw = payload[
+            pos:pos + quantidade * 4
+        ]
+
+        child_delta = deinterleave_i32(
+            child_raw,
+            quantidade
+        )
+
+        parent_delta = deinterleave_i32(
+            parent_raw,
+            quantidade
+        )
+
+        filhos = []
+        pais = []
+
+        acumulado = 0
+
+        for valor in child_delta:
+            acumulado += valor
+            filhos.append(acumulado)
+
+        acumulado = 0
+
+        for valor in parent_delta:
+            acumulado += valor
+            pais.append(acumulado)
+
+        for child_ref, parent_ref in zip(
+            filhos,
+            pais
+        ):
+
+            child = todas.get(child_ref)
+
+            if not child:
+                continue
+
+            if parent_ref == -1:
+                continue
+
+            parent = todas.get(parent_ref)
+
+            if not parent:
+                continue
+
+            nome = child["Properties"]["Name"]
+
+            chave = nome
+            contador = 2
+
+            while chave in parent["Children"]:
+                chave = f"{nome}_{contador}"
+                contador += 1
+
+            parent["Children"][chave] = child
+
+    # ---------------------------------------------------------
+    # 5. Retornar somente os roots reais
+    # ---------------------------------------------------------
+
+    roots = {}
+
+    for referent, instancia in todas.items():
+
+        tem_pai = False
+
+        # Procura se aparece como filho de alguma instância.
+        for outra in todas.values():
+
+            if referent in [
+                x["Properties"].get("Referent")
+                for x in outra["Children"].values()
+            ]:
+                tem_pai = True
+                break
+
+        if not tem_pai:
+
+            nome = instancia["Properties"]["Name"]
+
+            chave = nome
+            contador = 2
+
+            while chave in roots:
+                chave = f"{nome}_{contador}"
+                contador += 1
+
+            roots[chave] = instancia
+
+    return roots
 @app.route('/carregarasset', methods=['GET', 'POST'])
 def carregarasset():
     try:
