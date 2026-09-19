@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, Response
 import requests
 import xml.sax.saxutils as saxutils
+import json
 
 app = Flask(__name__)
 
@@ -2068,7 +2069,7 @@ def carregarasset():
                 }
                 print("[XML] Erro:", erro)
 
-        return jsonify({
+        return json.dumps({
             "sucesso": True,
             "asset_id": asset_id,
             "download_url": download_url,
