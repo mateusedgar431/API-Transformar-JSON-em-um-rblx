@@ -2069,12 +2069,20 @@ def carregarasset():
                 }
                 print("[XML] Erro:", erro)
 
-        return json.dumps({
-            "sucesso": True,
-            "asset_id": asset_id,
-            "download_url": download_url,
-            "services": services_mestres
-        })
+    json_final = json.dumps({
+        "sucesso": True,
+        "asset_id": asset_id,
+        "download_url": download_url,
+        "services": services_mestres
+    }, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+
+    print("================================")
+    print("[DEBUG] JSON gerado com sucesso")
+    print("[DEBUG] Caracteres:", len(json_final))
+    print("[DEBUG] Bytes UTF-8:", len(json_final.encode("utf-8")))
+    print("================================")
+
+        return json_final
 
     except requests.RequestException as erro:
         return jsonify({
