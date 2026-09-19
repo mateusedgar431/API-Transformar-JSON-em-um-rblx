@@ -2081,8 +2081,7 @@ def carregarasset():
     print("[DEBUG] Caracteres:", len(json_final))
     print("[DEBUG] Bytes UTF-8:", len(json_final.encode("utf-8")))
     print("================================")
-
-        return json_final
+    return json_final
 
     except requests.RequestException as erro:
         return jsonify({
