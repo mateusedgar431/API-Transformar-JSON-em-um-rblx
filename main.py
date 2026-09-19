@@ -2,8 +2,27 @@ from flask import Flask, request, jsonify, Response
 import requests
 import xml.sax.saxutils as saxutils
 import json
-
+import math
 app = Flask(__name__)
+def limpar_numeros_invalidos(obj):
+    if isinstance(obj, float):
+        if not math.isfinite(obj):
+            return 0
+        return obj
+
+    if isinstance(obj, dict):
+        return {
+            chave: limpar_numeros_invalidos(valor)
+            for chave, valor in obj.items()
+        }
+
+    if isinstance(obj, list):
+        return [
+            limpar_numeros_invalidos(valor)
+            for valor in obj
+        ]
+
+    return obj
 
 SERVICOS_MESTRES = {
     "workspace": "Workspace",
@@ -2069,6 +2088,8 @@ def carregarasset():
                 }
                 print("[XML] Erro:", erro)
 
+        services_mestres = limpar_numeros_invalidos(services_mestres)
+
         json_final = json.dumps({
             "sucesso": True,
             "asset_id": asset_id,
@@ -2077,10 +2098,11 @@ def carregarasset():
         }, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
 
         print("================================")
-        print("[DEBUG] JSON gerado com sucesso")
+        print("[DEBUG] JSON gerado com sucesso!")
         print("[DEBUG] Caracteres:", len(json_final))
-        print("[DEBUG] Bytes UTF-8:", len(json_final.encode("utf-8")))
+        print("[DEBUG] Bytes:", len(json_final.encode("utf-8")))
         print("================================")
+
         return json_final
 
     except requests.RequestException as erro:
