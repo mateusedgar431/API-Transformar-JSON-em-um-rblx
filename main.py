@@ -440,6 +440,10 @@ MATERIAL = {
 SURFACE={0:"Smooth",1:"Glue",2:"Weld",3:"Studs",4:"Inlet",5:"Universal",6:"Hinge",7:"Motor"}
 
 def enum_value(prop,v):
+    if prop=="Material" and v in MATERIAL:
+        return "Enum.Material."+MATERIAL[v]
+    if prop in {"TopSurface","BottomSurface","LeftSurface","RightSurface","FrontSurface","BackSurface"} and v in SURFACE:
+        return "Enum.SurfaceType."+SURFACE[v]
     return v
 
 def prop(t,b,p,n,name):
@@ -486,6 +490,29 @@ def prop(t,b,p,n,name):
         y=floats(b[p:p+n*4],n);p+=n*4
         z=floats(b[p:p+n*4],n);p+=n*4
         return [{"X":finite(x[i]),"Y":finite(y[i]),"Z":finite(z[i])} for i in range(n)],p
+    if t==0x0F:
+        # CFrame: posição XYZ + matriz de rotação XYZ.
+        # O formato mantém os componentes em arrays intercalados.
+        x=floats(b[p:p+n*4],n);p+=n*4
+        y=floats(b[p:p+n*4],n);p+=n*4
+        z=floats(b[p:p+n*4],n);p+=n*4
+        r00=floats(b[p:p+n*4],n);p+=n*4
+        r01=floats(b[p:p+n*4],n);p+=n*4
+        r02=floats(b[p:p+n*4],n);p+=n*4
+        r10=floats(b[p:p+n*4],n);p+=n*4
+        r11=floats(b[p:p+n*4],n);p+=n*4
+        r12=floats(b[p:p+n*4],n);p+=n*4
+        r20=floats(b[p:p+n*4],n);p+=n*4
+        r21=floats(b[p:p+n*4],n);p+=n*4
+        r22=floats(b[p:p+n*4],n);p+=n*4
+        return [{
+            "Position":{"X":finite(x[i]),"Y":finite(y[i]),"Z":finite(z[i])},
+            "Rotation":[
+                finite(r00[i]),finite(r01[i]),finite(r02[i]),
+                finite(r10[i]),finite(r11[i]),finite(r12[i]),
+                finite(r20[i]),finite(r21[i]),finite(r22[i])
+            ]
+        } for i in range(n)],p
     if t==0x12:
         q=n*4;a=inter_u32(b[p:p+q],n)
         return [enum_value(name,v) for v in a],p+q
@@ -533,7 +560,10 @@ def parse_rbxm(data):
     for name,b in ch:
         if name!="PROP":continue
         try:
-            p=0;cid,p=u32(b,p);pn,p=string(b,p);t,p=u8(b,p)
+            p=0;cid,p=u32(b,p);pn,p=string(b,p)
+            if pn:
+                pn=pn[0].upper()+pn[1:]
+            t,p=u8(b,p)
             c=classes.get(cid)
             if not c:continue
             vals,_=prop(t,b,p,len(c["Refs"]),pn)
