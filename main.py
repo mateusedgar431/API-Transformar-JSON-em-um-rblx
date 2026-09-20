@@ -365,7 +365,10 @@ def zz(v):
 def inter_u32(b,n):
     if n==0:return []
     if len(b)<n*4:raise ValueError("Array intercalado inválido")
-    return [struct.unpack(">I",bytes(b[i+j*n] for j in range(4)))[0] for i in range(n)]
+    return [
+        struct.unpack("<I", bytes(b[i+j*n] for j in range(4)))[0]
+        for i in range(n)
+    ]
 
 def inter_i32(b,n):
     return [zz(x) for x in inter_u32(b,n)]
@@ -373,10 +376,16 @@ def inter_i32(b,n):
 def floats(b,n):
     if n==0:return []
     if len(b)<n*4:raise ValueError("Float array inválido")
+
     out=[]
     for i in range(n):
         raw=bytes(b[i+j*n] for j in range(4))
-        out.append(struct.unpack(">f",struct.pack(">I",struct.unpack(">I",raw)[0]))[0])
+
+        # RBXM usa os bytes intercalados na ordem little-endian.
+        # Reconstituir como big-endian produz valores absurdos como
+        # 9.8e-38 e 9.8e37.
+        out.append(struct.unpack("<f", raw)[0])
+
     return out
 
 def finite(x):
