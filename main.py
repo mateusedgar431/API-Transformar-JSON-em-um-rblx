@@ -334,1400 +334,292 @@ def publicar():
 
 import os
 import struct
-try:
-    import lz4.block
-except ImportError:
-    lz4 = None
+import lz4.block
 
 API_KEY = "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJMU5pSXNJbXRwWkNJNkluTnBaeTB5TURJeExUQTNMVEV6VkRFNE9qVXhPalE1V2lJc0luUjVjQ0k2SWtwWFZDSjkuZXlKaGRXUWlPaUpTYjJKc2IzaEpiblJsY201aGJDSXNJbWx6Y3lJNklrTnNiM1ZrUVhWMGFHVnVkR2xqWVhScGIyNVRaWEoyYVdObElpd2lZbUZ6WlVGd2FVdGxlU0k2SW5oR04wTlZObGx1YzBVMmFrZGlja3R0WVhoaFVHRnZTV3huYTFCTWNEVkZWVU50VEhKNlZqTmFlSFJqTkROUU1DSXNJbTkzYm1WeVNXUWlPaUl5TURNMU5qVTROelUwSWl3aVpYaHdJam94TnpnNU16VTJNelkzTENKcFlYUWlPakUzT0Rrek5USTNOamNzSW01aVppSTZNVGM0T1RNMU1qYzJOMzAuUXVyaDllaXpRWDZ1M2tyTjBuVVlXSXdQQzd2M0FBZ2ZWYTFkNzQ5TmVlQUZqMGRIdHdEYkd1LTFicTcyT1A0WUQ0YXRIN2FzRm5UU04wY2wzeFlpZkVRV1VIN3ozVk92Q0RvSVR0TE9icVF4VV9tUEU1QmQ5NGtjMTNJbnJhLVJoNUVSMlREakhxam02RDhqekpsUDdMY2VVNnlNZ2pkSk1YaHI1ZVdjUWRIcTU5THpQNGdtTGduT0QwR25Scl9XUUhYODlCMmhHc2FNd19NQXhCQWdwOWtPcUZBTmg4azV6M0o0OExkTUlBRzNxNTZ2RmhKaVBIenhya285d180RVh0UEZIbTFOOFM3Sm9ybGQ5UGVLSkVJeXFSSzZFclcxck1yOG4tbVAtX293aUZGbmFoc3ItWmZLcm93MF95OVVlU1pDMG82ZHYzbUpzUkxpX0ZLUDJn"
 
-if not API_KEY:
-    print("[AVISO] ROBLOX_API_KEY não configurada.")
+def u8(b,p):
+    if p+1 > len(b): raise ValueError("EOF")
+    return b[p],p+1
 
+def u32(b,p):
+    if p+4 > len(b): raise ValueError("EOF")
+    return struct.unpack_from("<I",b,p)[0],p+4
 
-def ler_u8(data, pos):
-    if pos + 1 > len(data):
-        raise ValueError("Fim inesperado do buffer")
-    return data[pos], pos + 1
+def f32(b,p):
+    if p+4 > len(b): raise ValueError("EOF")
+    return struct.unpack_from("<f",b,p)[0],p+4
 
+def f64(b,p):
+    if p+8 > len(b): raise ValueError("EOF")
+    return struct.unpack_from("<d",b,p)[0],p+8
 
-def ler_u32_le(data, pos):
-    if pos + 4 > len(data):
-        raise ValueError("Fim inesperado do buffer")
-    return struct.unpack_from("<I", data, pos)[0], pos + 4
+def string(b,p):
+    n,p=u32(b,p)
+    if p+n>len(b): raise ValueError("String fora do buffer")
+    return b[p:p+n].decode("utf-8","replace"),p+n
 
+def zz(v):
+    return (v>>1)^-(v&1)
 
-def ler_i32_le(data, pos):
-    if pos + 4 > len(data):
-        raise ValueError("Fim inesperado do buffer")
-    return struct.unpack_from("<i", data, pos)[0], pos + 4
+def inter_u32(b,n):
+    if n==0:return []
+    if len(b)<n*4:raise ValueError("Array intercalado inválido")
+    return [struct.unpack(">I",bytes(b[i+j*n] for j in range(4)))[0] for i in range(n)]
 
+def inter_i32(b,n):
+    return [zz(x) for x in inter_u32(b,n)]
 
-def ler_f32_le(data, pos):
-    if pos + 4 > len(data):
-        raise ValueError("Fim inesperado do buffer")
-    return struct.unpack_from("<f", data, pos)[0], pos + 4
+def floats(b,n):
+    if n==0:return []
+    if len(b)<n*4:raise ValueError("Float array inválido")
+    out=[]
+    for i in range(n):
+        raw=bytes(b[i+j*n] for j in range(4))
+        out.append(struct.unpack(">f",struct.pack(">I",struct.unpack(">I",raw)[0]))[0])
+    return out
 
+def finite(x):
+    return float(x) if isinstance(x,(int,float)) and math.isfinite(float(x)) else 0.0
 
-def ler_f64_le(data, pos):
-    if pos + 8 > len(data):
-        raise ValueError("Fim inesperado do buffer")
-    return struct.unpack_from("<d", data, pos)[0], pos + 8
+def clean(x):
+    if isinstance(x,float): return finite(x)
+    if isinstance(x,dict): return {k:clean(v) for k,v in x.items()}
+    if isinstance(x,list): return [clean(v) for v in x]
+    return x
 
-
-def ler_string(data, pos):
-    tamanho, pos = ler_u32_le(data, pos)
-
-    if tamanho > len(data) - pos:
-        raise ValueError("String ultrapassa o buffer")
-
-    valor = data[pos:pos + tamanho].decode(
-        "utf-8",
-        errors="replace"
-    )
-
-    return valor, pos + tamanho
-
-
-def zigzag_decode32(valor):
-    return (valor >> 1) ^ -(valor & 1)
-
-
-def decode_interleaved_u32(data, quantidade):
-    if quantidade == 0:
-        return []
-
-    if len(data) < quantidade * 4:
-        raise ValueError("Array intercalado inválido")
-
-    resultado = []
-
-    for i in range(quantidade):
-        raw = bytes(
-            data[i + j * quantidade]
-            for j in range(4)
-        )
-
-        resultado.append(
-            struct.unpack(">I", raw)[0]
-        )
-
-    return resultado
-
-
-def decode_interleaved_i32(data, quantidade):
-    return [
-        zigzag_decode32(v)
-        for v in decode_interleaved_u32(
-            data,
-            quantidade
-        )
-    ]
-
-
-def decode_float_array(data, quantidade):
-    if quantidade == 0:
-        return []
-
-    if len(data) < quantidade * 4:
-        raise ValueError("Float array inválido")
-
-    valores = []
-
-    for i in range(quantidade):
-        raw = bytes(
-            data[i + j * quantidade]
-            for j in range(4)
-        )
-
-        inteiro = struct.unpack(">I", raw)[0]
-
-        valores.append(
-            struct.unpack(
-                ">f",
-                struct.pack(">I", inteiro)
-            )[0]
-        )
-
-    return valores
-
-
-def ler_chunks_rbxm(data):
-    if not (
-        data.startswith(b"<roblox!")
-        or data.startswith(b"<roblox")
-    ):
-        raise ValueError("Arquivo não possui cabeçalho RBXM")
-
-    pos = 32
-    chunks = []
-
-    while pos + 16 <= len(data):
-
-        nome_raw = data[pos:pos + 4]
-        pos += 4
-
-        compressed_len = struct.unpack_from(
-            "<I",
-            data,
-            pos
-        )[0]
-        pos += 4
-
-        uncompressed_len = struct.unpack_from(
-            "<I",
-            data,
-            pos
-        )[0]
-        pos += 4
-
-        pos += 4
-
-        nome = nome_raw.rstrip(
-            b"\x00"
-        ).decode(
-            "ascii",
-            errors="ignore"
-        )
-
-        if not nome:
-            break
-
-        if compressed_len == 0:
-
-            tamanho = uncompressed_len
-
-            if pos + tamanho > len(data):
-                raise ValueError(
-                    f"Chunk {nome} inválido"
-                )
-
-            payload = data[
-                pos:pos + tamanho
-            ]
-
-            pos += tamanho
-
+def chunks(data):
+    if not data.startswith((b"<roblox!",b"<roblox")):
+        raise ValueError("Cabeçalho RBXM inválido")
+    p=32
+    out=[]
+    while p+16<=len(data):
+        name=data[p:p+4].rstrip(b"\0").decode("ascii","ignore");p+=4
+        cl=struct.unpack_from("<I",data,p)[0];p+=4
+        ul=struct.unpack_from("<I",data,p)[0];p+=4
+        p+=4
+        if not name: break
+        if cl==0:
+            if p+ul>len(data): raise ValueError("Chunk inválido")
+            payload=data[p:p+ul];p+=ul
         else:
-
-            if pos + compressed_len > len(data):
-                raise ValueError(
-                    f"Chunk {nome} comprimido inválido"
-                )
-
-            compressed = data[
-                pos:pos + compressed_len
-            ]
-
-            pos += compressed_len
-
-            payload = None
-
-            if lz4 is not None:
-                try:
-                    payload = lz4.block.decompress(
-                        compressed,
-                        uncompressed_size=uncompressed_len
-                    )
-                except Exception:
-                    payload = None
-
-            if payload is None and compressed.startswith(
-                b"\x28\xb5\x2f\xfd"
-            ):
+            if p+cl>len(data): raise ValueError("Chunk comprimido inválido")
+            c=data[p:p+cl];p+=cl
+            payload=None
+            try: payload=lz4.block.decompress(c,uncompressed_size=ul)
+            except Exception: pass
+            if payload is None:
                 try:
                     import zstandard as zstd
-
-                    payload = (
-                        zstd.ZstdDecompressor()
-                        .decompress(
-                            compressed,
-                            max_output_size=uncompressed_len
-                        )
-                    )
-                except Exception as erro:
-                    raise ValueError(
-                        f"Falha no Zstandard: {erro}"
-                    )
-
-            if payload is None:
-                raise ValueError(
-                    f"Compressão desconhecida no chunk {nome}"
-                )
-
-        chunks.append((nome, payload))
-
-        if nome == "END":
-            break
-
-    return chunks
-
-
-def ler_cframe(payload, pos):
-    if pos + 13 > len(payload):
-        raise ValueError("CFrame inválido")
-
-    rotation_id = payload[pos]
-    pos += 1
-
-    x, pos = ler_f32_le(payload, pos)
-    y, pos = ler_f32_le(payload, pos)
-    z, pos = ler_f32_le(payload, pos)
-
-    return {
-        "Position": {
-            "X": x,
-            "Y": y,
-            "Z": z
-        },
-        "RotationId": rotation_id
-    }, pos
-
-
-def decodificar_prop(
-    type_id,
-    payload,
-    pos,
-    quantidade,
-    prop_name=None
-):
-
-    if type_id == 0x01:
-        valores = []
-
-        for _ in range(quantidade):
-            valor, pos = ler_string(
-                payload,
-                pos
-            )
-            valores.append(valor)
-
-        return valores, pos
-
-    if type_id == 0x02:
-        if pos + quantidade > len(payload):
-            raise ValueError("Bool inválido")
-
-        return [
-            payload[pos + i] != 0
-            for i in range(quantidade)
-        ], pos + quantidade
-
-    if type_id == 0x03:
-        tamanho = quantidade * 4
-
-        raw = payload[
-            pos:pos + tamanho
-        ]
-
-        return (
-            decode_interleaved_i32(
-                raw,
-                quantidade
-            ),
-            pos + tamanho
-        )
-
-    if type_id == 0x04:
-        tamanho = quantidade * 4
-
-        raw = payload[
-            pos:pos + tamanho
-        ]
-
-        return (
-            decode_float_array(
-                raw,
-                quantidade
-            ),
-            pos + tamanho
-        )
-
-    if type_id == 0x05:
-        valores = []
-
-        for _ in range(quantidade):
-            valor, pos = ler_f64_le(
-                payload,
-                pos
-            )
-            valores.append(valor)
-
-        return valores, pos
-
-    if type_id == 0x06:
-        escalas = decode_float_array(
-            payload[pos:pos + quantidade * 4],
-            quantidade
-        )
-        pos += quantidade * 4
-
-        offsets = decode_interleaved_i32(
-            payload[pos:pos + quantidade * 4],
-            quantidade
-        )
-        pos += quantidade * 4
-
-        return [
-            {
-                "Scale": escalas[i],
-                "Offset": offsets[i]
-            }
-            for i in range(quantidade)
-        ], pos
-
-    if type_id == 0x07:
-        sx = decode_float_array(
-            payload[pos:pos + quantidade * 4],
-            quantidade
-        )
-        pos += quantidade * 4
-
-        sy = decode_float_array(
-            payload[pos:pos + quantidade * 4],
-            quantidade
-        )
-        pos += quantidade * 4
-
-        ox = decode_interleaved_i32(
-            payload[pos:pos + quantidade * 4],
-            quantidade
-        )
-        pos += quantidade * 4
-
-        oy = decode_interleaved_i32(
-            payload[pos:pos + quantidade * 4],
-            quantidade
-        )
-        pos += quantidade * 4
-
-        return [
-            {
-                "X": {
-                    "Scale": sx[i],
-                    "Offset": ox[i]
-                },
-                "Y": {
-                    "Scale": sy[i],
-                    "Offset": oy[i]
-                }
-            }
-            for i in range(quantidade)
-        ], pos
-
-    if type_id == 0x08:
-        valores = []
-
-        for _ in range(quantidade):
-            origem = {}
-
-            origem["X"], pos = ler_f32_le(
-                payload,
-                pos
-            )
-            origem["Y"], pos = ler_f32_le(
-                payload,
-                pos
-            )
-            origem["Z"], pos = ler_f32_le(
-                payload,
-                pos
-            )
-
-            direcao = {}
-
-            direcao["X"], pos = ler_f32_le(
-                payload,
-                pos
-            )
-            direcao["Y"], pos = ler_f32_le(
-                payload,
-                pos
-            )
-            direcao["Z"], pos = ler_f32_le(
-                payload,
-                pos
-            )
-
-            valores.append({
-                "Origin": origem,
-                "Direction": direcao
-            })
-
-        return valores, pos
-
-    if type_id == 0x0B:
-        tamanho = quantidade * 4
-
-        return (
-            decode_interleaved_u32(
-                payload[pos:pos + tamanho],
-                quantidade
-            ),
-            pos + tamanho
-        )
-
-    if type_id == 0x0C:
-        r = decode_float_array(
-            payload[pos:pos + quantidade * 4],
-            quantidade
-        )
-        pos += quantidade * 4
-
-        g = decode_float_array(
-            payload[pos:pos + quantidade * 4],
-            quantidade
-        )
-        pos += quantidade * 4
-
-        b = decode_float_array(
-            payload[pos:pos + quantidade * 4],
-            quantidade
-        )
-        pos += quantidade * 4
-
-        return [
-            {
-                "R": r[i],
-                "G": g[i],
-                "B": b[i]
-            }
-            for i in range(quantidade)
-        ], pos
-
-    if type_id == 0x0D:
-        x = decode_float_array(
-            payload[pos:pos + quantidade * 4],
-            quantidade
-        )
-        pos += quantidade * 4
-
-        y = decode_float_array(
-            payload[pos:pos + quantidade * 4],
-            quantidade
-        )
-        pos += quantidade * 4
-
-        return [
-            {
-                "X": x[i],
-                "Y": y[i]
-            }
-            for i in range(quantidade)
-        ], pos
-
-    if type_id == 0x0E:
-        x = decode_float_array(
-            payload[pos:pos + quantidade * 4],
-            quantidade
-        )
-        pos += quantidade * 4
-
-        y = decode_float_array(
-            payload[pos:pos + quantidade * 4],
-            quantidade
-        )
-        pos += quantidade * 4
-
-        z = decode_float_array(
-            payload[pos:pos + quantidade * 4],
-            quantidade
-        )
-        pos += quantidade * 4
-
-        return [
-            {
-                "X": x[i],
-                "Y": y[i],
-                "Z": z[i]
-            }
-            for i in range(quantidade)
-        ], pos
-
-    if type_id == 0x10:
-        valores = []
-
-        for _ in range(quantidade):
-            valor, pos = ler_cframe(
-                payload,
-                pos
-            )
-            valores.append(valor)
-
-        return valores, pos
-
-    if type_id == 0x12:
-        tamanho = quantidade * 4
-
-        tokens = decode_interleaved_u32(
-            payload[pos:pos + tamanho],
-            quantidade
-        )
-
-        valores = []
-
-        for token in tokens:
-            valores.append({
-                "__type": "Enum",
-                "Property": prop_name,
-                "Value": token
-            })
-
-        return valores, pos + tamanho
-
-    if type_id == 0x13:
-        tamanho = quantidade * 4
-
-        deltas = decode_interleaved_i32(
-            payload[pos:pos + tamanho],
-            quantidade
-        )
-
-        valores = []
-        atual = 0
-
-        for delta in deltas:
-            atual += delta
-
-            if atual == -1:
-                valores.append(None)
-            else:
-                valores.append(atual)
-
-        return valores, pos + tamanho
-
-    if type_id == 0x14:
-        valores = []
-
-        for _ in range(quantidade):
-
-            if pos + 6 > len(payload):
-                raise ValueError(
-                    "Vector3int16 inválido"
-                )
-
-            x, y, z = struct.unpack_from(
-                "<hhh",
-                payload,
-                pos
-            )
-
-            pos += 6
-
-            valores.append({
-                "X": x,
-                "Y": y,
-                "Z": z
-            })
-
-        return valores, pos
-
-    if type_id == 0x17:
-        valores = []
-
-        for _ in range(quantidade):
-            minimo, pos = ler_f32_le(
-                payload,
-                pos
-            )
-
-            maximo, pos = ler_f32_le(
-                payload,
-                pos
-            )
-
-            valores.append({
-                "Min": minimo,
-                "Max": maximo
-            })
-
-        return valores, pos
-
-    if type_id == 0x18:
-        x0 = decode_float_array(
-            payload[pos:pos + quantidade * 4],
-            quantidade
-        )
-        pos += quantidade * 4
-
-        y0 = decode_float_array(
-            payload[pos:pos + quantidade * 4],
-            quantidade
-        )
-        pos += quantidade * 4
-
-        x1 = decode_float_array(
-            payload[pos:pos + quantidade * 4],
-            quantidade
-        )
-        pos += quantidade * 4
-
-        y1 = decode_float_array(
-            payload[pos:pos + quantidade * 4],
-            quantidade
-        )
-        pos += quantidade * 4
-
-        return [
-            {
-                "Min": {
-                    "X": x0[i],
-                    "Y": y0[i]
-                },
-                "Max": {
-                    "X": x1[i],
-                    "Y": y1[i]
-                }
-            }
-            for i in range(quantidade)
-        ], pos
-
-    if type_id == 0x1A:
-        if pos + quantidade * 3 > len(payload):
-            raise ValueError(
-                "Color3uint8 inválido"
-            )
-
-        r = payload[
-            pos:pos + quantidade
-        ]
-        pos += quantidade
-
-        g = payload[
-            pos:pos + quantidade
-        ]
-        pos += quantidade
-
-        b = payload[
-            pos:pos + quantidade
-        ]
-        pos += quantidade
-
-        return [
-            {
-                "__type": "Color3uint8",
-                "R": r[i] / 255,
-                "G": g[i] / 255,
-                "B": b[i] / 255
-            }
-            for i in range(quantidade)
-        ], pos
-
-    if type_id == 0x1B:
-        valores = []
-
-        for _ in range(quantidade):
-
-            if pos + 8 > len(payload):
-                raise ValueError(
-                    "Int64 inválido"
-                )
-
-            valor = int.from_bytes(
-                payload[pos:pos + 8],
-                "big",
-                signed=True
-            )
-
-            pos += 8
-            valores.append(valor)
-
-        return valores, pos
-
-    raise ValueError(
-        f"Tipo PROP não implementado: "
-        f"0x{type_id:02X}"
-    )
-
-
-def extrair_instancias_e_nomes_rbxm(
-    conteudo_bytes
-):
-
-    chunks = ler_chunks_rbxm(
-        conteudo_bytes
-    )
-
-    classes = {}
-
-    for nome_chunk, payload in chunks:
-
-        if nome_chunk != "INST":
-            continue
-
-        pos = 0
-
-        class_id, pos = ler_u32_le(
-            payload,
-            pos
-        )
-
-        class_name, pos = ler_string(
-            payload,
-            pos
-        )
-
-        object_format, pos = ler_u8(
-            payload,
-            pos
-        )
-
-        quantidade, pos = ler_u32_le(
-            payload,
-            pos
-        )
-
-        tamanho_refs = quantidade * 4
-
-        if pos + tamanho_refs > len(payload):
-            continue
-
-        refs_raw = payload[
-            pos:pos + tamanho_refs
-        ]
-
-        pos += tamanho_refs
-
-        refs_delta = decode_interleaved_i32(
-            refs_raw,
-            quantidade
-        )
-
-        referents = []
-
-        atual = 0
-
-        for delta in refs_delta:
-            atual += delta
-            referents.append(atual)
-
-        classes[class_id] = {
-            "ClassName": class_name,
-            "Referents": referents
-        }
-
-    todas = {}
-
-    for class_id, classe in classes.items():
-
-        class_name = classe["ClassName"]
-
-        for referent in classe["Referents"]:
-
-            todas[referent] = {
-                "Instance": class_name,
-                "Properties": {
-                    "Name": class_name,
-                    "ClassName": class_name,
-                    "Referent": referent
-                },
-                "Children": {},
-                "Script": None
-            }
-
-    for nome_chunk, payload in chunks:
-
-        if nome_chunk != "PROP":
-            continue
-
+                    payload=zstd.ZstdDecompressor().decompress(c,max_output_size=ul)
+                except Exception: pass
+            if payload is None: raise ValueError("Compressão desconhecida")
+        out.append((name,payload))
+        if name=="END":break
+    return out
+
+MATERIAL = {
+    0:"Plastic",1:"SmoothPlastic",2:"Brick",3:"Cobblestone",4:"Concrete",
+    5:"CorrodedMetal",6:"DiamondPlate",7:"Foil",8:"Grass",9:"Ice",
+    10:"Marble",11:"Granite",12:"Neon",13:"Pebble",14:"Sand",
+    15:"Slate",16:"Wood",17:"WoodPlanks",18:"Fabric",19:"Glass",
+    20:"Metal",21:"Air",22:"Water",23:"Rock",24:"Snow",25:"Sandstone",
+    26:"Mud",27:"Basalt",28:"Ground",29:"CrackedLava",30:"Glacier",
+    31:"Salt",32:"Limestone",33:"Pavement",34:"LeafyGrass",35:"Asphalt"
+}
+
+SURFACE={0:"Smooth",1:"Glue",2:"Weld",3:"Studs",4:"Inlet",5:"Universal",6:"Hinge",7:"Motor"}
+
+def enum_value(prop,v):
+    if prop=="Material" and v in MATERIAL:
+        return "Enum.Material."+MATERIAL[v]
+    if prop in {"TopSurface","BottomSurface","LeftSurface","RightSurface","FrontSurface","BackSurface"} and v in SURFACE:
+        return "Enum.SurfaceType."+SURFACE[v]
+    return v
+
+def prop(t,b,p,n,name):
+    if t==1:
+        a=[]
+        for _ in range(n):
+            v,p=string(b,p);a.append(v)
+        return a,p
+    if t==2:
+        if p+n>len(b):raise ValueError("Bool inválido")
+        return [b[p+i]!=0 for i in range(n)],p+n
+    if t==3:
+        q=n*4;return inter_i32(b[p:p+q],n),p+q
+    if t==4:
+        q=n*4;return floats(b[p:p+q],n),p+q
+    if t==5:
+        a=[]
+        for _ in range(n):v,p=f64(b,p);a.append(finite(v))
+        return a,p
+    if t==6:
+        s=floats(b[p:p+n*4],n);p+=n*4
+        o=inter_i32(b[p:p+n*4],n);p+=n*4
+        return [{"Scale":finite(s[i]),"Offset":o[i]} for i in range(n)],p
+    if t==7:
+        sx=floats(b[p:p+n*4],n);p+=n*4
+        ox=inter_i32(b[p:p+n*4],n);p+=n*4
+        sy=floats(b[p:p+n*4],n);p+=n*4
+        oy=inter_i32(b[p:p+n*4],n);p+=n*4
+        return [{"X":{"Scale":finite(sx[i]),"Offset":ox[i]},"Y":{"Scale":finite(sy[i]),"Offset":oy[i]}} for i in range(n)],p
+    if t==0x0B:
+        q=n*4;a=inter_u32(b[p:p+q],n)
+        return [enum_value(name,v) for v in a],p+q
+    if t==0x0C:
+        r=floats(b[p:p+n*4],n);p+=n*4
+        g=floats(b[p:p+n*4],n);p+=n*4
+        bl=floats(b[p:p+n*4],n);p+=n*4
+        return [{"R":finite(r[i]),"G":finite(g[i]),"B":finite(bl[i])} for i in range(n)],p
+    if t==0x0D:
+        x=floats(b[p:p+n*4],n);p+=n*4
+        y=floats(b[p:p+n*4],n);p+=n*4
+        return [{"X":finite(x[i]),"Y":finite(y[i])} for i in range(n)],p
+    if t==0x0E:
+        x=floats(b[p:p+n*4],n);p+=n*4
+        y=floats(b[p:p+n*4],n);p+=n*4
+        z=floats(b[p:p+n*4],n);p+=n*4
+        return [{"X":finite(x[i]),"Y":finite(y[i]),"Z":finite(z[i])} for i in range(n)],p
+    if t==0x12:
+        q=n*4;a=inter_u32(b[p:p+q],n)
+        return [enum_value(name,v) for v in a],p+q
+    if t==0x13:
+        q=n*4;d=inter_i32(b[p:p+q],n);a=[];cur=0
+        for x in d:
+            cur+=x;a.append(None if cur==-1 else cur)
+        return a,p+q
+    if t==0x14:
+        a=[]
+        for _ in range(n):
+            x,y,z=struct.unpack_from("<hhh",b,p);p+=6;a.append({"X":x,"Y":y,"Z":z})
+        return a,p
+    if t==0x17:
+        a=[]
+        for _ in range(n):
+            lo,p=f32(b,p);hi,p=f32(b,p);a.append({"Min":finite(lo),"Max":finite(hi)})
+        return a,p
+    if t==0x18:
+        x0=floats(b[p:p+n*4],n);p+=n*4
+        y0=floats(b[p:p+n*4],n);p+=n*4
+        x1=floats(b[p:p+n*4],n);p+=n*4
+        y1=floats(b[p:p+n*4],n);p+=n*4
+        return [{"Min":{"X":finite(x0[i]),"Y":finite(y0[i])},"Max":{"X":finite(x1[i]),"Y":finite(y1[i])}} for i in range(n)],p
+    if t==0x1A:
+        r=b[p:p+n];p+=n;g=b[p:p+n];p+=n;bl=b[p:p+n];p+=n
+        return [{"R":r[i]/255,"G":g[i]/255,"B":bl[i]/255} for i in range(n)],p
+    if t==0x1B:
+        a=[]
+        for _ in range(n):
+            a.append(int.from_bytes(b[p:p+8],"big",signed=True));p+=8
+        return a,p
+    raise ValueError("Tipo PROP não implementado: 0x%02X"%t)
+
+def parse_rbxm(data):
+    ch=chunks(data); classes={}; objects={}
+    for name,b in ch:
+        if name!="INST":continue
+        p=0;cid,p=u32(b,p);cn,p=string(b,p);_,p=u8(b,p);n,p=u32(b,p)
+        refs=inter_i32(b[p:p+n*4],n);cur=0;rr=[]
+        for d in refs:cur+=d;rr.append(cur)
+        classes[cid]={"ClassName":cn,"Refs":rr}
+        for r in rr:
+            objects[r]={"Instance":cn,"Properties":{"Name":cn,"ClassName":cn,"Referent":r},"Children":{},"Script":None}
+    for name,b in ch:
+        if name!="PROP":continue
         try:
-
-            pos = 0
-
-            class_id, pos = ler_u32_le(
-                payload,
-                pos
-            )
-
-            prop_name, pos = ler_string(
-                payload,
-                pos
-            )
-
-            type_id, pos = ler_u8(
-                payload,
-                pos
-            )
-
-            classe = classes.get(class_id)
-
-            if not classe:
-                continue
-
-            referents = classe["Referents"]
-            quantidade = len(referents)
-
-            try:
-                valores, novo_pos = decodificar_prop(
-                    type_id,
-                    payload,
-                    pos,
-                    quantidade,
-                    prop_name
-                )
-            except Exception as erro_prop:
-                print(
-                    "[PROP] Ignorando propriedade:",
-                    prop_name,
-                    "tipo:",
-                    hex(type_id),
-                    "erro:",
-                    erro_prop
-                )
-                continue
-
-            for i, referent in enumerate(referents):
-
-                if referent not in todas:
-                    continue
-
-                if i >= len(valores):
-                    continue
-
-                valor = valores[i]
-
-                todas[referent][
-                    "Properties"
-                ][prop_name] = valor
-
-                if prop_name == "Source":
-                    if isinstance(valor, str):
-                        todas[referent]["Script"] = valor
-
-        except Exception as erro:
-            print(
-                "[RBXM] Erro lendo PROP:",
-                erro
-            )
-            continue
-
-    relacionamentos = []
-
-    for nome_chunk, payload in chunks:
-
-        if nome_chunk != "PRNT":
-            continue
-
+            p=0;cid,p=u32(b,p);pn,p=string(b,p);t,p=u8(b,p)
+            c=classes.get(cid)
+            if not c:continue
+            vals,_=prop(t,b,p,len(c["Refs"]),pn)
+            for i,r in enumerate(c["Refs"]):
+                if r not in objects:continue
+                objects[r]["Properties"][pn]=vals[i]
+                if pn=="Source" and isinstance(vals[i],str):objects[r]["Script"]=vals[i]
+        except Exception as e: print("[PROP]",e)
+    relations=[]
+    for name,b in ch:
+        if name!="PRNT":continue
         try:
-
-            pos = 0
-
-            version, pos = ler_u8(
-                payload,
-                pos
-            )
-
-            quantidade, pos = ler_u32_le(
-                payload,
-                pos
-            )
-
-            tamanho = quantidade * 4
-
-            child_raw = payload[
-                pos:pos + tamanho
-            ]
-            pos += tamanho
-
-            parent_raw = payload[
-                pos:pos + tamanho
-            ]
-
-            child_delta = decode_interleaved_i32(
-                child_raw,
-                quantidade
-            )
-
-            parent_delta = decode_interleaved_i32(
-                parent_raw,
-                quantidade
-            )
-
-            children_refs = []
-            atual = 0
-
-            for delta in child_delta:
-                atual += delta
-                children_refs.append(atual)
-
-            parent_refs = []
-            atual = 0
-
-            for delta in parent_delta:
-                atual += delta
-                parent_refs.append(atual)
-
-            for child_ref, parent_ref in zip(
-                children_refs,
-                parent_refs
-            ):
-                relacionamentos.append(
-                    (
-                        child_ref,
-                        parent_ref
-                    )
-                )
-
-        except Exception as erro:
-            print(
-                "[RBXM] Erro lendo PRNT:",
-                erro
-            )
-
-    possui_pai = set()
-
-    for child_ref, parent_ref in relacionamentos:
-
-        child = todas.get(child_ref)
-        parent = todas.get(parent_ref)
-
-        if not child or not parent:
-            continue
-
-        nome = child[
-            "Properties"
-        ].get(
-            "Name",
-            child["Instance"]
-        )
-
-        chave = nome
-        numero = 2
-
-        while chave in parent["Children"]:
-            chave = f"{nome}_{numero}"
-            numero += 1
-
-        parent["Children"][chave] = child
-
-        possui_pai.add(child_ref)
-
-    roots = {}
-
-    for referent, instancia in todas.items():
-
-        if referent in possui_pai:
-            continue
-
-        nome = instancia[
-            "Properties"
-        ].get(
-            "Name",
-            instancia["Instance"]
-        )
-
-        chave = nome
-        numero = 2
-
-        while chave in roots:
-            chave = f"{nome}_{numero}"
-            numero += 1
-
-        roots[chave] = instancia
-
+            p=0;_,p=u8(b,p);n,p=u32(b,p);q=n*4
+            cr=inter_i32(b[p:p+q],n);p+=q;pr=inter_i32(b[p:p+q],n)
+            ca=[];cur=0
+            for x in cr:cur+=x;ca.append(cur)
+            pa=[];cur=0
+            for x in pr:cur+=x;pa.append(cur)
+            relations+=list(zip(ca,pa))
+        except Exception as e:print("[PRNT]",e)
+    has_parent=set()
+    for child,parent in relations:
+        c=objects.get(child);p=objects.get(parent)
+        if not c or not p:continue
+        nm=c["Properties"].get("Name",c["Instance"]);key=nm;i=2
+        while key in p["Children"]:key=f"{nm}_{i}";i+=1
+        p["Children"][key]=c;has_parent.add(child)
+    roots={}
+    for r,o in objects.items():
+        if r in has_parent:continue
+        nm=o["Properties"].get("Name",o["Instance"]);key=nm;i=2
+        while key in roots:key=f"{nm}_{i}";i+=1
+        roots[key]=o
     return roots
 
+def strip_refs(x):
+    if isinstance(x,dict):return {k:strip_refs(v) for k,v in x.items() if k!="Referent"}
+    if isinstance(x,list):return [strip_refs(v) for v in x]
+    return x
 
-def limpar_referents(obj):
-
-    if isinstance(obj, dict):
-
-        resultado = {}
-
-        for chave, valor in obj.items():
-
-            if chave == "Referent":
-                continue
-
-            resultado[chave] = limpar_referents(
-                valor
-            )
-
-        return resultado
-
-    if isinstance(obj, list):
-        return [
-            limpar_referents(x)
-            for x in obj
-        ]
-
-    return obj
-
-
-def limpar_nan_inf(obj):
-
-    if isinstance(obj, dict):
-
-        return {
-            chave: limpar_nan_inf(valor)
-            for chave, valor in obj.items()
-        }
-
-    if isinstance(obj, list):
-
-        return [
-            limpar_nan_inf(valor)
-            for valor in obj
-        ]
-
-    if isinstance(obj, float):
-
-        if not math.isfinite(obj):
-            return None
-
-    return obj
-
-
-@app.route(
-    "/carregarasset",
-    methods=["GET", "POST"]
-)
+@app.route("/carregarasset",methods=["GET","POST"])
 def carregarasset():
-
     try:
-
-        body = request.get_json(
-            silent=True
-        ) or {}
-
-        asset_id = (
-            request.args.get("assetId")
-            or request.args.get("id")
-            or body.get("assetId")
-        )
-
-        if not asset_id:
-            return jsonify({
-                "erro": "Asset ID nao informado"
-            }), 400
-
-        asset_id = str(
-            asset_id
-        ).strip()
-
-        if not API_KEY:
-            return jsonify({
-                "erro": "ROBLOX_API_KEY não configurada"
-            }), 500
-
-        roblox_url = (
-            "https://apis.roblox.com/"
-            "asset-delivery-api/v1/"
-            f"assetId/{asset_id}"
-        )
-
-        headers = {
-            "User-Agent": "Roblox/WinInet",
-            "Accept": "*/*",
-            "x-api-key": API_KEY
-        }
-
-        res = requests.get(
-            roblox_url,
-            headers=headers,
-            timeout=30
-        )
-
-        try:
-            data = res.json()
-        except Exception:
-            return jsonify({
-                "erro": "Roblox retornou resposta inválida",
-                "status": res.status_code,
-                "resposta": res.text[:1000]
-            }), 502
-
-        if res.status_code >= 400:
-            return jsonify({
-                "erro": "Roblox recusou o asset",
-                "status": res.status_code,
-                "detalhes": data
-            }), res.status_code
-
-        download_url = None
-
-        if isinstance(data, list):
-
-            for item in data:
-
-                if not isinstance(item, dict):
-                    continue
-
-                locations = item.get(
-                    "locations"
-                )
-
-                if locations:
-
-                    for location in locations:
-
-                        if isinstance(
-                            location,
-                            dict
-                        ):
-
-                            url = location.get(
-                                "location"
-                            )
-
-                            if url:
-                                download_url = url
-                                break
-
-                if download_url:
-                    break
-
-                if item.get("location"):
-                    download_url = item[
-                        "location"
-                    ]
-                    break
-
-        elif isinstance(data, dict):
-
-            if data.get("location"):
-                download_url = data[
-                    "location"
-                ]
-
-            elif data.get("locations"):
-
-                for location in data[
-                    "locations"
-                ]:
-
-                    if isinstance(
-                        location,
-                        dict
-                    ) and location.get(
-                        "location"
-                    ):
-
-                        download_url = (
-                            location["location"]
-                        )
-                        break
-
-        if not download_url:
-            return jsonify({
-                "erro": "Asset nao encontrado",
-                "asset_id": asset_id,
-                "detalhes": data
-            }), 404
-
-        file_res = requests.get(
-            download_url,
-            headers={
-                "User-Agent": "Roblox/WinInet",
-                "Accept": "*/*",
-                "Accept-Encoding": "identity"
-            },
-            timeout=60
-        )
-
-        file_res.raise_for_status()
-
-        conteudo_bruto = file_res.content
-
-        services_mestres = {}
-
-        if (
-            conteudo_bruto.startswith(
-                b"<roblox!"
-            )
-            or conteudo_bruto.startswith(
-                b"<roblox"
-            )
-        ):
-
-            filhos_reais = (
-                extrair_instancias_e_nomes_rbxm(
-                    conteudo_bruto
-                )
-            )
-
-            filhos_reais = limpar_referents(
-                filhos_reais
-            )
-
-            services_mestres["Workspace"] = {
-                "Instance": "Workspace",
-                "Properties": {
-                    "Name": "Workspace",
-                    "ClassName": "Workspace"
-                },
-                "Children": filhos_reais,
-                "Script": None
-            }
-
+        body=request.get_json(silent=True) or {}
+        asset_id=request.args.get("assetId") or request.args.get("id") or body.get("assetId")
+        if not asset_id:return jsonify({"erro":"Asset ID nao informado"}),400
+        if not API_KEY:return jsonify({"erro":"ROBLOX_API_KEY não configurada"}),500
+        h={"User-Agent":"Roblox/WinInet","Accept":"*/*","x-api-key":API_KEY}
+        r=requests.get("https://apis.roblox.com/asset-delivery-api/v1/assetId/"+str(asset_id),headers=h,timeout=30)
+        try:d=r.json()
+        except Exception:return jsonify({"erro":"Roblox retornou JSON inválido","status":r.status_code}),502
+        if r.status_code>=400:return jsonify({"erro":"Roblox recusou o asset","status":r.status_code,"detalhes":d}),r.status_code
+        url=None
+        items=d if isinstance(d,list) else [d]
+        for item in items:
+            if isinstance(item,dict):
+                locs=item.get("locations") or []
+                if locs and isinstance(locs[0],dict):url=locs[0].get("location")
+                if not url:url=item.get("location")
+                if url:break
+        if not url:return jsonify({"erro":"Asset nao encontrado","detalhes":d}),404
+        fr=requests.get(url,headers={"User-Agent":"Roblox/WinInet","Accept":"*/*","Accept-Encoding":"identity"},timeout=120)
+        fr.raise_for_status();raw=fr.content
+        services={}
+        if raw.startswith((b"<roblox!",b"<roblox")):
+            services["Workspace"]={"Instance":"Workspace","Properties":{"Name":"Workspace","ClassName":"Workspace"},"Children":strip_refs(parse_rbxm(raw)),"Script":None}
         else:
-
             import xml.etree.ElementTree as ET
-
-            inicio = conteudo_bruto.find(
-                b"<roblox"
-            )
-
-            if inicio >= 0:
-                fim = conteudo_bruto.rfind(
-                    b"</roblox>"
-                )
-
-                if fim >= 0:
-                    fim += len(
-                        b"</roblox>"
-                    )
-                    xml_valido = (
-                        conteudo_bruto[
-                            inicio:fim
-                        ]
-                    )
-                else:
-                    xml_valido = (
-                        conteudo_bruto[
-                            inicio:
-                        ]
-                    )
-            else:
-                xml_valido = conteudo_bruto
-
-            root = ET.fromstring(
-                xml_valido
-            )
-
-            def processar_xml(elem):
-
-                classe = elem.attrib.get(
-                    "class",
-                    "Folder"
-                )
-
-                properties = {
-                    "Name": classe,
-                    "ClassName": classe
-                }
-
-                children = {}
-                script = None
-
-                for child in elem:
-
-                    if child.tag == "Properties":
-
-                        for prop in child:
-
-                            prop_name = (
-                                prop.attrib.get(
-                                    "name",
-                                    prop.tag
-                                )
-                            )
-
-                            valor = (
-                                prop.text
-                                or ""
-                            )
-
-                            if prop.tag == "bool":
-                                valor = (
-                                    valor.lower()
-                                    == "true"
-                                )
-
-                            properties[
-                                prop_name
-                            ] = valor
-
-                            if (
-                                prop_name == "Source"
-                                and isinstance(
-                                    valor,
-                                    str
-                                )
-                            ):
-                                script = valor
-
-                    elif child.tag == "Item":
-
-                        filho = processar_xml(
-                            child
-                        )
-
-                        filho_nome = (
-                            filho[
-                                "Properties"
-                            ].get(
-                                "Name",
-                                filho["Instance"]
-                            )
-                        )
-
-                        chave = filho_nome
-                        numero = 2
-
-                        while chave in children:
-                            chave = (
-                                f"{filho_nome}_"
-                                f"{numero}"
-                            )
-                            numero += 1
-
-                        children[chave] = filho
-
-                return {
-                    "Instance": classe,
-                    "Properties": properties,
-                    "Children": children,
-                    "Script": script
-                }
-
+            root=ET.fromstring(raw)
+            def xml_item(e):
+                cls=e.attrib.get("class","Folder");name=e.attrib.get("referent",cls);props={"Name":name,"ClassName":cls};children={};script=None
+                for x in e:
+                    if x.tag=="Properties":
+                        for p in x:
+                            v=p.text or ""
+                            if p.tag=="bool":v=v.lower()=="true"
+                            props[p.attrib.get("name",p.tag)]=v
+                            if p.attrib.get("name",p.tag)=="Source" and isinstance(v,str):script=v
+                    elif x.tag=="Item":
+                        child=xml_item(x);nm=child["Properties"].get("Name",child["Instance"]);key=nm;i=2
+                        while key in children:key=f"{nm}_{i}";i+=1
+                        children[key]=child
+                return {"Instance":cls,"Properties":props,"Children":children,"Script":script}
             for item in root.findall("Item"):
-
-                processado = processar_xml(
-                    item
-                )
-
-                nome = processado[
-                    "Properties"
-                ].get(
-                    "Name",
-                    processado["Instance"]
-                )
-
-                services_mestres[
-                    nome
-                ] = processado
-
-        resposta = {
-            "sucesso": True,
-            "asset_id": asset_id,
-            "download_url": download_url,
-            "services": services_mestres
-        }
-
-        resposta = limpar_nan_inf(
-            resposta
-        )
-
-        return jsonify(resposta)
-
-    except requests.RequestException as erro:
-
-        return jsonify({
-            "erro": "Erro ao acessar Roblox",
-            "detalhes": str(erro)
-        }), 502
-
-    except Exception as erro:
-
-        print(
-            "[carregarasset] ERRO:",
-            repr(erro)
-        )
-
-        return jsonify({
-            "erro_python": str(erro)
-        }), 500
+                x=xml_item(item);services[x["Properties"].get("Name",x["Instance"])]=x
+        answer=clean({"sucesso":True,"asset_id":str(asset_id),"download_url":url,"services":services})
+        return app.response_class(json.dumps(answer,ensure_ascii=False,allow_nan=False,separators=(",",":")),200,mimetype="application/json")
+    except requests.RequestException as e:return jsonify({"erro":"Erro ao acessar Roblox","detalhes":str(e)}),502
+    except Exception as e:
+        print("[carregarasset]",repr(e))
+        return jsonify({"erro_python":str(e)}),500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
