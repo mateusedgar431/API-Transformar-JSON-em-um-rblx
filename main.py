@@ -338,7 +338,6 @@ import lz4.block
 
 API_KEY = "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJMU5pSXNJbXRwWkNJNkluTnBaeTB5TURJeExUQTNMVEV6VkRFNE9qVXhPalE1V2lJc0luUjVjQ0k2SWtwWFZDSjkuZXlKaGRXUWlPaUpTYjJKc2IzaEpiblJsY201aGJDSXNJbWx6Y3lJNklrTnNiM1ZrUVhWMGFHVnVkR2xqWVhScGIyNVRaWEoyYVdObElpd2lZbUZ6WlVGd2FVdGxlU0k2SW5oR04wTlZObGx1YzBVMmFrZGlja3R0WVhoaFVHRnZTV3huYTFCTWNEVkZWVU50VEhKNlZqTmFlSFJqTkROUU1DSXNJbTkzYm1WeVNXUWlPaUl5TURNMU5qVTROelUwSWl3aVpYaHdJam94TnpnNU16VTJNelkzTENKcFlYUWlPakUzT0Rrek5USTNOamNzSW01aVppSTZNVGM0T1RNMU1qYzJOMzAuUXVyaDllaXpRWDZ1M2tyTjBuVVlXSXdQQzd2M0FBZ2ZWYTFkNzQ5TmVlQUZqMGRIdHdEYkd1LTFicTcyT1A0WUQ0YXRIN2FzRm5UU04wY2wzeFlpZkVRV1VIN3ozVk92Q0RvSVR0TE9icVF4VV9tUEU1QmQ5NGtjMTNJbnJhLVJoNUVSMlREakhxam02RDhqekpsUDdMY2VVNnlNZ2pkSk1YaHI1ZVdjUWRIcTU5THpQNGdtTGduT0QwR25Scl9XUUhYODlCMmhHc2FNd19NQXhCQWdwOWtPcUZBTmg4azV6M0o0OExkTUlBRzNxNTZ2RmhKaVBIenhya285d180RVh0UEZIbTFOOFM3Sm9ybGQ5UGVLSkVJeXFSSzZFclcxck1yOG4tbVAtX293aUZGbmFoc3ItWmZLcm93MF95OVVlU1pDMG82ZHYzbUpzUkxpX0ZLUDJn"
 
-
 def u8(b,p):
     if p+1 > len(b): raise ValueError("EOF")
     return b[p],p+1
@@ -550,6 +549,10 @@ def parse_rbxm(data):
         if name!="PROP":continue
         try:
             p=0;cid,p=u32(b,p);pn,p=string(b,p)
+            if pn:
+                pn=pn[0].upper()+pn[1:]
+            if pn=="Color3uint8":
+                pn="Color"
             if pn:
                 pn=pn[0].upper()+pn[1:]
             t,p=u8(b,p)
