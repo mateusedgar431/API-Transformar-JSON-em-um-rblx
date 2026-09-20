@@ -463,10 +463,20 @@ def prop(t,b,p,n,name):
         return [{"Scale":finite(s[i]),"Offset":o[i]} for i in range(n)],p
     if t==7:
         sx=floats(b[p:p+n*4],n);p+=n*4
-        ox=inter_i32(b[p:p+n*4],n);p+=n*4
         sy=floats(b[p:p+n*4],n);p+=n*4
+        ox=inter_i32(b[p:p+n*4],n);p+=n*4
         oy=inter_i32(b[p:p+n*4],n);p+=n*4
-        return [{"X":{"Scale":finite(sx[i]),"Offset":ox[i]},"Y":{"Scale":finite(sy[i]),"Offset":oy[i]}} for i in range(n)],p
+        return [
+            {
+                "X":{
+                    "Scale":finite(sx[i]),
+                    "Offset":ox[i]
+                },
+                "Y":{
+                    "Scale":finite(sy[i]),
+                    "Offset":oy[i]
+                }
+            }for i in range(n)],p
     if t==0x0B:
         q=n*4;a=inter_u32(b[p:p+q],n)
         return [enum_value(name,v) for v in a],p+q
