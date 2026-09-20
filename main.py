@@ -537,9 +537,23 @@ def prop(t,b,p,n,name):
         x1=floats(b[p:p+n*4],n);p+=n*4
         y1=floats(b[p:p+n*4],n);p+=n*4
         return [{"Min":{"X":finite(x0[i]),"Y":finite(y0[i])},"Max":{"X":finite(x1[i]),"Y":finite(y1[i])}} for i in range(n)],p
-    if t==0x1A:
-        r=b[p:p+n];p+=n;g=b[p:p+n];p+=n;bl=b[p:p+n];p+=n
-        return [{"R":r[i]/255,"G":g[i]/255,"B":bl[i]/255} for i in range(n)],p
+    if t == 0x1A:
+        if p + n * 3 > len(b):
+            raise ValueError("Color3uint8 inválido")
+        r = b[p:p+n]
+        p += n
+        g = b[p:p+n]
+        p += n
+        bl = b[p:p+n]
+        p += n
+        valores = []
+        for i in range(n):
+            valores.append({
+                "R": r[i] / 255,
+                "G": g[i] / 255,
+                "B": bl[i] / 255
+            })
+        return valores, p
     if t==0x1B:
         a=[]
         for _ in range(n):
@@ -560,9 +574,11 @@ def parse_rbxm(data):
     for name,b in ch:
         if name!="PROP":continue
         try:
-            p=0;cid,p=u32(b,p);pn,p=string(b,p)
+            p=0;cid,p=u32(b,p);pn,p=string(b, p)
             if pn:
-                pn=pn[0].upper()+pn[1:]
+                pn = pn[0].upper() + pn[1:]
+            if pn == "Color3uint8":
+                pn = "Color"
             t,p=u8(b,p)
             c=classes.get(cid)
             if not c:continue
