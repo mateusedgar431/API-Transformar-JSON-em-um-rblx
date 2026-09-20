@@ -338,6 +338,7 @@ import lz4.block
 
 API_KEY = "xF7CU6YnsE6jGbrKmaxaPaoIlgkPLp5EUCmLrzV3Zxtc43P0ZXlKaGJHY2lPaUpTVXpJMU5pSXNJbXRwWkNJNkluTnBaeTB5TURJeExUQTNMVEV6VkRFNE9qVXhPalE1V2lJc0luUjVjQ0k2SWtwWFZDSjkuZXlKaGRXUWlPaUpTYjJKc2IzaEpiblJsY201aGJDSXNJbWx6Y3lJNklrTnNiM1ZrUVhWMGFHVnVkR2xqWVhScGIyNVRaWEoyYVdObElpd2lZbUZ6WlVGd2FVdGxlU0k2SW5oR04wTlZObGx1YzBVMmFrZGlja3R0WVhoaFVHRnZTV3huYTFCTWNEVkZWVU50VEhKNlZqTmFlSFJqTkROUU1DSXNJbTkzYm1WeVNXUWlPaUl5TURNMU5qVTROelUwSWl3aVpYaHdJam94TnpnNU16VTJNelkzTENKcFlYUWlPakUzT0Rrek5USTNOamNzSW01aVppSTZNVGM0T1RNMU1qYzJOMzAuUXVyaDllaXpRWDZ1M2tyTjBuVVlXSXdQQzd2M0FBZ2ZWYTFkNzQ5TmVlQUZqMGRIdHdEYkd1LTFicTcyT1A0WUQ0YXRIN2FzRm5UU04wY2wzeFlpZkVRV1VIN3ozVk92Q0RvSVR0TE9icVF4VV9tUEU1QmQ5NGtjMTNJbnJhLVJoNUVSMlREakhxam02RDhqekpsUDdMY2VVNnlNZ2pkSk1YaHI1ZVdjUWRIcTU5THpQNGdtTGduT0QwR25Scl9XUUhYODlCMmhHc2FNd19NQXhCQWdwOWtPcUZBTmg4azV6M0o0OExkTUlBRzNxNTZ2RmhKaVBIenhya285d180RVh0UEZIbTFOOFM3Sm9ybGQ5UGVLSkVJeXFSSzZFclcxck1yOG4tbVAtX293aUZGbmFoc3ItWmZLcm93MF95OVVlU1pDMG82ZHYzbUpzUkxpX0ZLUDJn"
 
+
 def u8(b,p):
     if p+1 > len(b): raise ValueError("EOF")
     return b[p],p+1
@@ -366,26 +367,26 @@ def inter_u32(b,n):
     if n==0:return []
     if len(b)<n*4:raise ValueError("Array intercalado inválido")
     return [
-        struct.unpack("<I", bytes(b[i+j*n] for j in range(4)))[0]
+        struct.unpack(">I", bytes(b[i+j*n] for j in range(4)))[0]
         for i in range(n)
     ]
 
 def inter_i32(b,n):
     return [zz(x) for x in inter_u32(b,n)]
 
+def roblox_float_word_to_ieee(word):
+    sign = word & 1
+    ieee = (sign << 31) | (word >> 1)
+    return struct.unpack(">f", struct.pack(">I", ieee))[0]
+
 def floats(b,n):
     if n==0:return []
     if len(b)<n*4:raise ValueError("Float array inválido")
-
     out=[]
     for i in range(n):
         raw=bytes(b[i+j*n] for j in range(4))
-
-        # RBXM usa os bytes intercalados na ordem little-endian.
-        # Reconstituir como big-endian produz valores absurdos como
-        # 9.8e-38 e 9.8e37.
-        out.append(struct.unpack("<f", raw)[0])
-
+        word=struct.unpack(">I", raw)[0]
+        out.append(roblox_float_word_to_ieee(word))
     return out
 
 def finite(x):
@@ -428,13 +429,7 @@ def chunks(data):
     return out
 
 MATERIAL = {
-    0:"Plastic",1:"SmoothPlastic",2:"Brick",3:"Cobblestone",4:"Concrete",
-    5:"CorrodedMetal",6:"DiamondPlate",7:"Foil",8:"Grass",9:"Ice",
-    10:"Marble",11:"Granite",12:"Neon",13:"Pebble",14:"Sand",
-    15:"Slate",16:"Wood",17:"WoodPlanks",18:"Fabric",19:"Glass",
-    20:"Metal",21:"Air",22:"Water",23:"Rock",24:"Snow",25:"Sandstone",
-    26:"Mud",27:"Basalt",28:"Ground",29:"CrackedLava",30:"Glacier",
-    31:"Salt",32:"Limestone",33:"Pavement",34:"LeafyGrass",35:"Asphalt"
+256:"Plastic",272:"SmoothPlastic",288:"Neon",512:"Wood",528:"WoodPlanks",784:"Marble",788:"Basalt",800:"Slate",804:"CrackedLava",816:"Concrete",820:"Limestone",832:"Granite",836:"Pavement",848:"Brick",864:"Pebble",880:"Cobblestone",896:"Rock",912:"Sandstone",1040:"CorrodedMetal",1056:"DiamondPlate",1072:"Foil",1088:"Metal",1280:"Grass",1284:"LeafyGrass",1296:"Sand",1312:"Fabric",1328:"Snow",1344:"Mud",1360:"Ground",1376:"Asphalt",1392:"Salt",1536:"Ice",1552:"Glacier",1568:"Glass",1584:"ForceField",1792:"Air",2048:"Water",2304:"Cardboard",2305:"Carpet",2306:"CeramicTiles",2307:"ClayRoofTiles",2308:"RoofShingles",2309:"Leather",2310:"Plaster",2311:"Rubber"
 }
 
 SURFACE={0:"Smooth",1:"Glue",2:"Weld",3:"Studs",4:"Inlet",5:"Universal",6:"Hinge",7:"Motor"}
@@ -490,29 +485,19 @@ def prop(t,b,p,n,name):
         y=floats(b[p:p+n*4],n);p+=n*4
         z=floats(b[p:p+n*4],n);p+=n*4
         return [{"X":finite(x[i]),"Y":finite(y[i]),"Z":finite(z[i])} for i in range(n)],p
-    if t==0x0F:
-        # CFrame: posição XYZ + matriz de rotação XYZ.
-        # O formato mantém os componentes em arrays intercalados.
+    if t==0x10:
+        rotations=[]
+        for _ in range(n):
+            rot_id=b[p]; p+=1
+            if rot_id==0:
+                vals=floats(b[p:p+36],9); p+=36
+                rotations.append(vals)
+            else:
+                rotations.append(rot_id)
         x=floats(b[p:p+n*4],n);p+=n*4
         y=floats(b[p:p+n*4],n);p+=n*4
         z=floats(b[p:p+n*4],n);p+=n*4
-        r00=floats(b[p:p+n*4],n);p+=n*4
-        r01=floats(b[p:p+n*4],n);p+=n*4
-        r02=floats(b[p:p+n*4],n);p+=n*4
-        r10=floats(b[p:p+n*4],n);p+=n*4
-        r11=floats(b[p:p+n*4],n);p+=n*4
-        r12=floats(b[p:p+n*4],n);p+=n*4
-        r20=floats(b[p:p+n*4],n);p+=n*4
-        r21=floats(b[p:p+n*4],n);p+=n*4
-        r22=floats(b[p:p+n*4],n);p+=n*4
-        return [{
-            "Position":{"X":finite(x[i]),"Y":finite(y[i]),"Z":finite(z[i])},
-            "Rotation":[
-                finite(r00[i]),finite(r01[i]),finite(r02[i]),
-                finite(r10[i]),finite(r11[i]),finite(r12[i]),
-                finite(r20[i]),finite(r21[i]),finite(r22[i])
-            ]
-        } for i in range(n)],p
+        return [{"Position":{"X":finite(x[i]),"Y":finite(y[i]),"Z":finite(z[i])},"Rotation":rotations[i]} for i in range(n)],p
     if t==0x12:
         q=n*4;a=inter_u32(b[p:p+q],n)
         return [enum_value(name,v) for v in a],p+q
@@ -537,28 +522,18 @@ def prop(t,b,p,n,name):
         x1=floats(b[p:p+n*4],n);p+=n*4
         y1=floats(b[p:p+n*4],n);p+=n*4
         return [{"Min":{"X":finite(x0[i]),"Y":finite(y0[i])},"Max":{"X":finite(x1[i]),"Y":finite(y1[i])}} for i in range(n)],p
-    if t == 0x1A:
-        if p + n * 3 > len(b):
-            raise ValueError("Color3uint8 inválido")
-        r = b[p:p+n]
-        p += n
-        g = b[p:p+n]
-        p += n
-        bl = b[p:p+n]
-        p += n
-        valores = []
-        for i in range(n):
-            valores.append({
-                "R": r[i] / 255,
-                "G": g[i] / 255,
-                "B": bl[i] / 255
-            })
-        return valores, p
+    if t==0x1A:
+        r=b[p:p+n];p+=n;g=b[p:p+n];p+=n;bl=b[p:p+n];p+=n
+        return [{"R":r[i]/255,"G":g[i]/255,"B":bl[i]/255} for i in range(n)],p
     if t==0x1B:
-        a=[]
-        for _ in range(n):
-            a.append(int.from_bytes(b[p:p+8],"big",signed=True));p+=8
-        return a,p
+        q=n*8
+        if len(b)-p<q: raise ValueError("Int64 inválido")
+        vals=[]
+        for i in range(n):
+            raw=bytes(b[p+i+j*n] for j in range(8))
+            word=struct.unpack(">Q",raw)[0]
+            vals.append((word>>1) ^ -(word&1))
+        return vals,p+q
     raise ValueError("Tipo PROP não implementado: 0x%02X"%t)
 
 def parse_rbxm(data):
@@ -574,11 +549,9 @@ def parse_rbxm(data):
     for name,b in ch:
         if name!="PROP":continue
         try:
-            p=0;cid,p=u32(b,p);pn,p=string(b, p)
+            p=0;cid,p=u32(b,p);pn,p=string(b,p)
             if pn:
-                pn = pn[0].upper() + pn[1:]
-            if pn == "Color3uint8":
-                pn = "Color"
+                pn=pn[0].upper()+pn[1:]
             t,p=u8(b,p)
             c=classes.get(cid)
             if not c:continue
