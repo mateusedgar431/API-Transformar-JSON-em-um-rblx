@@ -516,7 +516,7 @@ def prop(t,b,p,n,name):
                 else:
                     rx = math.atan2(-r12, r11)
                     ry = math.atan2(-r20, sy)
-                    rz = 0
+                    rz = 0.0
                 rotations.append({
                     "X": finite(math.degrees(rx)),
                     "Y": finite(math.degrees(ry)),
@@ -524,34 +524,31 @@ def prop(t,b,p,n,name):
                 })
             else:
                 rotations.append({
-                    "X": 0,
-                    "Y": 0,
-                    "Z": 0
+                    "X": 0.0,
+                    "Y": 0.0,
+                    "Z": 0.0
                 })
-        x = floats(
-            b[p:p + n * 4],
-            n
-        )
+        x = floats(b[p:p + n * 4], n)
         p += n * 4
-        y = floats(
-            b[p:p + n * 4],
-            n
-        )
+        y = floats(b[p:p + n * 4], n)
         p += n * 4
-        z = floats(
-            b[p:p + n * 4],
-            n
-        )
+        z = floats(b[p:p + n * 4], n)
         p += n * 4
-        return [
-            {
+        resultado = []
+        for i in range(n):
+            resultado.append({
                 "Position": {
                     "X": finite(x[i]),
                     "Y": finite(y[i]),
                     "Z": finite(z[i])
                 },
-                "Rotation": rotations[i]
-            }for i in range(n)], p
+                "Rotation": {
+                    "X": finite(rotations[i]["X"]),
+                    "Y": finite(rotations[i]["Y"]),
+                    "Z": finite(rotations[i]["Z"])
+                }
+            })
+        return resultado, p
     if t==0x12:
         q=n*4;a=inter_u32(b[p:p+q],n)
         return [enum_value(name,v) for v in a],p+q
