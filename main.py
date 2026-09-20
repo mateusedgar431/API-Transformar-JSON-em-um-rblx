@@ -440,10 +440,6 @@ MATERIAL = {
 SURFACE={0:"Smooth",1:"Glue",2:"Weld",3:"Studs",4:"Inlet",5:"Universal",6:"Hinge",7:"Motor"}
 
 def enum_value(prop,v):
-    if prop=="Material" and v in MATERIAL:
-        return "Enum.Material."+MATERIAL[v]
-    if prop in {"TopSurface","BottomSurface","LeftSurface","RightSurface","FrontSurface","BackSurface"} and v in SURFACE:
-        return "Enum.SurfaceType."+SURFACE[v]
     return v
 
 def prop(t,b,p,n,name):
