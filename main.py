@@ -388,6 +388,33 @@ def floats(b,n):
         out.append(roblox_float_word_to_ieee(word))
     return out
 
+CFRAME_ROTATIONS = {
+    0x02:(0,0,0),
+    0x03:(90,0,0),
+    0x05:(0,180,180),
+    0x06:(-90,0,0),
+    0x07:(0,180,90),
+    0x09:(0,90,90),
+    0x0A:(0,0,90),
+    0x0C:(0,-90,90),
+    0x0D:(-90,-90,0),
+    0x0E:(0,-90,0),
+    0x10:(90,-90,0),
+    0x11:(0,90,180),
+    0x14:(0,180,0),
+    0x15:(-90,-180,0),
+    0x17:(0,0,180),
+    0x18:(90,180,0),
+    0x19:(0,0,-90),
+    0x1B:(0,-90,-90),
+    0x1C:(0,-180,-90),
+    0x1E:(0,90,-90),
+    0x1F:(90,90,0),
+    0x20:(0,90,0),
+    0x22:(-90,90,0),
+    0x23:(0,-90,180)
+}
+
 def finite(x):
     return float(x) if isinstance(x,(int,float)) and math.isfinite(float(x)) else 0.0
 
@@ -500,55 +527,62 @@ def prop(t,b,p,n,name):
             rot_id = b[p]
             p += 1
             if rot_id == 0:
-                vals = floats(b[p:p + 36], 9)
+                if p + 36 > len(b):
+                    raise ValueError("CFrame rotation inválida")
+                vals = struct.unpack_from("<9f", b, p)
                 p += 36
-                r00, r01, r02 = vals[0], vals[1], vals[2]
-                r10, r11, r12 = vals[3], vals[4], vals[5]
-                r20, r21, r22 = vals[6], vals[7], vals[8]
-                sy = math.sqrt(
-                    r00 * r00 +
-                    r10 * r10
-                )
+                r00,r01,r02 = vals[0],vals[1],vals[2]
+                r10,r11,r12 = vals[3],vals[4],vals[5]
+                r20,r21,r22 = vals[6],vals[7],vals[8]
+                sy = math.sqrt(r00*r00 + r10*r10)
                 if sy > 1e-6:
-                    rx = math.atan2(r21, r22)
-                    ry = math.atan2(-r20, sy)
-                    rz = math.atan2(r10, r00)
+                    rx = math.atan2(r21,r22)
+                    ry = math.atan2(-r20,sy)
+                    rz = math.atan2(r10,r00)
                 else:
-                    rx = math.atan2(-r12, r11)
-                    ry = math.atan2(-r20, sy)
+                    rx = math.atan2(-r12,r11)
+                    ry = math.atan2(-r20,sy)
                     rz = 0.0
                 rotations.append({
-                    "X": finite(math.degrees(rx)),
-                    "Y": finite(math.degrees(ry)),
-                    "Z": finite(math.degrees(rz))
+                    "X":finite(math.degrees(rx)),
+                    "Y":finite(math.degrees(ry)),
+                    "Z":finite(math.degrees(rz))
                 })
             else:
-                rotations.append({
-                    "X": 0.0,
-                    "Y": 0.0,
-                    "Z": 0.0
-                })
-        x = floats(b[p:p + n * 4], n)
-        p += n * 4
-        y = floats(b[p:p + n * 4], n)
-        p += n * 4
-        z = floats(b[p:p + n * 4], n)
-        p += n * 4
-        resultado = []
-        for i in range(n):
-            resultado.append({
-                "Position": {
-                    "X": finite(x[i]),
-                    "Y": finite(y[i]),
-                    "Z": finite(z[i])
+                rot = CFRAME_ROTATIONS.get(rot_id)
+                if rot is None:
+                    rotations.append({
+                        "X":0.0,
+                        "Y":0.0,
+                        "Z":0.0
+                    })
+                else:
+                    rotations.append({
+                        "X":finite(rot[0]),
+                        "Y":finite(rot[1]),
+                        "Z":finite(rot[2])
+                    })
+        x = floats(b[p:p+n*4],n)
+        p += n*4
+        y = floats(b[p:p+n*4],n)
+        p += n*4
+        z = floats(b[p:p+n*4],n)
+        p += n*4
+        return [
+            {
+                "Position":{
+                    "X":finite(x[i]),
+                    "Y":finite(y[i]),
+                    "Z":finite(z[i])
                 },
-                "Rotation": {
-                    "X": finite(rotations[i]["X"]),
-                    "Y": finite(rotations[i]["Y"]),
-                    "Z": finite(rotations[i]["Z"])
+                "Rotation":{
+                    "X":finite(rotations[i]["X"]),
+                    "Y":finite(rotations[i]["Y"]),
+                    "Z":finite(rotations[i]["Z"])
                 }
-            })
-        return resultado, p
+            }
+            for i in range(n)
+        ],p
     if t==0x12:
         q=n*4;a=inter_u32(b[p:p+q],n)
         return [enum_value(name,v) for v in a],p+q
@@ -641,6 +675,12 @@ def parse_rbxm(data):
         nm=o["Properties"].get("Name",o["Instance"]);key=nm;i=2
         while key in roots:key=f"{nm}_{i}";i+=1
         roots[key]=o
+    if t == 1:
+        a = []
+        for _ in range(n):
+            v,p = string(b,p)
+            a.append(v)
+        return a,p
     return roots
 
 def strip_refs(x):
