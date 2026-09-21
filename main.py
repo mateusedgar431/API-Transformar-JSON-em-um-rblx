@@ -427,10 +427,15 @@ def chunks(data):
         if name=="END":break
     return out
 
-# Não precisa mais de MATERIAL = {...} nem SURFACE = {...}
-
 ENUM_CACHE = {}
+ENUM_FONT = {}
 
+def font_enum(valor):
+    nome = ENUM_FONT.get(int(valor))
+    if nome is None:
+        return valor
+    return "Enum.Font." + nome
+    
 def carregar_enums_roblox():
     """
     Recebe um JSON produzido pelo Roblox contendo:
@@ -626,6 +631,10 @@ def parse_rbxm(data):
                 pn=pn[0].upper()+pn[1:]
             if pn=="Color3uint8":
                 pn="Color"
+            if pn == "Font":
+                q = n * 4
+                valores = inter_u32(b[p:p+q], n)
+                return [font_enum(v) for v in valores], p + q
             if pn:
                 pn=pn[0].upper()+pn[1:]
             t,p=u8(b,p)
