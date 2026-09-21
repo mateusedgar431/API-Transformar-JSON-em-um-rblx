@@ -388,33 +388,6 @@ def floats(b,n):
         out.append(roblox_float_word_to_ieee(word))
     return out
 
-CFRAME_ROTATIONS = {
-    0x02:(0,0,0),
-    0x03:(90,0,0),
-    0x05:(0,180,180),
-    0x06:(-90,0,0),
-    0x07:(0,180,90),
-    0x09:(0,90,90),
-    0x0A:(0,0,90),
-    0x0C:(0,-90,90),
-    0x0D:(-90,-90,0),
-    0x0E:(0,-90,0),
-    0x10:(90,-90,0),
-    0x11:(0,90,180),
-    0x14:(0,180,0),
-    0x15:(-90,-180,0),
-    0x17:(0,0,180),
-    0x18:(90,180,0),
-    0x19:(0,0,-90),
-    0x1B:(0,-90,-90),
-    0x1C:(0,-180,-90),
-    0x1E:(0,90,-90),
-    0x1F:(90,90,0),
-    0x20:(0,90,0),
-    0x22:(-90,90,0),
-    0x23:(0,-90,180)
-}
-
 def finite(x):
     return float(x) if isinstance(x,(int,float)) and math.isfinite(float(x)) else 0.0
 
@@ -524,26 +497,20 @@ def prop(t,b,p,n,name):
     if t == 0x10:
         rotations = []
         for _ in range(n):
-            rot_id = b[p]
             p += 1
-            if rot_id == 0:
-                vals = struct.unpack_from("<9f", b, p)
-                p += 36
-                rotations.append({
-                    "R00": finite(vals[0]),
-                    "R01": finite(vals[1]),
-                    "R02": finite(vals[2]),
-                    "R10": finite(vals[3]),
-                    "R11": finite(vals[4]),
-                    "R12": finite(vals[5]),
-                    "R20": finite(vals[6]),
-                    "R21": finite(vals[7]),
-                    "R22": finite(vals[8])
-                })
-            else:
-                rotations.append({
-                    "RotationId": rot_id
-                })
+            vals = struct.unpack_from("<9f", b, p)
+            p += 36
+            rotations.append({
+                "R00": finite(vals[0]),
+                "R01": finite(vals[1]),
+                "R02": finite(vals[2]),
+                "R10": finite(vals[3]),
+                "R11": finite(vals[4]),
+                "R12": finite(vals[5]),
+                "R20": finite(vals[6]),
+                "R21": finite(vals[7]),
+                "R22": finite(vals[8])
+            })
         x = floats(b[p:p+n*4], n)
         p += n*4
         y = floats(b[p:p+n*4], n)
