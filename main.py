@@ -538,9 +538,9 @@ def prop(t,b,p,n,name):
         for i in range(n):  
             resultado.append({  
                 "Position": {  
-                    "X": finite(x[i]),  
-                    "Y": finite(y[i]),  
-                    "Z": finite(z[i])  
+                    "X": 0,#finite(x[i]),  
+                    "Y": 0,#finite(y[i]),  
+                    "Z": 0,#finite(z[i])  
                 },  
                 "Rotation": {  
                     "X": finite(rotations[i]["X"]),  
