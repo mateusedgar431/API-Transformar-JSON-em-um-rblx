@@ -499,7 +499,7 @@ def prop(t,b,p,n,name):
         for _ in range(n):  
             rot_id = b[p]  
             p += 1  
-            if rot_id > 0:  
+            if rot_id != 0:  
                 vals = floats(b[p:p + 36], 9)  
                 p += 36  
                 r00, r01, r02 = vals[0], vals[1], vals[2]  
@@ -522,7 +522,7 @@ def prop(t,b,p,n,name):
                     "Y": finite(math.degrees(ry)),  
                     "Z": finite(math.degrees(rz))  
                 })
-           else:  
+            else:  
                 rotations.append({  
                     "X": 0.0,  
                     "Y": 0.0,  
