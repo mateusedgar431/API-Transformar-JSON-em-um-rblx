@@ -497,35 +497,49 @@ def prop(t,b,p,n,name):
     if t == 0x10:
         rotations = []
         for _ in range(n):
+            rot_id = b[p]
             p += 1
-            vals = struct.unpack_from("<9f", b, p)
-            p += 36
-            rotations.append({
-                "X": finite(math.degrees(math.atan2(vals[7], vals[8]))),
-                "Y": finite(math.degrees(math.atan2(-vals[6], math.sqrt(vals[0] * vals[0] + vals[3] * vals[3])))),
-                "Z": finite(math.degrees(math.atan2(vals[3], vals[0])))
-            })
-        x = floats(b[p:p+n*4], n)
-        p += n*4
-        y = floats(b[p:p+n*4], n)
-        p += n*4
-        z = floats(b[p:p+n*4], n)
-        p += n*4
-        return [
-            {
+            if rot_id == 0:
+                vals = floats(b[p:p + 36], 9)
+                p += 36
+                r00, r01, r02 = vals[0], vals[1], vals[2]
+                r10, r11, r12 = vals[3], vals[4], vals[5]
+                r20, r21, r22 = vals[6], vals[7], vals[8]
+                sy = math.sqrt(r00 * r00 + r10 * r10)
+                if sy > 1e-6:
+                    rx = math.atan2(r21, r22)
+                    ry = math.atan2(-r20, sy)
+                    rz = math.atan2(r10, r00)
+                else:
+                    rx = math.atan2(-r12, r11)
+                    ry = math.atan2(-r20, sy)
+                    rz = 0.0
+                rotations.append({
+                    "X": finite(math.degrees(rx)),
+                    "Y": finite(math.degrees(ry)),
+                    "Z": finite(math.degrees(rz))
+                })
+            else:
+                rotations.append(None)
+        x = floats(b[p:p + n * 4], n)
+        p += n * 4
+        y = floats(b[p:p + n * 4], n)
+        p += n * 4
+        z = floats(b[p:p + n * 4], n)
+        p += n * 4
+        resultado = []
+        for i in range(n):
+            cframe = {
                 "Position": {
                     "X": finite(x[i]),
                     "Y": finite(y[i]),
                     "Z": finite(z[i])
-                },
-                "Rotation": {
-                    "X": finite(rotations[i]["X"]),
-                    "Y": finite(rotations[i]["Y"]),
-                    "Z": finite(rotations[i]["Z"])
                 }
             }
-            for i in range(n)
-        ], p
+            if rotations[i] is not None:
+                cframe["Rotation"] = rotations[i]
+            resultado.append(cframe)
+        return resultado, p
     if t==0x12:
         q=n*4;a=inter_u32(b[p:p+q],n)
         return [enum_value(name,v) for v in a],p+q
