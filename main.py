@@ -431,10 +431,11 @@ ENUM_CACHE = {}
 ENUM_FONT = {}
 
 def font_enum(valor):
-    nome = ENUM_FONT.get(int(valor))
-    if nome is None:
-        return valor
-    return "Enum.Font." + nome
+    return 0
+    #nome = ENUM_FONT.get(int(valor))
+    #if nome is None:
+    #    return valor
+    #return "Enum.Font." + nome
     
 def carregar_enums_roblox():
     """
