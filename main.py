@@ -497,7 +497,7 @@ def prop(t,b,p,n,name):
     if t == 0x10:
         rotations = []
         for _ in range(n):
-            rot_id = b[p] - 2
+            rot_id = 0
             p += 1
             if rot_id == 0:
                 vals = floats(b[p:p + 36], 9)
