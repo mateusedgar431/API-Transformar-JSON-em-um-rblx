@@ -501,15 +501,9 @@ def prop(t,b,p,n,name):
             vals = struct.unpack_from("<9f", b, p)
             p += 36
             rotations.append({
-                "R00": finite(vals[0]),
-                "R01": finite(vals[1]),
-                "R02": finite(vals[2]),
-                "R10": finite(vals[3]),
-                "R11": finite(vals[4]),
-                "R12": finite(vals[5]),
-                "R20": finite(vals[6]),
-                "R21": finite(vals[7]),
-                "R22": finite(vals[8])
+                "X": finite(math.degrees(math.atan2(vals[7], vals[8]))),
+                "Y": finite(math.degrees(math.atan2(-vals[6], math.sqrt(vals[0] * vals[0] + vals[3] * vals[3])))),
+                "Z": finite(math.degrees(math.atan2(vals[3], vals[0])))
             })
         x = floats(b[p:p+n*4], n)
         p += n*4
@@ -524,7 +518,11 @@ def prop(t,b,p,n,name):
                     "Y": finite(y[i]),
                     "Z": finite(z[i])
                 },
-                "Rotation": rotations[i]
+                "Rotation": {
+                    "X": finite(rotations[i]["X"]),
+                    "Y": finite(rotations[i]["Y"]),
+                    "Z": finite(rotations[i]["Z"])
+                }
             }
             for i in range(n)
         ], p
