@@ -433,6 +433,41 @@ MATERIAL = {
 
 SURFACE={0:"Smooth",1:"Glue",2:"Weld",3:"Studs",4:"Inlet",5:"Universal",6:"Hinge",7:"Motor"}
 
+ROTATION_ID = {
+    0: {"X": 0, "Y": 0, "Z": 0},
+    1: {"X": 0, "Y": 90, "Z": 0},
+    2: {"X": 0, "Y": 180, "Z": 0},
+    3: {"X": 0, "Y": -90, "Z": 0},
+    4: {"X": 90, "Y": 0, "Z": 0},
+    5: {"X": -90, "Y": 0, "Z": 0},
+    6: {"X": 180, "Y": 0, "Z": 0},
+    7: {"X": 0, "Y": 0, "Z": 90},
+    8: {"X": 0, "Y": 0, "Z": -90},
+    9: {"X": 0, "Y": 45, "Z": 0},
+    10: {"X": 0, "Y": -45, "Z": 0},
+    11: {"X": 0, "Y": 135, "Z": 0},
+    12: {"X": 0, "Y": -135, "Z": 0},
+    13: {"X": 45, "Y": 0, "Z": 0},
+    14: {"X": -45, "Y": 0, "Z": 0},
+    15: {"X": 0, "Y": 0, "Z": 45},
+    16: {"X": 0, "Y": 0, "Z": -45},
+    17: {"X": 45, "Y": 90, "Z": 0},
+    18: {"X": -45, "Y": 90, "Z": 0},
+    19: {"X": 45, "Y": -90, "Z": 0},
+    20: {"X": -45, "Y": -90, "Z": 0},
+    21: {"X": 90, "Y": 90, "Z": 0},
+    22: {"X": -90, "Y": 90, "Z": 0},
+    23: {"X": 90, "Y": -90, "Z": 0},
+    24: {"X": -90, "Y": -90, "Z": 0},
+    25: {"X": 0, "Y": 180, "Z": 90},
+    26: {"X": 0, "Y": 180, "Z": -90},
+    27: {"X": 90, "Y": 180, "Z": 0},
+    28: {"X": -90, "Y": 180, "Z": 0},
+    29: {"X": 180, "Y": 90, "Z": 0},
+    30: {"X": 180, "Y": -90, "Z": 0},
+    31: {"X": 0, "Y": 45, "Z": 45},
+    32: {"X": 0, "Y": -45, "Z": -45},
+}
 def enum_value(prop,v):
     if prop=="Material" and v in MATERIAL:
         return "Enum.Material."+MATERIAL[v]
@@ -496,59 +531,62 @@ def prop(t,b,p,n,name):
         return [{"X":finite(x[i]),"Y":finite(y[i]),"Z":finite(z[i])} for i in range(n)],p
     if t == 0x10:
         rotations = []
-        for _ in range(n):  
-            rot_id = b[p]  
-            p += 1  
-            if rot_id != 0:  
-                vals = floats(b[p:p + 36], 9)  
-                p += 36  
-                r00, r01, r02 = vals[0], vals[1], vals[2]  
-                r10, r11, r12 = vals[3], vals[4], vals[5]  
-                r20, r21, r22 = vals[6], vals[7], vals[8]  
-                sy = math.sqrt(  
-                    r00 * r00 +  
-                    r10 * r10  
-                )  
-                if sy > 1e-6:  
-                    rx = math.atan2(r21, r22)  
-                    ry = math.atan2(-r20, sy)  
-                    rz = math.atan2(r10, r00)  
-                else:  
-                    rx = math.atan2(-r12, r11)  
-                    ry = math.atan2(-r20, sy)  
+        for _ in range(n):
+            rot_id = b[p]
+            p += 1
+            if rot_id == 0:
+                vals = floats(b[p:p + 36], 9)
+                p += 36
+                r00,r01,r02 = vals[0],vals[1],vals[2]
+                r10,r11,r12 = vals[3],vals[4],vals[5]
+                r20,r21,r22 = vals[6],vals[7],vals[8]
+                sy = math.sqrt(r00*r00 + r10*r10)
+                if sy > 1e-6:
+                    rx = math.atan2(r21,r22)
+                    ry = math.atan2(-r20,sy)
+                    rz = math.atan2(r10,r00)
+                else:
+                    rx = math.atan2(-r12,r11)
+                    ry = math.atan2(-r20,sy)
                     rz = 0.0
-                rotations.append({  
-                    "X": finite(math.degrees(rx)),  
-                    "Y": finite(math.degrees(ry)),  
-                    "Z": finite(math.degrees(rz))  
+                rotations.append({
+                    "X": finite(math.degrees(rx)),
+                    "Y": finite(math.degrees(ry)),
+                    "Z": finite(math.degrees(rz))
                 })
-            else:  
-                rotations.append({  
-                    "X": 0.0,  
-                    "Y": 0.0,  
-                    "Z": 0.0  
-                })  
-        x = floats(b[p:p + n * 4], n)  
-        p += n * 4  
-        y = floats(b[p:p + n * 4], n)  
-        p += n * 4  
-        z = floats(b[p:p + n * 4], n)  
-        p += n * 4  
-        resultado = []  
-        for i in range(n):  
-            resultado.append({  
-                "Position": {  
-                    "X": 0,#finite(x[i]),  
-                    "Y": 0,#finite(y[i]),  
-                    "Z": 0,#finite(z[i])  
-                },  
-                "Rotation": {  
-                    "X": finite(rotations[i]["X"]),  
-                    "Y": finite(rotations[i]["Y"]),  
-                    "Z": finite(rotations[i]["Z"])  
-                }  
-            })  
-        return resultado, p
+            else:
+                rot = ROTATION_ID.get(rot_id)
+                if rot is None:
+                    rotations.append({
+                        "X": None,
+                        "Y": None,
+                        "Z": None,
+                        "RotationId": rot_id
+                    })
+                else:
+                    rotations.append({
+                        "X": finite(rot["X"]),
+                        "Y": finite(rot["Y"]),
+                        "Z": finite(rot["Z"]),
+                        "RotationId": rot_id
+                    })
+        x = floats(b[p:p+n*4],n)
+        p += n*4
+        y = floats(b[p:p+n*4],n)
+        p += n*4
+        z = floats(b[p:p+n*4],n)
+        p += n*4
+        resultado = []
+        for i in range(n):
+            resultado.append({
+                "Position": {
+                    "X": finite(x[i]),
+                    "Y": finite(y[i]),
+                    "Z": finite(z[i])
+                },
+                "Rotation": rotations[i]
+            })
+        return resultado,p
     if t==0x12:
         q=n*4;a=inter_u32(b[p:p+q],n)
         return [enum_value(name,v) for v in a],p+q
