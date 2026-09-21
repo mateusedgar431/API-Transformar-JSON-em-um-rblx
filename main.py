@@ -527,62 +527,40 @@ def prop(t,b,p,n,name):
             rot_id = b[p]
             p += 1
             if rot_id == 0:
-                if p + 36 > len(b):
-                    raise ValueError("CFrame rotation inválida")
                 vals = struct.unpack_from("<9f", b, p)
                 p += 36
-                r00,r01,r02 = vals[0],vals[1],vals[2]
-                r10,r11,r12 = vals[3],vals[4],vals[5]
-                r20,r21,r22 = vals[6],vals[7],vals[8]
-                sy = math.sqrt(r00*r00 + r10*r10)
-                if sy > 1e-6:
-                    rx = math.atan2(r21,r22)
-                    ry = math.atan2(-r20,sy)
-                    rz = math.atan2(r10,r00)
-                else:
-                    rx = math.atan2(-r12,r11)
-                    ry = math.atan2(-r20,sy)
-                    rz = 0.0
                 rotations.append({
-                    "X":finite(math.degrees(rx)),
-                    "Y":finite(math.degrees(ry)),
-                    "Z":finite(math.degrees(rz))
+                    "R00": finite(vals[0]),
+                    "R01": finite(vals[1]),
+                    "R02": finite(vals[2]),
+                    "R10": finite(vals[3]),
+                    "R11": finite(vals[4]),
+                    "R12": finite(vals[5]),
+                    "R20": finite(vals[6]),
+                    "R21": finite(vals[7]),
+                    "R22": finite(vals[8])
                 })
             else:
-                rot = CFRAME_ROTATIONS.get(rot_id)
-                if rot is None:
-                    rotations.append({
-                        "X":0.0,
-                        "Y":0.0,
-                        "Z":0.0
-                    })
-                else:
-                    rotations.append({
-                        "X":finite(rot[0]),
-                        "Y":finite(rot[1]),
-                        "Z":finite(rot[2])
-                    })
-        x = floats(b[p:p+n*4],n)
+                rotations.append({
+                    "RotationId": rot_id
+                })
+        x = floats(b[p:p+n*4], n)
         p += n*4
-        y = floats(b[p:p+n*4],n)
+        y = floats(b[p:p+n*4], n)
         p += n*4
-        z = floats(b[p:p+n*4],n)
+        z = floats(b[p:p+n*4], n)
         p += n*4
         return [
             {
-                "Position":{
-                    "X":finite(x[i]),
-                    "Y":finite(y[i]),
-                    "Z":finite(z[i])
+                "Position": {
+                    "X": finite(x[i]),
+                    "Y": finite(y[i]),
+                    "Z": finite(z[i])
                 },
-                "Rotation":{
-                    "X":finite(rotations[i]["X"]),
-                    "Y":finite(rotations[i]["Y"]),
-                    "Z":finite(rotations[i]["Z"])
-                }
+                "Rotation": rotations[i]
             }
             for i in range(n)
-        ],p
+        ], p
     if t==0x12:
         q=n*4;a=inter_u32(b[p:p+q],n)
         return [enum_value(name,v) for v in a],p+q
