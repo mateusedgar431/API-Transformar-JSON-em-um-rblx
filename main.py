@@ -427,19 +427,46 @@ def chunks(data):
         if name=="END":break
     return out
 
-MATERIAL = {
-256:"Plastic",272:"SmoothPlastic",288:"Neon",512:"Wood",528:"WoodPlanks",784:"Marble",788:"Basalt",800:"Slate",804:"CrackedLava",816:"Concrete",820:"Limestone",832:"Granite",836:"Pavement",848:"Brick",864:"Pebble",880:"Cobblestone",896:"Rock",912:"Sandstone",1040:"CorrodedMetal",1056:"DiamondPlate",1072:"Foil",1088:"Metal",1280:"Grass",1284:"LeafyGrass",1296:"Sand",1312:"Fabric",1328:"Snow",1344:"Mud",1360:"Ground",1376:"Asphalt",1392:"Salt",1536:"Ice",1552:"Glacier",1568:"Glass",1584:"ForceField",1792:"Air",2048:"Water",2304:"Cardboard",2305:"Carpet",2306:"CeramicTiles",2307:"ClayRoofTiles",2308:"RoofShingles",2309:"Leather",2310:"Plaster",2311:"Rubber"
-}
+# Não precisa mais de MATERIAL = {...} nem SURFACE = {...}
 
-SURFACE={0:"Smooth",1:"Glue",2:"Weld",3:"Studs",4:"Inlet",5:"Universal",6:"Hinge",7:"Motor"}
+ENUM_CACHE = {}
 
-def enum_value(prop,v):
-    if prop=="Material" and v in MATERIAL:
-        return "Enum.Material."+MATERIAL[v]
-    if prop in {"TopSurface","BottomSurface","LeftSurface","RightSurface","FrontSurface","BackSurface"} and v in SURFACE:
-        return "Enum.SurfaceType."+SURFACE[v]
-    return v
+def carregar_enums_roblox():
+    """
+    Recebe um JSON produzido pelo Roblox contendo:
+    {
+        "Material": {
+            "256": "Plastic",
+            "272": "SmoothPlastic"
+        },
+        "SurfaceType": {
+            "0": "Smooth",
+            "1": "Glue"
+        }
+    }
+    """
+    global ENUM_CACHE
+    ENUM_CACHE = {}
 
+    for enum_name, values in data.items():
+        ENUM_CACHE[enum_name] = {
+            int(value): name
+            for value, name in values.items()
+        }
+
+def enum_value(enum_name, value):
+    tabela = ENUM_CACHE.get(enum_name)
+
+    if tabela is None:
+        return value
+
+    nome = tabela.get(int(value))
+
+    if nome is None:
+        return value
+
+    return f"Enum.{enum_name}.{nome}"
+    
 def prop(t,b,p,n,name):
     if t==1:
         a=[]
