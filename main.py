@@ -568,12 +568,7 @@ def prop(t,b,p,n,name):
                     "Y":finite(y[i]),
                     "Z":finite(z[i])
                 },
-                "Rotation":{
-                    "X":finite(rotations[i]["X"]),
-                    "Y":finite(rotations[i]["Y"]),
-                    "Z":finite(rotations[i]["Z"]),
-                    "Rotation_ID":rotations[i]["Rotation_ID"]
-                }
+                "Rotation":rotations[i]
             })
         return resultado,p
     if t==0x12:
