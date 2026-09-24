@@ -495,53 +495,92 @@ def prop(t,b,p,n,name):
         z=floats(b[p:p+n*4],n);p+=n*4
         return [{"X":finite(x[i]),"Y":finite(y[i]),"Z":finite(z[i])} for i in range(n)],p
     if t == 0x10:
+        ROTATION_IDS = {
+            0x02:(0,0,0),
+            0x03:(90,0,0),
+            0x05:(0,180,180),
+            0x06:(-90,0,0),
+            0x07:(0,180,90),
+            0x09:(0,90,90),
+            0x0A:(0,0,90),
+            0x0C:(0,-90,90),
+            0x0D:(-90,-90,0),
+            0x0E:(0,-90,0),
+            0x10:(90,-90,0),
+            0x11:(0,90,180),
+            0x14:(0,180,0),
+            0x15:(-90,-180,0),
+            0x17:(0,0,180),
+            0x18:(90,180,0),
+            0x19:(0,0,-90),
+            0x1B:(0,-90,-90),
+            0x1C:(0,-180,-90),
+            0x1E:(0,90,-90),
+            0x1F:(90,90,0),
+            0x20:(0,90,0),
+            0x22:(-90,90,0),
+            0x23:(0,-90,180)
+        }
+
         rotations = []
+
         for _ in range(n):
             rot_id = b[p]
             p += 1
+
             if rot_id == 0:
-                vals = floats(b[p:p + 36], 9)
+                vals = floats(b[p:p+36],9)
                 p += 36
-                r00,r01,r02 = vals[0],vals[1],vals[2]
-                r10,r11,r12 = vals[3],vals[4],vals[5]
-                r20,r21,r22 = vals[6],vals[7],vals[8]
-                sy = math.sqrt(r00*r00 + r10*r10)
-                if sy > 1e-6:
-                    rx = math.atan2(r21,r22)
-                    ry = math.atan2(-r20,sy)
-                    rz = math.atan2(r10,r00)
-                else:
-                    rx = math.atan2(-r12,r11)
-                    ry = math.atan2(-r20,sy)
-                    rz = 0.0
+
                 rotations.append({
-                    "X": finite(math.degrees(rx)),
-                    "Y": finite(math.degrees(ry)),
-                    "Z": finite(math.degrees(rz))
+                    "R00":finite(vals[0]),
+                    "R01":finite(vals[1]),
+                    "R02":finite(vals[2]),
+                    "R10":finite(vals[3]),
+                    "R11":finite(vals[4]),
+                    "R12":finite(vals[5]),
+                    "R20":finite(vals[6]),
+                    "R21":finite(vals[7]),
+                    "R22":finite(vals[8])
                 })
+
             else:
+                rot = ROTATION_IDS.get(rot_id)
+
+                if rot is None:
+                    raise ValueError(
+                        "Rotation ID desconhecido: 0x%02X" % rot_id
+                    )
+
                 rotations.append({
-                    "X": 0,
-                    "Y": 0,
-                    "Z": 0,
-                    "rotation_id": rot_id,
+                    "X":rot[0],
+                    "Y":rot[1],
+                    "Z":rot[2]
                 })
+
         x = floats(b[p:p+n*4],n)
         p += n*4
+
         y = floats(b[p:p+n*4],n)
         p += n*4
+
         z = floats(b[p:p+n*4],n)
         p += n*4
+
         resultado = []
+
         for i in range(n):
+            rot = rotations[i]
+
             resultado.append({
-                "Position": {
-                    "X": finite(x[i]),
-                    "Y": finite(y[i]),
-                    "Z": finite(z[i])
+                "Position":{
+                    "X":finite(x[i]),
+                    "Y":finite(y[i]),
+                    "Z":finite(z[i])
                 },
-                "Rotation": rotations[i]
+                "Rotation":rot
             })
+
         return resultado,p
     if t==0x12:
         q=n*4;a=inter_u32(b[p:p+q],n)
