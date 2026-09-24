@@ -497,7 +497,7 @@ def prop(t,b,p,n,name):
     if t == 0x10:
         ROTATION_IDS = {
             0x02:(0,0,0),
-            0x03:(90,0,0),
+            0x03:(0,90,0),
             0x05:(0,180,180),
             0x06:(-90,0,0),
             0x07:(0,180,90),
@@ -517,7 +517,7 @@ def prop(t,b,p,n,name):
             0x1C:(0,-180,-90),
             0x1E:(0,90,-90),
             0x1F:(90,90,0),
-            0x20:(0,90,0),
+            0x20:(90,0,0),
             0x22:(-90,90,0),
             0x23:(0,-90,180)
         }
@@ -543,7 +543,8 @@ def prop(t,b,p,n,name):
                 rotations.append({
                     "X":finite(math.degrees(rx)),
                     "Y":finite(math.degrees(ry)),
-                    "Z":finite(math.degrees(rz))
+                    "Z":finite(math.degrees(rz)),
+                    "Rotation_ID":0
                 })
             else:
                 rot = ROTATION_IDS.get(rot_id)
@@ -554,7 +555,8 @@ def prop(t,b,p,n,name):
                 rotations.append({
                     "X":rot[0],
                     "Y":rot[1],
-                    "Z":rot[2]
+                    "Z":rot[2],
+                    "Rotation_ID":rot_id
                 })
         x = floats(b[p:p+n*4],n)
         p += n*4
@@ -573,7 +575,8 @@ def prop(t,b,p,n,name):
                 "Rotation":{
                     "X":finite(rotations[i]["X"]),
                     "Y":finite(rotations[i]["Y"]),
-                    "Z":finite(rotations[i]["Z"])
+                    "Z":finite(rotations[i]["Z"]),
+                    "Rotation_ID":rotations[i]["Rotation_ID"]
                 }
             })
         return resultado,p
