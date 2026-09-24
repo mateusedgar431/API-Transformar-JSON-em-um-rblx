@@ -548,14 +548,10 @@ def prop(t,b,p,n,name):
                 })
             else:
                 rot = ROTATION_IDS.get(rot_id)
-                if rot is None:
-                    raise ValueError(
-                        "Rotation ID desconhecido: 0x%02X" % rot_id
-                    )
                 rotations.append({
-                    "X":rot[0],
-                    "Y":rot[1],
-                    "Z":rot[2],
+                    "X":rot[i]["X"] or 0,
+                    "Y":rot[i]["Y"] or 0,
+                    "Z":rot[i]["Z"] or 0,
                     "Rotation_ID":rot_id
                 })
         x = floats(b[p:p+n*4],n)
