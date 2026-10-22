@@ -231,7 +231,7 @@ def processar_objetos_xml(TableData):
 
     return "\n".join(xml_output)
 
-def construir_rbxlx_completo(part_data_dict):
+def construir_rbxlx_completo(part_data_dict, terrain_data_dict):
     workspace_content = ""
     workspace_props = ""
     servicos_dados_finais = {
@@ -306,6 +306,8 @@ def construir_rbxlx_completo(part_data_dict):
 def publicar():
     try:
         dados_json = request.json
+        part_data = dados_json.get('PartData')
+        terrain_data = dados_json.get('TerrainData')
         api_key = request.headers.get('x-api-key')
         universe_id = request.headers.get('universe-id')
         place_id = request.headers.get('place-id')
@@ -313,8 +315,8 @@ def publicar():
         if not api_key or not universe_id or not place_id:
             return jsonify({"erro": "Headers obrigatorios faltando."}), 400
 
-        conteudo_rbxlx = construir_rbxlx_completo(dados_json)
-
+        conteudo_rbxlx = construir_rbxlx_completo(part_data, terrain_data)
+        
         url_roblox = f"https://apis.roblox.com/universes/v1/{universe_id}/places/{place_id}/versions?versionType=Published"
         headers_roblox = {
             "x-api-key": api_key,
