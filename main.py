@@ -231,6 +231,40 @@ def processar_objetos_xml(TableData):
 
     return "\n".join(xml_output)
 
+def processar_terrain_xml(terrain_data):
+    """Processa a lista de dados do Terrain (a, b, c, d, e) para o formato XML"""
+    if not terrain_data or not isinstance(terrain_data, list):
+        return ""
+    
+    # Aqui iteramos sobre cada operação de terreno salva no DataStore
+    operacoes_xml = ""
+    for item in terrain_data:
+        shape = item.get("a", "Block")
+        b_val = item.get("b", "")
+        c_val = item.get("c", "")
+        d_val = item.get("d", "")
+        e_val = item.get("e", "")
+        
+        # Você pode estruturar como cada formato de preenchimento será representado ou mapeado
+        # Exemplo de tratamento limpo para exportar no XML:
+        operacoes_xml += f'''
+        <TerrainRegion shape="{shape}">
+            <b value="{b_val}"/>
+            <c value="{c_val}"/>
+            <d value="{d_val}"/>
+            <e value="{e_val}"/>
+        </TerrainRegion>'''
+
+    return f'''
+    <Item class="Terrain" referent="RBX_TERRAIN">
+        <Properties>
+            <string name="Name">Terrain</string>
+            <bool name="CastShadow">true</bool>
+            <bool name="Decoration">true</bool>
+        </Properties>
+        {operacoes_xml}
+    </Item>'''
+
 def construir_rbxlx_completo(part_data_dict, terrain_data_dict):
     workspace_content = ""
     workspace_props = ""
@@ -269,6 +303,9 @@ def construir_rbxlx_completo(part_data_dict, terrain_data_dict):
 
     elif isinstance(part_data_dict, list):
         workspace_content = processar_objetos_xml(part_data_dict)
+
+    if terrain_data_dict:
+        workspace_content += processar_terrain_xml(terrain_data_dict)
 
     outros_servicos_list = []
     for s_nome, dados in servicos_dados_finais.items():
