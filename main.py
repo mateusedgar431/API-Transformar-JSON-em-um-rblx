@@ -264,8 +264,8 @@ def processar_terrain_xml(terrain_data):
     <Properties>
         <string name="Name">Terrain</string>
         <BinaryString name="MaterialColors">E\\u0018\\u0000\\u0001\\u0002\\u0000PROP0o~>XYV</BinaryString>
-        <BinaryString name="PhysicsGrid">{physics_grid}</BinaryString>
-        <BinaryString name="SmoothGrid">{smooth_grid}</BinaryString>
+        <BinaryString name="PhysicsGrid"></BinaryString>
+        <BinaryString name="SmoothGrid"></BinaryString>
     </Properties>
 </Item>'''
 
