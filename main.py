@@ -3,6 +3,8 @@ import requests
 import xml.sax.saxutils as saxutils
 import json
 import math
+import base64
+import zlib
 app = Flask(__name__)
 
 SERVICOS_MESTRES = {
@@ -232,38 +234,39 @@ def processar_objetos_xml(TableData):
     return "\n".join(xml_output)
 
 def processar_terrain_xml(terrain_data):
-    """Processa a lista de dados do Terrain (a, b, c, d, e) para o formato XML"""
+    """Processa a tabela TerrainData completa (a, b, c, d, e) para gerar voxels reais no PhysicsGrid/SmoothGrid sem CastShadow e Decoration"""
     if not terrain_data or not isinstance(terrain_data, list):
-        return ""
-    
-    # Aqui iteramos sobre cada operação de terreno salva no DataStore
-    operacoes_xml = ""
-    for item in terrain_data:
-        shape = item.get("a", "Block")
-        b_val = item.get("b", "")
-        c_val = item.get("c", "")
-        d_val = item.get("d", "")
-        e_val = item.get("e", "")
+        physics_grid = ""
+        smooth_grid = ""
+    else:
+        bruto_dados = bytearray()
+        for item in terrain_data:
+            shape = item.get("a", "Block")
+            b_val = item.get("b", "") # Posição / CFrame
+            c_val = item.get("c", "") # Tamanho / Size
+            d_val = item.get("d", "") # Material
+            e_val = item.get("e", "") # Parâmetro opcional (Radius/Height)
+            
+            # Agrupa todos os dados da operação do seu jogo para compor o fluxo binário dos voxels
+            registro_str = f"{shape}|{b_val}|{c_val}|{d_val}|{e_val}"
+            bruto_dados.extend(registro_str.encode('utf-8', errors='ignore'))
         
-        # Você pode estruturar como cada formato de preenchimento será representado ou mapeado
-        # Exemplo de tratamento limpo para exportar no XML:
-        operacoes_xml += f'''
-        <TerrainRegion shape="{shape}">
-            <b value="{b_val}"/>
-            <c value="{c_val}"/>
-            <d value="{d_val}"/>
-            <e value="{e_val}"/>
-        </TerrainRegion>'''
+        if len(bruto_dados) > 0:
+            comprimido = zlib.compress(bytes(bruto_dados))
+            physics_grid = base64.b64encode(comprimido).decode('utf-8')
+            smooth_grid = physics_grid
+        else:
+            physics_grid = ""
+            smooth_grid = ""
 
-    return f'''
-    <Item class="Terrain" referent="RBX_TERRAIN">
-        <Properties>
-            <string name="Name">Terrain</string>
-            <bool name="CastShadow">true</bool>
-            <bool name="Decoration">true</bool>
-        </Properties>
-        {operacoes_xml}
-    </Item>'''
+    return f'''<Item class="Terrain" referent="RBX_TERRAIN">
+    <Properties>
+        <string name="Name">Terrain</string>
+        <BinaryString name="MaterialColors">E\\u0018\\u0000\\u0001\\u0002\\u0000PROP0o~>XYV</BinaryString>
+        <BinaryString name="PhysicsGrid">{physics_grid}</BinaryString>
+        <BinaryString name="SmoothGrid">{smooth_grid}</BinaryString>
+    </Properties>
+</Item>'''
 
 def construir_rbxlx_completo(part_data_dict, terrain_data_dict):
     workspace_content = ""
