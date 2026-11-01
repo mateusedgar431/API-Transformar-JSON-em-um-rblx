@@ -234,21 +234,22 @@ def processar_objetos_xml(TableData):
     return "\n".join(xml_output)
 
 def processar_terrain_xml(terrain_data):
-    """Processa a tabela TerrainData completa (a, b, c, d, e) para gerar voxels reais no PhysicsGrid/SmoothGrid sem CastShadow e Decoration"""
+    """Processa com segurança a tabela TerrainData garantindo que as chaves a, b, c, d, e sejam lidas corretamente"""
     if not terrain_data or not isinstance(terrain_data, list):
         physics_grid = ""
         smooth_grid = ""
     else:
         bruto_dados = bytearray()
         for item in terrain_data:
+            # Garantindo a leitura exata de cada chave da sua tabela Lua/JSON
             shape = item.get("a", "Block")
-            b_val = item.get("b", "") # Posição / CFrame
-            c_val = item.get("c", "") # Tamanho / Size
-            d_val = item.get("d", "") # Material
-            e_val = item.get("e", "") # Parâmetro opcional (Radius/Height)
+            pos = item.get("b", "")
+            size = item.get("c", "")
+            material = item.get("d", "")
+            param = item.get("e", "")
             
-            # Agrupa todos os dados da operação do seu jogo para compor o fluxo binário dos voxels
-            registro_str = f"{shape}|{b_val}|{c_val}|{d_val}|{e_val}"
+            # Monta o registro concatenado de forma limpa
+            registro_str = f"{shape}:{pos}:{size}:{material}:{param};"
             bruto_dados.extend(registro_str.encode('utf-8', errors='ignore'))
         
         if len(bruto_dados) > 0:
