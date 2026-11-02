@@ -234,37 +234,27 @@ def processar_objetos_xml(TableData):
     return "\n".join(xml_output)
 
 def processar_terrain_xml(terrain_data):
-    """Processa com segurança a tabela TerrainData garantindo que as chaves a, b, c, d, e sejam lidas corretamente"""
-    if not terrain_data or not isinstance(terrain_data, list):
-        physics_grid = ""
-        smooth_grid = ""
-    else:
-        bruto_dados = bytearray()
-        for item in terrain_data:
-            # Garantindo a leitura exata de cada chave da sua tabela Lua/JSON
-            shape = item.get("a", "Block")
-            pos = item.get("b", "")
-            size = item.get("c", "")
-            material = item.get("d", "")
-            param = item.get("e", "")
-            
-            # Monta o registro concatenado de forma limpa
-            registro_str = f"{shape}:{pos}:{size}:{material}:{param};"
-            bruto_dados.extend(registro_str.encode('utf-8', errors='ignore'))
-        
-        if len(bruto_dados) > 0:
-            comprimido = zlib.compress(bytes(bruto_dados))
-            physics_grid = base64.b64encode(comprimido).decode('utf-8')
-            smooth_grid = physics_grid
-        else:
-            physics_grid = ""
-            smooth_grid = ""
+    """
+    Recebe as tabelas PhysicsGrid e SmoothGrid, 
+    transforma em string, compacta e gera o XML do Terrain.
+    """
+    # Pega as tabelas (listas) vindas do seu processo
+    physics_table = terrain_data.get("PhysicsGrid", [])
+    smooth_table = terrain_data.get("SmoothGrid", [])
+    
+    # 1. Transforma a tabela/lista em string (ex: unindo os elementos por vírgula ou espaço)
+    # Se os dados forem números ou bytes, ajustamos a junção:
+    physics_str = ",".join(str(x) for x in physics_table) if isinstance(physics_table, list) else str(physics_table)
+    smooth_str = ",".join(str(x) for x in smooth_table) if isinstance(smooth_table, list) else str(smooth_table)
+    
+    # 2. Transforma a string em binário compactado (zlib + base64) para a tag BinaryString
+    physics_grid = base64.b64encode(zlib.compress(physics_str.encode('utf-8'))).decode('utf-8') if physics_str else ""
+    smooth_grid = base64.b64encode(zlib.compress(smooth_str.encode('utf-8'))).decode('utf-8') if smooth_str else ""
 
     return f'''<Item class="Terrain" referent="RBX_TERRAIN">
     <Properties>
         <string name="Name">Terrain</string>
-        <BinaryString name="MaterialColors">E\\u0018\\u0000\\u0001\\u0002\\u0000PROP0o~>XYV</BinaryString>
-        <BinaryString name="PhysicsGrid"></BinaryString>
+        <BinaryString name="PhysicsGrid">{physics_grid}</BinaryString>
         <BinaryString name="SmoothGrid">{smooth_grid}</BinaryString>
     </Properties>
 </Item>'''
