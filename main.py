@@ -313,8 +313,8 @@ def construir_rbxlx_completo(part_data_dict, terrain_data_dict):
     elif isinstance(part_data_dict, list):
         workspace_content = processar_objetos_xml(part_data_dict)
 
-    if terrain_data_dict:
-        # workspace_content += processar_terrain_xml(terrain_data_dict)
+    # if terrain_data_dict:
+    # workspace_content += processar_terrain_xml(terrain_data_dict)
 
     outros_servicos_list = []
     for s_nome, dados in servicos_dados_finais.items():
