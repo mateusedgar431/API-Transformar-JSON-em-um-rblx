@@ -269,8 +269,8 @@ def processar_terrain_xml(terrain_data):
     <Properties>
         <string name="Name">Terrain</string>
         <BinaryString name="MaterialColors">E\\u0018\\u0000\\u0001\\u0002\\u0000PROP0o~>XYV</BinaryString>
-        <BinaryString name="PhysicsGrid"></BinaryString>
-        <BinaryString name="SmoothGrid"></BinaryString>
+        <BinaryString name="PhysicsGrid">{physics_grid}</BinaryString>
+        <BinaryString name="SmoothGrid">{smooth_grid}</BinaryString>
     </Properties>
 </Item>'''
 
@@ -314,7 +314,7 @@ def construir_rbxlx_completo(part_data_dict, terrain_data_dict):
         workspace_content = processar_objetos_xml(part_data_dict)
 
     if terrain_data_dict:
-        workspace_content += processar_terrain_xml(terrain_data_dict)
+        # workspace_content += processar_terrain_xml(terrain_data_dict)
 
     outros_servicos_list = []
     for s_nome, dados in servicos_dados_finais.items():
