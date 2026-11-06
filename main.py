@@ -287,7 +287,7 @@ for _, terraindata in pairs(TerrainData) do
         pcall(function() Terrain:FillBlock(b, c, d, e) end)
     end
 end
-print("Carregado Terrain! Data: "..TerrainData)
+print("Carregado Terrain! Data: ",#TerrainData)
 """
 
     return f'''<Item class="Script" referent="RBX_TerrainLoader">
