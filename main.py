@@ -275,7 +275,11 @@ local function parseValor(val)
             if number then
                 return number
             end
-            return Enum.Material[val]
+            local Material = tostring(val):split(".")
+            if #Material >= 3 then
+                return Enum.Material[val[3]]
+            end
+            return val
         end
     elseif type(val) == "number" then
         return val
