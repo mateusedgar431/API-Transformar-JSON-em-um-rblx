@@ -277,7 +277,7 @@ local function parseValor(val)
             end
             local Material = tostring(val):split(".")
             if #Material >= 3 then
-                return Enum.Material[val[3]]
+                return Enum.Material[Material[3]]
             end
             return val
         end
