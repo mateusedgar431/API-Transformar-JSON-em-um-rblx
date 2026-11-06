@@ -271,11 +271,7 @@ local function parseValor(val)
         elseif #numeros == 1 and val:match("^%d+$") then
             return tonumber(val)
         else
-            local matName = val:match("Enum%%.Material%%.(%w+)")
-            if matName and Enum.Material[matName] then
-                return Enum.Material[matName]
-            end
-            return val
+            return Enum.Material[val]
         end
     elseif type(val) == "number" then
         return val
