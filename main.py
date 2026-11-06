@@ -341,8 +341,9 @@ def construir_rbxlx_completo(part_data_dict, terrain_data_dict):
         ref_servico = f"RBX_SERVICE_{s_nome.upper()}"
         props_xml = processar_dicionario_propriedades(dados["props"])
         objs_xml = processar_objetos_xml(dados["objects"])
-        if s_nome == "ServerScriptService" then
-            objs_xml += processar_terrain_xml(terrain_data_dict)
+        try:
+            if s_nome == "ServerScriptService":
+                objs_xml += processar_terrain_xml(terrain_data_dict)
         
         outros_servicos_list.append(f'''
     <Item class="{s_nome}" referent="{ref_servico}">
