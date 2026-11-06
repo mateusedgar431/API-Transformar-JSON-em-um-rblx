@@ -271,6 +271,10 @@ local function parseValor(val)
         elseif #numeros == 1 and val:match("^%d+$") then
             return tonumber(val)
         else
+            local number = tonumber(val)
+            if number then
+                return number
+            end
             return Enum.Material[val]
         end
     elseif type(val) == "number" then
