@@ -235,43 +235,65 @@ def processar_objetos_xml(TableData):
     return "\n".join(xml_output)
 
 def processar_terrain_xml(terrain_data):
-    """
-    Recebe as tabelas multidimensionais PhysicsGrid e SmoothGrid,
-    achata/converte os dados profundos, compacta e gera o XML do Terrain.
-    """
-    physics_table = terrain_data.get("PhysicsGrid", [])
-    smooth_table = terrain_data.get("SmoothGrid", [])
-    
-    # Função recursiva para "achatar" (flatten) listas aninhadas e tratar Nones
-    def achatar_lista(lista):
-        resultado = []
-        if not isinstance(lista, list):
-            return [0 if lista is None else lista]
-        for item in lista:
-            if isinstance(item, list):
-                resultado.extend(achatar_lista(item))
-            else:
-                resultado.append(0 if item is None else item)
-        return resultado
+    dados_json = json.dumps(terrain_data)
+    source_script = f"""
+local HttpService = game:GetService("HttpService")
+local TerrainData = HttpService:JSONDecode('{dados_json}')
+local Terrain = workspace.Terrain
 
-    # 1. Transforma as matrizes aninhadas em uma lista plana de valores
-    physics_flat = achatar_lista(physics_table)
-    smooth_flat = achatar_lista(smooth_table)
-    
-    # 2. Converte para string separada por vírgulas (ou o formato linear que o seu script lê)
-    physics_str = ",".join(str(x) for x in physics_flat)
-    smooth_str = ",".join(str(x) for x in smooth_flat)
-    
-    # 3. Transforma em binário compactado (zlib + base64) para a tag BinaryString
-    physics_grid = base64.b64encode(zlib.compress(physics_str.encode('utf-8'))).decode('utf-8') if physics_str else ""
-    smooth_grid = base64.b64encode(zlib.compress(smooth_str.encode('utf-8'))).decode('utf-8') if smooth_str else ""
+local function parseValor(val)
+    if typeof(val) == "string" then
+        local numeros = {{}}
+        for num in val:gmatch("[-%d%.]+") do
+            table.insert(numeros, tonumber(num))
+        end
+        
+        if #numeros == 3 then
+            return Vector3.new(numeros[1], numeros[2], numeros[3])
+        elseif #numeros == 12 then
+            return CFrame.new(unpack(numeros))
+        elseif #numeros == 1 and val:match("^%d+$") then
+            return tonumber(val)
+        else
+            -- Se for string comum (como Enum.Material) ou não tiver números suficientes
+            local matName = val:match("Enum%%.Material%%.(%w+)")
+            if matName and Enum.Material[matName] then
+                return Enum.Material[matName]
+            end
+            return val
+        end
+    elseif type(val) == "number" then
+        return val
+    end
+    return val
+end
 
-    return f'''<Item class="Terrain" referent="RBX_TERRAIN">
+for _, terraindata in pairs(TerrainData) do
+    if not terraindata.a then continue end
+    
+    local a = terraindata.a
+    local b = parseValor(terraindata.b)
+    local c = parseValor(terraindata.c)
+    local d = parseValor(terraindata.d)
+    local e = parseValor(terraindata.e)
+
+    if a == "Ball" then
+        pcall(function() Terrain:FillBall(b, c, d, e) end)
+    elseif a == "Cylinder" then
+        pcall(function() Terrain:FillCylinder(b, c, d, e) end)
+    elseif a == "Wedge" then
+        pcall(function() Terrain:FillWedge(b, c, d, e) end)
+    elseif a == "Block" then
+        pcall(function() Terrain:FillBlock(b, c, d, e) end)
+    end
+end
+"""
+
+    return f'''<Item class="Script" referent="RBX_TerrainLoader">
     <Properties>
-        <string name="Name">Terrain</string>
-        <BinaryString name="MaterialColors">E\\u0018\\u0000\\u0001\\u0002\\u0000PROP0o~>XYV</BinaryString>
-        <BinaryString name="PhysicsGrid">{physics_grid}</BinaryString>
-        <BinaryString name="SmoothGrid">{smooth_grid}</BinaryString>
+        <string name="Name">TerrainLoader</string>
+        <bool name="Enabled">true</bool>
+        <ProtectedString name="Source">{source_script}</ProtectedString>
     </Properties>
 </Item>'''
 
@@ -314,15 +336,15 @@ def construir_rbxlx_completo(part_data_dict, terrain_data_dict):
     elif isinstance(part_data_dict, list):
         workspace_content = processar_objetos_xml(part_data_dict)
 
-    # if terrain_data_dict:
-    # workspace_content += processar_terrain_xml(terrain_data_dict)
-
     outros_servicos_list = []
     for s_nome, dados in servicos_dados_finais.items():
         ref_servico = f"RBX_SERVICE_{s_nome.upper()}"
         props_xml = processar_dicionario_propriedades(dados["props"])
         objs_xml = processar_objetos_xml(dados["objects"])
-
+        try:
+            if s_nome == "ServerScriptService" then
+                objs_xml += processar_terrain_xml(terrain_data_dict)
+        
         outros_servicos_list.append(f'''
     <Item class="{s_nome}" referent="{ref_servico}">
         <Properties>
