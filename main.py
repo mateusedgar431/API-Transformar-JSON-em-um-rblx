@@ -235,11 +235,27 @@ def processar_objetos_xml(TableData):
     return "\n".join(xml_output)
 
 def processar_terrain_xml(terrain_data):
+    import json
     dados_json = json.dumps(terrain_data)
+    
     source_script = f"""
+task.wait(1) -- Aguarda o Workspace e o Terrain carregarem completamente
+
 local HttpService = game:GetService("HttpService")
-local TerrainData = HttpService:JSONDecode('{dados_json}')
-local Terrain = workspace.Terrain
+local success, TerrainData = pcall(function()
+    return HttpService:JSONDecode('{dados_json}')
+end)
+
+if not success or not TerrainData then
+    warn("Erro ao decodificar JSON do TerrainData:", TerrainData)
+    return
+end
+
+local Terrain = workspace:FindFirstChildOfClass("Terrain")
+if not Terrain then
+    warn("Terrain não encontrado no Workspace!")
+    return
+end
 
 local function parseValor(val)
     if typeof(val) == "string" then
@@ -255,7 +271,6 @@ local function parseValor(val)
         elseif #numeros == 1 and val:match("^%d+$") then
             return tonumber(val)
         else
-            -- Se for string comum (como Enum.Material) ou não tiver números suficientes
             local matName = val:match("Enum%%.Material%%.(%w+)")
             if matName and Enum.Material[matName] then
                 return Enum.Material[matName]
@@ -278,16 +293,17 @@ for _, terraindata in pairs(TerrainData) do
     local e = parseValor(terraindata.e)
 
     if a == "Ball" then
-        pcall(function() Terrain:FillBall(b, c, d, e) end)
+        Terrain:FillBall(b, c, d, e)
     elseif a == "Cylinder" then
-        pcall(function() Terrain:FillCylinder(b, c, d, e) end)
+        Terrain:FillCylinder(b, c, d, e)
     elseif a == "Wedge" then
-        pcall(function() Terrain:FillWedge(b, c, d, e) end)
+        Terrain:FillWedge(b, c, d, e)
     elseif a == "Block" then
-        pcall(function() Terrain:FillBlock(b, c, d, e) end)
+        Terrain:FillBlock(b, c, d, e)
     end
 end
-print("Carregado Terrain! Data: ",#TerrainData)
+
+print("Terrain gerado com sucesso! Total de itens:", #TerrainData)
 """
 
     return f'''<Item class="Script" referent="RBX_TerrainLoader">
