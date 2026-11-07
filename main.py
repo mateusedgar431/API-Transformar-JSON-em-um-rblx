@@ -200,7 +200,6 @@ def processar_dicionario_propriedades(props_dict):
     return "\n".join(xml_props)
 
 def gerar_material_colors_customizado(cores_dict):
-    cabecalho = ""
     bytes_cores = bytearray()
     
     for material, rgb in cores_dict.items():
@@ -209,7 +208,7 @@ def gerar_material_colors_customizado(cores_dict):
         b = float(rgb['b']) / 255.0
         bytes_cores.extend(struct.pack('<fff', r, g, b))
     
-    return base64.b64encode(cabecalho + bytes_cores).decode('utf-8')
+    return base64.b64encode(bytes_cores).decode('utf-8')
 
 def processar_objetos_xml(TableData):
     xml_output = []
