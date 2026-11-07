@@ -199,15 +199,26 @@ def processar_dicionario_propriedades(props_dict):
             xml_props.append(f"            {no_xml}")
     return "\n".join(xml_props)
 
+import struct
+import base64
+
 def gerar_material_colors_customizado(cores_dict):
     bytes_cores = bytearray()
     
-    for material, rgb in cores_dict.items():
+    ordem_materiais = [
+        "WoodPlanks", "Basalt", "Slate", "CrackedLava", "Concrete", 
+        "Limestone", "Pavement", "Brick", "Cobblestone", "Rock", 
+        "Sandstone", "Grass", "LeafyGrass", "Sand", "Snow", 
+        "Mud", "Ground", "Asphalt", "Salt", "Ice", "Glacier"
+    ]
+    
+    for material in ordem_materiais:
+        rgb = cores_dict.get(material, {"r": 255, "g": 255, "b": 255})
         r = float(rgb['r']) / 255.0
         g = float(rgb['g']) / 255.0
         b = float(rgb['b']) / 255.0
-        bytes_cores.extend(struct.pack('<fff', r, g, b))
-    
+        bytes_cores.extend(struct.pack('<ffff', r, g, b, 1.0))
+        
     return base64.b64encode(bytes_cores).decode('utf-8')
 
 def processar_objetos_xml(TableData):
