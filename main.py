@@ -306,8 +306,6 @@ for _, terraindata in pairs(TerrainData) do
         Terrain:FillBlock(b, c, d, e)
     end
 end
-
-print("Terrain gerado com sucesso! Total de itens:", #TerrainData)
 """
 
     return f'''<Item class="Script" referent="RBX_TerrainLoader">
