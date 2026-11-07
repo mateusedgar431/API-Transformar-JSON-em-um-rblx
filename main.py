@@ -200,7 +200,7 @@ def processar_dicionario_propriedades(props_dict):
     return "\n".join(xml_props)
 
 def gerar_material_colors_customizado(cores_dict):
-    cabecalho = b"E\x18\x00\x01\x02\x00PROP"
+    cabecalho = ""
     bytes_cores = bytearray()
     
     for material, rgb in cores_dict.items():
