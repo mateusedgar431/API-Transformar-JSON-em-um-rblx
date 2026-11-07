@@ -200,7 +200,6 @@ def processar_dicionario_propriedades(props_dict):
     return "\n".join(xml_props)
 
 def gerar_material_colors_customizado(cores_dict):
-    cabecalho = b"E\x18\x00\x01\x02\x00PROP"
     bytes_cores = bytearray()
     
     ordem_materiais = [
@@ -215,12 +214,11 @@ def gerar_material_colors_customizado(cores_dict):
         r = float(rgb['r']) / 255.0
         g = float(rgb['g']) / 255.0
         b = float(rgb['b']) / 255.0
+        
+        # Empacota em 4 floats por material mantendo a ordem correta
         bytes_cores.extend(struct.pack('<ffff', r, g, b, 1.0))
-    
-    # O Roblox precisa do tamanho total dos dados logo após o cabeçalho (geralmente um inteiro de 4 bytes)
-    tamanho_dados = struct.pack('<I', len(bytes_cores))
-    
-    return base64.b64encode(cabecalho + tamanho_dados + bytes_cores).decode('utf-8')
+        
+    return base64.b64encode(bytes_cores).decode('utf-8')
 
 def processar_objetos_xml(TableData):
     xml_output = []
