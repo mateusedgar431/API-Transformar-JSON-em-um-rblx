@@ -5,6 +5,7 @@ import json
 import math
 import base64
 import zlib
+import struct
 app = Flask(__name__)
 
 SERVICOS_MESTRES = {
@@ -198,6 +199,18 @@ def processar_dicionario_propriedades(props_dict):
             xml_props.append(f"            {no_xml}")
     return "\n".join(xml_props)
 
+def gerar_material_colors_customizado(cores_dict):
+    cabecalho = b"E\x18\x00\x01\x02\x00PROP"
+    bytes_cores = bytearray()
+    
+    for material, rgb in cores_dict.items():
+        r = float(rgb['r']) / 255.0
+        g = float(rgb['g']) / 255.0
+        b = float(rgb['b']) / 255.0
+        bytes_cores.extend(struct.pack('<fff', r, g, b))
+    
+    return base64.b64encode(cabecalho + bytes_cores).decode('utf-8')
+
 def processar_objetos_xml(TableData):
     xml_output = []
     if isinstance(TableData, list):
@@ -215,17 +228,6 @@ def processar_objetos_xml(TableData):
 
                 ref_id = f"RBX_OBJ_{idx}_{abs(hash(obj_name))}"
                 if class_name == "Terrain":
-                    def gerar_material_colors_customizado(cores_dict):
-                        cabecalho = b"E\x18\x00\x01\x02\x00PROP"
-                        bytes_cores = bytearray()
-    
-                        for material, rgb in cores_dict.items():
-                            bytes_cores.append(rgb['r']/255)
-                            bytes_cores.append(rgb['g']/255)
-                            bytes_cores.append(rgb['b']/255)
-    
-                        return base64.b64encode(cabecalho + bytes_cores).decode('utf-8')
-
                     material_colors = {
                         "WoodPlanks": {"r": 172, "g": 148, "b": 108},
                         "Basalt": {"r": 75, "g": 74, "b": 74},
