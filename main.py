@@ -220,9 +220,9 @@ def processar_objetos_xml(TableData):
                         bytes_cores = bytearray()
     
                         for material, rgb in cores_dict.items():
-                            bytes_cores.append(rgb['r'])
-                            bytes_cores.append(rgb['g'])
-                            bytes_cores.append(rgb['b'])
+                            bytes_cores.append(rgb['r']) / 255.0
+                            bytes_cores.append(rgb['g']) / 255.0
+                            bytes_cores.append(rgb['b']) / 255.0
     
                         return base64.b64encode(cabecalho + bytes_cores).decode('utf-8')
 
