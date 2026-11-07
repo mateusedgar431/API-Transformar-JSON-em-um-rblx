@@ -200,11 +200,9 @@ def processar_dicionario_propriedades(props_dict):
     return "\n".join(xml_props)
 
 def gerar_material_colors_customizado(cores_dict):
-    # Cabeçalho obrigatório do Roblox para blocos de propriedades binárias (PROP)
     cabecalho = b"E\x18\x00\x01\x02\x00PROP"
     bytes_cores = bytearray()
     
-    # Ordem exata dos Enums de materiais do Terrain no Roblox
     ordem_materiais = [
         "WoodPlanks", "Basalt", "Slate", "CrackedLava", "Concrete", 
         "Limestone", "Pavement", "Brick", "Cobblestone", "Rock", 
@@ -217,11 +215,12 @@ def gerar_material_colors_customizado(cores_dict):
         r = float(rgb['r']) / 255.0
         g = float(rgb['g']) / 255.0
         b = float(rgb['b']) / 255.0
-        
-        # Cada material usa 4 floats (R, G, B, Alpha=1.0) em little-endian
         bytes_cores.extend(struct.pack('<ffff', r, g, b, 1.0))
-        
-    return base64.b64encode(cabecalho + bytes_cores).decode('utf-8')
+    
+    # O Roblox precisa do tamanho total dos dados logo após o cabeçalho (geralmente um inteiro de 4 bytes)
+    tamanho_dados = struct.pack('<I', len(bytes_cores))
+    
+    return base64.b64encode(cabecalho + tamanho_dados + bytes_cores).decode('utf-8')
 
 def processar_objetos_xml(TableData):
     xml_output = []
