@@ -214,8 +214,48 @@ def processar_objetos_xml(TableData):
                 obj_name = props.get("Name", f"Object_{idx}")
 
                 ref_id = f"RBX_OBJ_{idx}_{abs(hash(obj_name))}"
+                if class_name == "Terrain":
+                    def gerar_material_colors_customizado(cores_dict):
+                        cabecalho = b"E\x18\x00\x01\x02\x00PROP"
+                        bytes_cores = bytearray()
+    
+                        for material, rgb in cores_dict.items():
+                            bytes_cores.append(rgb['r'])
+                            bytes_cores.append(rgb['g'])
+                            bytes_cores.append(rgb['b'])
+    
+                        return base64.b64encode(cabecalho + bytes_cores).decode('utf-8')
 
-                item_str = f'<Item class="{class_name}" referent="{ref_id}">\n  <Properties>\n    <string name="Name">{saxutils.escape(str(obj_name))}</string>'
+                    material_colors = {
+                        "WoodPlanks": {"r": 172, "g": 148, "b": 108},
+                        "Basalt": {"r": 75, "g": 74, "b": 74},
+                        "Slate": {"r": 88, "g": 89, "b": 86},
+                        "CrackedLava": {"r": 255, "g": 24, "b": 67},
+                        "Concrete": {"r": 152, "g": 152, "b": 152},
+                        "Limestone": {"r": 255, "g": 243, "b": 192},
+                        "Pavement": {"r": 143, "g": 144, "b": 135},
+                        "Brick": {"r": 138, "g": 97, "b": 73},
+                        "Cobblestone": {"r": 134, "g": 134, "b": 118},
+                        "Rock": {"r": 99, "g": 100, "b": 102},
+                        "Sandstone": {"r": 148, "g": 124, "b": 95},
+                        "Grass": {"r": 111, "g": 126, "b": 62},
+                        "LeafyGrass": {"r": 106, "g": 134, "b": 64},
+                        "Sand": {"r": 207, "g": 203, "b": 167},
+                        "Snow": {"r": 235, "g": 253, "b": 255},
+                        "Mud": {"r": 121, "g": 112, "b": 98},
+                        "Ground": {"r": 140, "g": 130, "b": 104},
+                        "Asphalt": {"r": 80, "g": 84, "b": 84},
+                        "Salt": {"r": 255, "g": 255, "b": 254},
+                        "Ice": {"r": 204, "g": 210, "b": 223},
+                        "Glacier": {"r": 221, "g": 228, "b": 229}
+                    }
+
+                    material_colors_base64 = gerar_material_colors_customizado(material_colors)
+
+                    item_str = f'<Item class="{class_name}" referent="{ref_id}">\n  <Properties>\n    <string name="Name">{saxutils.escape(str(obj_name))}</string>\n    <BinaryString name="MaterialColors">{material_colors_base64}</BinaryString>'
+                else
+                    item_str = f'<Item class="{class_name}" referent="{ref_id}">\n. <Properties>\n    <string name="Name">{saxutils.escape(str(obj_name))}</string>'
+                
                 props_xml = processar_dicionario_propriedades(props)
                 if props_xml:
                     item_str += f"\n{props_xml}"
