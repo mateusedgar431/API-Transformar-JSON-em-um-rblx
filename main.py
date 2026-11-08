@@ -282,6 +282,7 @@ def processar_terrain_xml(terrain_data):
     "Ice": {"r": 204, "g": 210, "b": 223},
     "Glacier": {"r": 221, "g": 228, "b": 229}
     }
+    material_colors_json = json.dumps(material_colors)
     source_script = f"""
 task.wait(1) -- Aguarda o Workspace e o Terrain carregarem completamente
 
@@ -294,7 +295,7 @@ if not success or not TerrainData then
     return
 end
 local success2, TerrainColor = pcall(function()
-    return HttpService:JSONDecode('{material_colors}')
+    return HttpService:JSONDecode('{material_colors_json}')
 end)
 if not success2 then
     warn("Erro ao decodificar JSON do TerrainColor:", TerrainColor)
