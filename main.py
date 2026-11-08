@@ -355,7 +355,7 @@ for _, terraincolor in pairs(Enum.Material:GetEnumItems()) do
     local matName = tostring(terraincolor.Name)
     local rgb = TerrainColor[matName]
     if rgb then
-        Terrain:SetMaterialColors(terraincolor, Color3.fromRGB(rgb.r, rgb.g, rgb.b))
+        Terrain:SetMaterialColor(terraincolor, Color3.fromRGB(rgb.r, rgb.g, rgb.b))
     end
 end
 """
