@@ -257,7 +257,7 @@ def processar_objetos_xml(TableData):
                         "Glacier": {"r": 221, "g": 228, "b": 229}
                     }
 
-                    material_colors_base64 = f'E�π0o~>XYVaIΟΛ§¬”lcdfέδελύ”|_ypbKJJ‚hCPTT††vΜίj†@ώσΐ‡' #gerar_material_colors_customizado(material_colors)
+                    material_colors_base64 = f'π0o~>XYVaIΟΛ§¬”lcdfέδελύ�”|_ypbKJJ‚h�CPTT††vΜ�ίj†@��ώ�σΐ' #gerar_material_colors_customizado(material_colors)
 
                     item_str = f'<Item class="{class_name}" referent="{ref_id}">\n  <Properties>\n    <string name="Name">{saxutils.escape(str(obj_name))}</string>\n    <BinaryString name="MaterialColors">{material_colors_base64}</BinaryString>'
                 else:
