@@ -257,32 +257,9 @@ def processar_objetos_xml(TableData):
 
     return "\n".join(xml_output)
 
-def processar_terrain_xml(terrain_data):
+def processar_terrain_xml(terrain_data, terrain_material_color):
     dados_json = json.dumps(terrain_data)
-    material_colors = {
-    "WoodPlanks": {"r": 172, "g": 148, "b": 108},
-    "Basalt": {"r": 75, "g": 74, "b": 74},
-    "Slate": {"r": 88, "g": 89, "b": 86},
-    "CrackedLava": {"r": 255, "g": 24, "b": 67},
-    "Concrete": {"r": 152, "g": 152, "b": 152},
-    "Limestone": {"r": 255, "g": 243, "b": 192},
-    "Pavement": {"r": 143, "g": 144, "b": 135},
-    "Brick": {"r": 138, "g": 97, "b": 73},
-    "Cobblestone": {"r": 134, "g": 134, "b": 118},
-    "Rock": {"r": 99, "g": 100, "b": 102},
-    "Sandstone": {"r": 148, "g": 124, "b": 95},
-    "Grass": {"r": 111, "g": 126, "b": 62},
-    "LeafyGrass": {"r": 106, "g": 134, "b": 64},
-    "Sand": {"r": 207, "g": 203, "b": 167},
-    "Snow": {"r": 235, "g": 253, "b": 255},
-    "Mud": {"r": 121, "g": 112, "b": 98},
-    "Ground": {"r": 140, "g": 130, "b": 104},
-    "Asphalt": {"r": 80, "g": 84, "b": 84},
-    "Salt": {"r": 255, "g": 255, "b": 254},
-    "Ice": {"r": 204, "g": 210, "b": 223},
-    "Glacier": {"r": 221, "g": 228, "b": 229}
-    }
-    material_colors_json = json.dumps(material_colors)
+    material_colors_json = json.dumps(terrain_material_color)
     source_script = f"""
 task.wait(1) -- Aguarda o Workspace e o Terrain carregarem completamente
 
@@ -355,7 +332,7 @@ for _, terraincolor in pairs(Enum.Material:GetEnumItems()) do
     local matName = tostring(terraincolor.Name)
     local rgb = TerrainColor[matName]
     if rgb then
-        Terrain:SetMaterialColor(terraincolor, Color3.fromRGB(rgb.r, rgb.g, rgb.b))
+        Terrain:SetMaterialColor(terraincolor, Color3.fromRGB(rgb.R, rgb.G, rgb.B))
     end
 end
 """
@@ -368,7 +345,7 @@ end
     </Properties>
 </Item>'''
 
-def construir_rbxlx_completo(part_data_dict, terrain_data_dict):
+def construir_rbxlx_completo(part_data_dict, terrain_data_dict, terrain_material_color_dict):
     workspace_content = ""
     workspace_props = ""
     servicos_dados_finais = {
@@ -413,7 +390,7 @@ def construir_rbxlx_completo(part_data_dict, terrain_data_dict):
         props_xml = processar_dicionario_propriedades(dados["props"])
         objs_xml = processar_objetos_xml(dados["objects"])
         if s_nome == "ServerScriptService":
-            objs_xml += processar_terrain_xml(terrain_data_dict)
+            objs_xml += processar_terrain_xml(terrain_data_dict, terrain_material_color_dict)
         
         outros_servicos_list.append(f'''
     <Item class="{s_nome}" referent="{ref_servico}">
@@ -450,11 +427,11 @@ def publicar():
         api_key = request.headers.get('x-api-key')
         universe_id = request.headers.get('universe-id')
         place_id = request.headers.get('place-id')
-
+        terrain_material_color = dados_json.get('TerrainMaterialColor')
         if not api_key or not universe_id or not place_id:
             return jsonify({"erro": "Headers obrigatorios faltando."}), 400
 
-        conteudo_rbxlx = construir_rbxlx_completo(part_data, terrain_data)
+        conteudo_rbxlx = construir_rbxlx_completo(part_data, terrain_data, terrain_material_color)
         
         url_roblox = f"https://apis.roblox.com/universes/v1/{universe_id}/places/{place_id}/versions?versionType=Published"
         headers_roblox = {
