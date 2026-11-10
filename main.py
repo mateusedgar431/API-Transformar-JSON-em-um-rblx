@@ -462,10 +462,12 @@ def GetGames():
             universeId = jogo.get('id')
             nome = jogo.get('name')
 
-            # Pega TODAS as places desse universe
-            cursor = ''
+            cursor = None
             while True:
-                url = f'https://apis.roblox.com/universes/v1/{universeId}/places?limit=100&cursor={cursor}'
+                url = f'https://apis.roblox.com/universes/v1/{universeId}/places'
+                if cursor:
+                    url += f'?cursor={cursor}'
+
                 pr = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}).json()
 
                 for p in pr.get('data', []):
