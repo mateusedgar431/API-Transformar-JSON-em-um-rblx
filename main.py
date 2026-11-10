@@ -459,17 +459,27 @@ def GetGames():
 
         jogos = []
         for jogo in r.get('data', []):
-            root = jogo.get('rootPlace') or {}
-            creator = jogo.get('creator') or {}
-            jogos.append({
-                'name': jogo.get('name'),
-                'placeId': root.get('id'),
-                'universeId': jogo.get('id'),
-                'creator': creator.get('name')
-            })
+            universeId = jogo.get('id')
+            nome = jogo.get('name')
+
+            # Pega TODAS as places desse universe
+            cursor = ''
+            while True:
+                url = f'https://apis.roblox.com/universes/v1/{universeId}/places?limit=100&cursor={cursor}'
+                pr = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}).json()
+
+                for p in pr.get('data', []):
+                    jogos.append({
+                        'name': p.get('name') or nome,
+                        'universeId': universeId,
+                        'placeId': p.get('id')
+                    })
+
+                cursor = pr.get('nextPageCursor')
+                if not cursor:
+                    break
 
         return jsonify(jogos)
-
     except Exception as e:
         return jsonify({'erro': str(e)}), 500
 
