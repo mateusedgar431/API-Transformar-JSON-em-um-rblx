@@ -453,31 +453,23 @@ def GetGames():
             return jsonify({'erro': 'manda ?userId=123'}), 400
 
         headers = {'User-Agent': 'Mozilla/5.0'}
+
+        r = requests.get(
+            f'https://games.roblox.com/v2/users/{userId}/games',
+            headers=headers
+        ).json()
+
         jogos = []
-        vistos = set()
+        for jogo in r.get('data', []):
+            root = jogo.get('rootPlace') or {}
+            if not root.get('id'):
+                continue
 
-        # 1 = Privado, 2 = Publico - mesma API, 2 vezes, sem limit e sem sortOrder
-        for filtro in ['1', '2']:
-            r = requests.get(
-                f'https://games.roblox.com/v2/users/{userId}/games?accessFilter={filtro}',
-                headers=headers
-            ).json()
-
-            for jogo in r.get('data', []):
-                universeId = jogo.get('id')
-                if universeId in vistos:
-                    continue
-                vistos.add(universeId)
-
-                root = jogo.get('rootPlace') or {}
-                if not root.get('id'):
-                    continue
-
-                jogos.append({
-                    'name': jogo.get('name'),
-                    'universeId': universeId,
-                    'placeId': root.get('id')
-                })
+            jogos.append({
+                'name': jogo.get('name'),
+                'universeId': jogo.get('id'),
+                'placeId': root.get('id')
+            })
 
         return jsonify(jogos)
     except Exception as e:
