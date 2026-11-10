@@ -452,26 +452,27 @@ def GetGames():
         if not userId:
             return jsonify({'erro': 'manda ?userId=123'}), 400
 
-        g = requests.get(
+        r = requests.get(
             f'https://games.roblox.com/v2/users/{userId}/games',
             headers={'User-Agent': 'Mozilla/5.0'}
         ).json()
 
         jogos = []
-        for jogo in g.get('data', []):
+        for jogo in r.get('data', []):
+            root = jogo.get('rootPlace') or {}
+            creator = jogo.get('creator') or {}
             jogos.append({
-                'name': jogo['name'],
-                'placeId': jogo['rootPlace']['id'],
-                'universeId': jogo['id'],
-                'creator': jogo['creator']['name'],
-                'playing': jogo['placeVisits']
+                'name': jogo.get('name'),
+                'placeId': root.get('id'),
+                'universeId': jogo.get('id'),
+                'creator': creator.get('name')
             })
 
         return jsonify(jogos)
 
     except Exception as e:
         return jsonify({'erro': str(e)}), 500
-        
+
 import os
 import lz4.block
 
