@@ -452,34 +452,32 @@ def GetGames():
         if not userId:
             return jsonify({'erro': 'manda ?userId=123'}), 400
 
-        r = requests.get(
-            f'https://games.roblox.com/v2/users/{userId}/games',
-            headers={'User-Agent': 'Mozilla/5.0'}
-        ).json()
-
+        headers = {'User-Agent': 'Mozilla/5.0'}
         jogos = []
-        for jogo in r.get('data', []):
-            universeId = jogo.get('id')
-            nome = jogo.get('name')
+        vistos = set()
 
-            cursor = None
-            while True:
-                url = f'https://apis.roblox.com/universes/v1/{universeId}/places'
-                if cursor:
-                    url += f'?cursor={cursor}'
+        # 1 = Privado, 2 = Publico - mesma API, 2 vezes, sem limit e sem sortOrder
+        for filtro in ['1', '2']:
+            r = requests.get(
+                f'https://games.roblox.com/v2/users/{userId}/games?accessFilter={filtro}',
+                headers=headers
+            ).json()
 
-                pr = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}).json()
+            for jogo in r.get('data', []):
+                universeId = jogo.get('id')
+                if universeId in vistos:
+                    continue
+                vistos.add(universeId)
 
-                for p in pr.get('data', []):
-                    jogos.append({
-                        'name': p.get('name') or nome,
-                        'universeId': universeId,
-                        'placeId': p.get('id')
-                    })
+                root = jogo.get('rootPlace') or {}
+                if not root.get('id'):
+                    continue
 
-                cursor = pr.get('nextPageCursor')
-                if not cursor:
-                    break
+                jogos.append({
+                    'name': jogo.get('name'),
+                    'universeId': universeId,
+                    'placeId': root.get('id')
+                })
 
         return jsonify(jogos)
     except Exception as e:
