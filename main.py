@@ -25,7 +25,7 @@ SERVICOS_MESTRES = {
 
 # Lista de propriedades que o Roblox exige estritamente como <bool>
 PROPRIEDADES_BOOLEANAS = {
-    "IgnoreGuiInset", "Enabled", "Visible", "ResetOnSpawn", "Archivable",
+    "IgnoreGuilnset", "Enabled", "Visible", "ResetOnSpawn", "Archivable",
     "Anchored", "CanCollide", "CanTouch", "CanQuery", "CastShadow",
     "Massless", "Locked", "ClipToDeviceSafeArea", "ClipsDescendants",
     "Active", "AutoButtonColor", "Selected", "RichText", "TextScaled",
