@@ -165,6 +165,10 @@ def tratar_propriedade_individual(nome_prop, valor):
     # 3. DICIONÁRIOS / TABELAS (UDim, UDim2, Vector3, Color3, Enums em Tabela)
     if isinstance(valor, dict):
         # Enum vindo em formato de tabela Luau {EnumType = ..., Name = "Sensor"}
+        if valor.get("Type") == "Enum" and valor.get("ID") is not None:
+            value_enum = valor.get("ID")
+            return f'<token name="{nome_prop}">{value_enum}</token>'
+
         if "Name" in valor:
             nome_enum = str(valor["Name"]).strip()
             if nome_enum in MAPA_ENUM_NUMERICO:
