@@ -71,19 +71,16 @@ PROPRIEDADES_BOOLEANAS = {
 # Tabela expandida de Tokens Enum oficiais do Roblox
 MAPA_ENUM_NUMERICO = {
     # ScreenOrientation (StarterGui / ScreenGui)
-    "LandscapeLeft": 0,
-    "LandscapeRight": 1,
-    "LandscapeSensor": 2,
-    "Portrait": 3,
-    "Sensor": 4,
+    "LandscapeLeft": 0, "LandscapeRight": 1, "LandscapeSensor": 2, "Portrait": 3, "Sensor": 4,
 
+    # ScreenInsets
+    "None": 0, "DeviceSafeInsets": 1, "CoreUISafeInsets": 2, "TopbarSafeInsets": 3,
+    
+    # SafeAreaCompatibility
+    "None": 0, "FullscreenExtension": 1,
+    
     # Face / NormalId (Decal, Texture, SurfaceGui)
-    "Right": 0,
-    "Top": 1,
-    "Back": 2,
-    "Left": 3,
-    "Bottom": 4,
-    "Front": 5,
+    "Right": 0, "Top": 1, "Back": 2, "Left": 3, "Bottom": 4, "Front": 5,
 
     # Fonts
     "Legacy": 0, "Arial": 1, "ArialBold": 2, "SourceSans": 3, "SourceSansBold": 4,
