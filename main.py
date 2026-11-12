@@ -29,7 +29,8 @@ PROPRIEDADES_BOOLEANAS = {
     "Anchored", "CanCollide", "CanTouch", "CanQuery", "CastShadow",
     "Massless", "Locked", "ClipToDeviceSafeArea", "ClipsDescendants",
     "Active", "AutoButtonColor", "Selected", "RichText", "TextScaled",
-    "TextWrapped", "ClearTextOnFocus", "MultiLine", "DisplayOrder"
+    "TextWrapped", "ClearTextOnFocus", "MultiLine", "DisplayOrder",
+    "ResetPlayerGuiOnSpawn"
 }
 
 # Tabela expandida de Tokens Enum oficiais do Roblox
@@ -37,9 +38,9 @@ MAPA_ENUM_NUMERICO = {
     # ScreenOrientation (StarterGui / ScreenGui)
     "LandscapeLeft": 0,
     "LandscapeRight": 1,
-    "Portrait": 2,
-    "Sensor": 3,
-    "LandscapeSensor": 4,
+    "LandscapeSensor": 2,
+    "Portrait": 3,
+    "Sensor": 4,
 
     # Face / NormalId (Decal, Texture, SurfaceGui)
     "Right": 0,
