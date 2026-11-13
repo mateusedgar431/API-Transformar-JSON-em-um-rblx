@@ -165,6 +165,10 @@ def tratar_propriedade_individual(nome_prop, valor):
     # 3. DICIONÁRIOS / TABELAS (UDim, UDim2, Vector3, Color3, Enums em Tabela)
     if isinstance(valor, dict):
         # Enum vindo em formato de tabela Luau {EnumType = ..., Name = "Sensor"}
+        if valor.get("Type") == "Referent" and valor.get("ReferentID") is not None:
+            instance_value = valor.get("ReferentID")
+            return f'<ref name="{nome_prop}">RBX_{instance_value}</ref>'
+            
         if valor.get("Type") == "Enum" and valor.get("ID") is not None:
             value_enum = valor.get("ID")
             return f'<token name="{nome_prop}">{value_enum}</token>'
@@ -256,14 +260,18 @@ def processar_objetos_xml(TableData):
                 props = a.get("Properties", {})
                 children = a.get("Children", []) or a.get("Objects", [])
                 script_code = a.get("Script") or (props.get("Source") if isinstance(props, dict) else None)
-
+                ref = a.get("Referent")
+                
                 if not isinstance(props, dict):
                     props = {}
 
                 class_name = props.get("ClassName", "Part")
                 obj_name = props.get("Name", f"Object_{idx}")
 
-                ref_id = f"RBX_OBJ_{idx}_{abs(hash(obj_name))}"
+                if ref:
+                    ref_id = f"RBX_{ref}"
+                else:
+                    ref_id = f"RBX_OBJ_{idx}_{abs(hash(obj_name))}"
                 if class_name == "Terrain":
                     material_colors_base64 = f'E0o~>XYV▯▯▯▯aIΟΛ§¬”lcdfέδελύ”¹_ypbKJJ,hCPTT††vΜί@ωσ' #gerar_material_colors_customizado(material_colors)
 
@@ -378,10 +386,11 @@ end
 </Item>'''
 
 def construir_rbxlx_completo(part_data_dict, terrain_data_dict, terrain_material_color_dict):
+    workspace_ref = "WORKSPACE_ROOT"
     workspace_content = ""
     workspace_props = ""
     servicos_dados_finais = {
-        s_nome: {"props": {}, "objects": []} 
+        s_nome: {"props": {}, "objects": [], "referent": []} 
         for s_nome in SERVICOS_MESTRES.values() if s_nome != "Workspace"
     }
 
@@ -394,10 +403,12 @@ def construir_rbxlx_completo(part_data_dict, terrain_data_dict, terrain_material
                 continue
 
             objetos = []
+            ref = ""
             propriedades_recebidas = {}
 
             if isinstance(servico_dados, dict):
                 objetos = servico_dados.get("Objects", []) or servico_dados.get("Children", [])
+                ref = servico_dados.get("Referent", "")
                 if "Properties" in servico_dados and isinstance(servico_dados["Properties"], dict):
                     propriedades_recebidas = servico_dados["Properties"]
                 else:
@@ -405,20 +416,29 @@ def construir_rbxlx_completo(part_data_dict, terrain_data_dict, terrain_material
 
             elif isinstance(servico_dados, list):
                 objetos = servico_dados
+                ref = ""
 
             if servico_oficial == "Workspace":
                 workspace_content = processar_objetos_xml(objetos)
                 workspace_props = processar_dicionario_propriedades(propriedades_recebidas)
+                workspace_ref = servico_dados.get("Referent", "WORKSPACE_ROOT")
             else:
                 servicos_dados_finais[servico_oficial]["props"].update(propriedades_recebidas)
                 servicos_dados_finais[servico_oficial]["objects"] = objetos
+                servicos_dados_finais[servico_oficial]["referent"] = ref
 
     elif isinstance(part_data_dict, list):
         workspace_content = processar_objetos_xml(part_data_dict)
 
     outros_servicos_list = []
     for s_nome, dados in servicos_dados_finais.items():
-        ref_servico = f"RBX_SERVICE_{s_nome.upper()}"
+        ref_id = dados.get("referent", "")
+        ref_servico = []
+        if ref_id and ref_id != "":
+            ref_servico = f"RBX_{ref_id.upper()}"
+        else:
+            ref_servico = f"RBX_SERVICE_{s_nome.upper()}"
+            
         props_xml = processar_dicionario_propriedades(dados["props"])
         objs_xml = processar_objetos_xml(dados["objects"])
         if s_nome == "ServerScriptService":
@@ -438,7 +458,7 @@ def construir_rbxlx_completo(part_data_dict, terrain_data_dict, terrain_material
     rbxlx_str = f'''<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
     <External>null</External>
     <External>nil</External>
-    <Item class="Workspace" referent="RBX_WORKSPACE_ROOT">
+    <Item class="Workspace" referent="RBX_{workspace_ref}">
         <Properties>
             <string name="Name">Workspace</string>
             <bool name="FilteringEnabled">true</bool>
