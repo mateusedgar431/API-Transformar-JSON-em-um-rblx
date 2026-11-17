@@ -166,9 +166,9 @@ def tratar_propriedade_individual(nome_prop, valor):
     if isinstance(valor, dict):
         if valor.get("Type") == "Font" and valor.get("Value") is not None:
             value_full = valor.get("Value")
-            value_family = value_full[0]
-            value_weight = value_full[1]
-            value_style = value_full[2].split(".")[-1]
+            value_family = value_full["Family"]
+            value_weight = value_full["Weight"]
+            value_style = value_full["Style"].split(".")[-1]
             return f'<{nome_prop} name="{nome_prop}">\n<Family>{value_family}</Family>\n<Weight>{value_weight}</Weight>\n<Style>{value_style}</Style>\n</{nome_prop}>'
     
         # Enum vindo em formato de tabela Luau {EnumType = ..., Name = "Sensor"}
