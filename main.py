@@ -164,6 +164,13 @@ def tratar_propriedade_individual(nome_prop, valor):
 
     # 3. DICIONÁRIOS / TABELAS (UDim, UDim2, Vector3, Color3, Enums em Tabela)
     if isinstance(valor, dict):
+        if valor.get("Type") == "Font" and valor.get("Value") is not None:
+            value_full = valor.get("Value")
+            value_family = value_full[0]
+            value_weight = value_full[1]
+            value_style = value_full[2].split(".")[-1]
+            return f'<{nome_prop} name="{nome_prop}">\n<Family>{value_family}</Family>\n<Weight>{value_weight}</Weight>\n<Style>{value_style}</Style>\n</{nome_prop}>'
+    
         # Enum vindo em formato de tabela Luau {EnumType = ..., Name = "Sensor"}
         if valor.get("Type") == "Referent" and valor.get("ReferentID") is not None:
             instance_value = valor.get("ReferentID")
