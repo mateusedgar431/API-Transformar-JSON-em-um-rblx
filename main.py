@@ -169,7 +169,7 @@ def tratar_propriedade_individual(nome_prop, valor):
             value_family = "rbxasset://fonts/families/GothamSSm.json" #str(value_full["Family"])
             value_weight = value_full["Weight"]
             value_style = value_full["Style"].split(".")[-1]
-            return f'<{nome_prop} name="{nome_prop}">\n<Family>{value_family}</Family>\n<Weight>{value_weight}</Weight>\n<Style>{value_style}</Style>\n<CachedFaceId>0</CachedFaceId>\n</{nome_prop}>'
+            return f'<{nome_prop} name="{nome_prop}">\n<Family><url>{value_family}</url></Family>\n<Weight>{value_weight}</Weight>\n<Style>{value_style}</Style>\n<CachedFaceId>0</CachedFaceId>\n</{nome_prop}>'
     
         # Enum vindo em formato de tabela Luau {EnumType = ..., Name = "Sensor"}
         if valor.get("Type") == "Referent" and valor.get("ReferentID") is not None:
