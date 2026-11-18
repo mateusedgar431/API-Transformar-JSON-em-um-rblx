@@ -11,6 +11,7 @@ app = Flask(__name__)
 SERVICOS_MESTRES = {
     "workspace": "Workspace",
     "lighting": "Lighting",
+    "materialservice": "MaterialService",
     "replicatedfirst": "ReplicatedFirst",
     "replicatedstorage": "ReplicatedStorage",
     "serverscriptservice": "ServerScriptService",
