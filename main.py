@@ -69,6 +69,10 @@ PROPRIEDADES_BOOLEANAS = {
 "Decoration", "Use2022Materials"
 }
 
+PROPERTIES_CONTENT = {
+"Texture", "Image", "TextureId", "ImageId", "MeshId", "SoundId", "ColorMap"
+}
+
 # Tabela expandida de Tokens Enum oficiais do Roblox
 MAPA_ENUM_NUMERICO = {
     # ScreenOrientation (StarterGui / ScreenGui)
@@ -157,7 +161,7 @@ def tratar_propriedade_individual(nome_prop, valor):
             return f'<token name="{nome_prop}">{token_val}</token>'
 
         # Conteúdo de Asset/Textura
-        if nome_prop in ["Texture", "Image", "TextureId", "ImageId", "MeshId", "SoundId"] or val_limpo.startswith("rbxassetid://"):
+        if nome_prop in PROPERTIES_CONTENT or val_limpo.startswith("rbxassetid://"):
             return f'<Content name="{nome_prop}"><url>{saxutils.escape(val_limpo)}</url></Content>'
 
         # String padrão
