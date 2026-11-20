@@ -70,7 +70,7 @@ PROPRIEDADES_BOOLEANAS = {
 }
 
 PROPERTIES_CONTENT = {
-"Texture", "Image", "TextureId", "ImageId", "MeshId", "SoundId", "ColorMap"
+"Texture", "Image", "TextureId", "ImageId", "MeshId", "SoundId", "ColorMap", "NormalMap"
 }
 
 # Tabela expandida de Tokens Enum oficiais do Roblox
@@ -241,18 +241,18 @@ def tratar_propriedade_individual(nome_prop, valor):
 
 def processar_dicionario_propriedades(props_dict):
     xml_props = []
+    ClassName = props_dict.get("ClassName", "Part")
     for k, v in props_dict.items():
-        if k != "MaterialVariant":
-            no_xml = tratar_propriedade_individual(k, v)
+        no_xml = tratar_propriedade_individual(k, v)
+        if no_xml:
+            xml_props.append(f"            {no_xml}")
+
+    if ClassName == "MaterialVariant":
+        if "NormalMap" not in props_dict:
+            no_xml = tratar_propriedade_individual("NormalMap", "")
             if no_xml:
                 xml_props.append(f"            {no_xml}")
 
-    valor = props_dict.get("MaterialVariant")
-    if valor:
-        no_xml = tratar_propriedade_individual("MaterialVariant", valor)
-        if no_xml:
-            xml_props.append(f"            {no_xml}")
-   
     return "\n".join(xml_props)
 
 def gerar_material_colors_customizado(cores_dict):
