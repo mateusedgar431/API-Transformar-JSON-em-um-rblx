@@ -70,7 +70,7 @@ PROPRIEDADES_BOOLEANAS = {
 }
 
 PROPERTIES_CONTENT = {
-"Texture", "Image", "TextureId", "ImageId", "MeshId", "SoundId", "ColorMap", "NormalMap"
+"Texture", "Image", "TextureId", "ImageId", "MeshId", "SoundId", "ColorMap", "NormalMap", "MetalnessMap", "RoughnessMap"
 }
 
 # Tabela expandida de Tokens Enum oficiais do Roblox
