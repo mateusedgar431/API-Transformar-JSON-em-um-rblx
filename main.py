@@ -164,9 +164,6 @@ def tratar_propriedade_individual(nome_prop, valor):
         if nome_prop in PROPERTIES_CONTENT or val_limpo.startswith("rbxassetid://"):
             return f'<Content name="{nome_prop}"><url>{saxutils.escape(val_limpo)}</url></Content>'
 
-        if nome_prop == "MaterialVariant":
-            return f'<string name="{nome_prop}">Madeira</string>'
-            
         # String padrão
         return f'<string name="{nome_prop}">{saxutils.escape(val_limpo)}</string>'
 
