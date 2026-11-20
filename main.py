@@ -242,9 +242,17 @@ def tratar_propriedade_individual(nome_prop, valor):
 def processar_dicionario_propriedades(props_dict):
     xml_props = []
     for k, v in props_dict.items():
-        no_xml = tratar_propriedade_individual(k, v)
+        if k != "MaterialVariant":
+            no_xml = tratar_propriedade_individual(k, v)
+            if no_xml:
+                xml_props.append(f"            {no_xml}")
+
+    valor = props_dict.get("MaterialVariant")
+    if valor:
+        no_xml = tratar_propriedade_individual("MaterialVariant", valor)
         if no_xml:
             xml_props.append(f"            {no_xml}")
+   
     return "\n".join(xml_props)
 
 def gerar_material_colors_customizado(cores_dict):
