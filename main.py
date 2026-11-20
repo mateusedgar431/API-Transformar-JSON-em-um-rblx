@@ -149,7 +149,7 @@ def tratar_propriedade_individual(nome_prop, valor):
 
     # 2. STRINGS E ENUMS (ScreenOrientation, Face, Material, etc)
     if isinstance(valor, str):
-        val_limpo = str(valor)#valor.strip()
+        val_limpo = valor.strip()
         
         # Remove prefixo 'Enum.Grupo.Nome' se existir
         if "Enum." in val_limpo:
@@ -165,8 +165,7 @@ def tratar_propriedade_individual(nome_prop, valor):
             return f'<Content name="{nome_prop}"><url>{saxutils.escape(val_limpo)}</url></Content>'
 
         # String padrão
-        return f'<string name="{nome_prop}">{val_limpo}</string>'
-        #return f'<string name="{nome_prop}">{saxutils.escape(val_limpo)}</string>'
+        return f'<string name="{nome_prop}">{saxutils.escape(val_limpo)}</string>'
 
     # 3. DICIONÁRIOS / TABELAS (UDim, UDim2, Vector3, Color3, Enums em Tabela)
     if isinstance(valor, dict):
