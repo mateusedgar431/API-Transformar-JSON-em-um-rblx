@@ -9,9 +9,9 @@ import struct
 app = Flask(__name__)
 
 SERVICOS_MESTRES = {
-    "materialservice": "MaterialService",
     "workspace": "Workspace",
     "lighting": "Lighting",
+    "materialservice": "MaterialService",
     "replicatedfirst": "ReplicatedFirst",
     "replicatedstorage": "ReplicatedStorage",
     "serverscriptservice": "ServerScriptService",
@@ -241,17 +241,10 @@ def tratar_propriedade_individual(nome_prop, valor):
 
 def processar_dicionario_propriedades(props_dict):
     xml_props = []
-    ClassName = props_dict.get("ClassName", "Part")
     for k, v in props_dict.items():
         no_xml = tratar_propriedade_individual(k, v)
         if no_xml:
             xml_props.append(f"            {no_xml}")
-
-    if ClassName == "MaterialVariant":
-        if "NormalMap" not in props_dict:
-            no_xml = tratar_propriedade_individual("NormalMap", "")
-            if no_xml:
-                xml_props.append(f"            {no_xml}")
 
     return "\n".join(xml_props)
 
