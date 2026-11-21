@@ -9,9 +9,9 @@ import struct
 app = Flask(__name__)
 
 SERVICOS_MESTRES = {
+    "materialservice": "MaterialService",
     "workspace": "Workspace",
     "lighting": "Lighting",
-    "materialservice": "MaterialService",
     "replicatedfirst": "ReplicatedFirst",
     "replicatedstorage": "ReplicatedStorage",
     "serverscriptservice": "ServerScriptService",
