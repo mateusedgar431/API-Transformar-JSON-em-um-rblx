@@ -467,7 +467,7 @@ def construir_rbxlx_completo(part_data_dict, terrain_data_dict, terrain_material
     # MaterialService SEMPRE em primeiro
     outros_servicos_list.sort(key=lambda x: 0 if 'class="MaterialService"' in x else 1)
     outros_servicos_str = "".join(outros_servicos_list)
-    print(f'{outros_servicos_str}')
+    print(f'{outros_servicos_str}', flush = True)
     rbxlx_str = f'''<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
     <External>null</External>
     <External>nil</External>
