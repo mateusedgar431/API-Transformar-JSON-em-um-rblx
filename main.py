@@ -245,7 +245,7 @@ def processar_dicionario_propriedades(props_dict):
         no_xml = tratar_propriedade_individual(k, v)
         if no_xml:
             if k == "MaterialVariant":
-                raise Exception(f"Name: {props_dict.get('Name', '')} | Prop: {k} | Value: {v} | ValueLimpo: {no_xml}")
+                print(f"Name: {props_dict.get('Name', '')} | Prop: {k} | Value: {v} | ValueLimpo: {no_xml}", flush = True)
             
             xml_props.append(f"            {no_xml}")
 
