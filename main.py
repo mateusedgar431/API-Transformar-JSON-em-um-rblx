@@ -498,7 +498,7 @@ def publicar():
             return jsonify({"erro": "Headers obrigatorios faltando."}), 400
 
         conteudo_rbxlx = construir_rbxlx_completo(part_data, terrain_data, terrain_material_color)
-        
+        print(conteudo_rbxlx, flush=True)
         url_roblox = f"https://apis.roblox.com/universes/v1/{universe_id}/places/{place_id}/versions?versionType=Published"
         headers_roblox = {
             "x-api-key": api_key,
