@@ -252,11 +252,7 @@ def processar_dicionario_propriedades(props_dict):
     xml_props = []
     for k, v in props_dict.items():
         no_xml = tratar_propriedade_individual(k, v)
-        if no_xml:
-            # DEBUG DOS MAPAS - SEM LIMITE
-            if k in ["ColorMap", "MetalnessMap", "NormalMap", "RoughnessMap"]:
-                print(f"Name: {k} | Value: {v} | ValueLimpo: {no_xml}", flush=True)
-            
+        if no_xml:            
             xml_props.append(f"            {no_xml}")
 
     return "\n".join(xml_props)
