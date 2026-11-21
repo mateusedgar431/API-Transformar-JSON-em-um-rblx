@@ -66,7 +66,7 @@ PROPRIEDADES_BOOLEANAS = {
 "ClickablePrompt", "VRTiltAndRollEnabled", "AllowTeamChangeOnTouch", "ResetPlayerGuiOnSpawn", "SelectionGroup",
 "ClipToDeviceSafeArea", "ClearTextOnFocus", "MultiLine", "TailVisible", "AcousticSimulationEnabled",
 "DiffractionEnabled", "OcclusionEnabled", "RespectFilteringEnabled", "ReverbEnabled", "AudioCanCollide",
-"Decoration", "Use2022Materials"
+"Decoration"
 }
 
 PROPERTIES_CONTENT = {
