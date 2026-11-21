@@ -243,10 +243,7 @@ def processar_dicionario_propriedades(props_dict):
     xml_props = []
     for k, v in props_dict.items():
         no_xml = tratar_propriedade_individual(k, v)
-        if no_xml:
-            if k == "MaterialVariant":
-                print(f"Name: {props_dict.get('Name', '')} | Prop: {k} | Value: {v} | ValueLimpo: {no_xml}", flush = True)
-            
+        if no_xml:            
             xml_props.append(f"            {no_xml}")
 
     return "\n".join(xml_props)
@@ -470,7 +467,7 @@ def construir_rbxlx_completo(part_data_dict, terrain_data_dict, terrain_material
     # MaterialService SEMPRE em primeiro
     outros_servicos_list.sort(key=lambda x: 0 if 'class="MaterialService"' in x else 1)
     outros_servicos_str = "".join(outros_servicos_list)
-
+    print(f'{outros_servicos_str}')
     rbxlx_str = f'''<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
     <External>null</External>
     <External>nil</External>
