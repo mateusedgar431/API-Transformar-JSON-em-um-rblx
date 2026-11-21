@@ -474,7 +474,12 @@ def construir_rbxlx_completo(part_data_dict, terrain_data_dict, terrain_material
     rbxlx_str = f'''<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
     <External>null</External>
     <External>nil</External>
-    {outros_servicos_str}
+    <Item class="DataModel" referent="RBX0">
+        <Properties>
+            <string name="Name">Game</string>
+        </Properties>
+        {outros_servicos_str}
+    </Item>
 </roblox>'''
 
     return rbxlx_str.encode('utf-8')
