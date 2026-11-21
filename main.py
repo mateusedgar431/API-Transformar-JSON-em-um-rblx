@@ -402,12 +402,9 @@ end
 </Item>'''
 
 def construir_rbxlx_completo(part_data_dict, terrain_data_dict, terrain_material_color_dict):
-    workspace_ref = "WORKSPACE_ROOT"
-    workspace_content = ""
-    workspace_props = ""
     servicos_dados_finais = {
-        s_nome: {"props": {}, "objects": [], "referent": []} 
-        for s_nome in SERVICOS_MESTRES.values() if s_nome != "Workspace"
+        s_nome: {"props": {}, "objects": [], "referent": ""}
+        for s_nome in SERVICOS_MESTRES.values()
     }
 
     if isinstance(part_data_dict, dict):
@@ -428,60 +425,56 @@ def construir_rbxlx_completo(part_data_dict, terrain_data_dict, terrain_material
                 if "Properties" in servico_dados and isinstance(servico_dados["Properties"], dict):
                     propriedades_recebidas = servico_dados["Properties"]
                 else:
-                    propriedades_recebidas = {k: v for k, v in servico_dados.items() if k not in ["Objects", "Children"]}
+                    propriedades_recebidas = {k: v for k, v in servico_dados.items() if k not in ["Objects", "Children", "Referent"]}
 
             elif isinstance(servico_dados, list):
                 objetos = servico_dados
                 ref = ""
 
-            if servico_oficial == "Workspace":
-                workspace_content = processar_objetos_xml(objetos)
-                workspace_props = processar_dicionario_propriedades(propriedades_recebidas)
-                workspace_ref = servico_dados.get("Referent", "WORKSPACE_ROOT")
-            else:
-                servicos_dados_finais[servico_oficial]["props"].update(propriedades_recebidas)
-                servicos_dados_finais[servico_oficial]["objects"] = objetos
-                servicos_dados_finais[servico_oficial]["referent"] = ref
+            servicos_dados_finais[servico_oficial]["props"].update(propriedades_recebidas)
+            servicos_dados_finais[servico_oficial]["objects"] = objetos
+            servicos_dados_finais[servico_oficial]["referent"] = ref
 
     elif isinstance(part_data_dict, list):
-        workspace_content = processar_objetos_xml(part_data_dict)
+        servicos_dados_finais["Workspace"]["objects"] = part_data_dict
 
     outros_servicos_list = []
     for s_nome, dados in servicos_dados_finais.items():
         ref_id = dados.get("referent", "")
-        ref_servico = []
         if ref_id and ref_id != "":
-            ref_servico = f"RBX_{ref_id.upper()}"
+            if str(ref_id).upper().startswith("RBX_"):
+                ref_servico = str(ref_id).upper()
+            else:
+                ref_servico = f"RBX_{str(ref_id).upper()}"
         else:
             ref_servico = f"RBX_SERVICE_{s_nome.upper()}"
-            
+
         props_xml = processar_dicionario_propriedades(dados["props"])
         objs_xml = processar_objetos_xml(dados["objects"])
         if s_nome == "ServerScriptService":
             objs_xml += processar_terrain_xml(terrain_data_dict, terrain_material_color_dict)
-        
+
+        extra_props = ""
+        if s_nome == "Workspace":
+            extra_props = '            <bool name="FilteringEnabled">true</bool>\n'
+
         outros_servicos_list.append(f'''
     <Item class="{s_nome}" referent="{ref_servico}">
         <Properties>
             <string name="Name">{s_nome}</string>
-{props_xml}
+{extra_props}{props_xml}
         </Properties>
 {objs_xml}
     </Item>''')
 
+    # MaterialService SEMPRE em primeiro
+    outros_servicos_list.sort(key=lambda x: 0 if 'class="MaterialService"' in x else 1)
     outros_servicos_str = "".join(outros_servicos_list)
 
     rbxlx_str = f'''<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
     <External>null</External>
     <External>nil</External>
-    <Item class="Workspace" referent="RBX_{workspace_ref}">
-        <Properties>
-            <string name="Name">Workspace</string>
-            <bool name="FilteringEnabled">true</bool>
-{workspace_props}
-        </Properties>
-        {workspace_content}
-    </Item>{outros_servicos_str}
+    {outros_servicos_str}
 </roblox>'''
 
     return rbxlx_str.encode('utf-8')
