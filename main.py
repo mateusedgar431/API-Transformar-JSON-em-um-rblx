@@ -6,6 +6,7 @@ import math
 import base64
 import zlib
 import struct
+import re
 app = Flask(__name__)
 
 SERVICOS_MESTRES = {
