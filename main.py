@@ -10,9 +10,9 @@ import re
 app = Flask(__name__)
 
 SERVICOS_MESTRES = {
-    "materialservice": "MaterialService",
     "workspace": "Workspace",
     "lighting": "Lighting",
+    "materialservice": "MaterialService",
     "replicatedfirst": "ReplicatedFirst",
     "replicatedstorage": "ReplicatedStorage",
     "serverscriptservice": "ServerScriptService",
@@ -479,8 +479,6 @@ def construir_rbxlx_completo(part_data_dict, terrain_data_dict, terrain_material
 {objs_xml}
     </Item>''')
 
-    # MaterialService SEMPRE em primeiro
-    outros_servicos_list.sort(key=lambda x: 0 if 'class="MaterialService"' in x else 1)
     outros_servicos_str = "".join(outros_servicos_list)
     rbxlx_str = f'''<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
     <Meta name="ExplicitAutoJoints">true</Meta>
