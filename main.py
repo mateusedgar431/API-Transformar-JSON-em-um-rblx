@@ -251,11 +251,12 @@ def tratar_propriedade_individual(nome_prop, valor):
 def processar_dicionario_propriedades(props_dict):
     xml_props = []
     for k, v in props_dict.items():
-        no_xml = None
-        if props_dict.get("ClassName", "") in ["MaterialVariant"] and k in ["Name"]:
-            no_xml = f'<BinaryString name="{k}">{v}</BinaryString>'
-        else:
-            no_xml = tratar_propriedade_individual(k, v)
+        name = k
+        value = v
+        if name == "MaterialVariant":
+            name = "MaterialVariantSerialized"
+
+        no_xml = tratar_propriedade_individual(name, value)
         
         if no_xml:            
             xml_props.append(f"            {no_xml}")
